@@ -20,6 +20,7 @@ import java.net.URL;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -30,12 +31,19 @@ import static com.skcraft.launcher.bootstrap.SharedLocale.tr;
 public class Downloader implements Runnable, ProgressObservable {
 
     private final Bootstrap bootstrap;
+    /** Already installed launchers to start if the download fails (empty on a first install). */
+    private final List<LauncherBinary> fallback;
     private DownloadFrame dialog;
     private HttpRequest httpRequest;
     private Thread thread;
 
     public Downloader(Bootstrap bootstrap) {
+        this(bootstrap, Collections.<LauncherBinary>emptyList());
+    }
+
+    public Downloader(Bootstrap bootstrap, List<LauncherBinary> fallback) {
         this.bootstrap = bootstrap;
+        this.fallback = fallback;
     }
 
     @Override
@@ -49,6 +57,15 @@ public class Downloader implements Runnable, ProgressObservable {
             System.exit(0);
         } catch (Throwable t) {
             log.log(Level.WARNING, "Failed to download launcher", t);
+            if (!fallback.isEmpty()) {
+                try {
+                    log.info("Starting the installed launcher instead");
+                    bootstrap.launchExisting(fallback, false);
+                    return;
+                } catch (Throwable t2) {
+                    log.log(Level.WARNING, "Failed to start the installed launcher", t2);
+                }
+            }
             SwingHelper.showErrorDialog(null, tr("errors.failedDownloadError"), tr("errorTitle"), t);
             System.exit(0);
         }

@@ -8,23 +8,33 @@
 package com.skcraft.launcher;
 
 import com.gummer.launcher.shared.BootstrapConfig;
+import com.gummer.launcher.shared.Toolbox;
 import com.gummer.launcher.shared.TrustedTls;
 import com.skcraft.launcher.bootstrap.*;
 import lombok.Getter;
 import lombok.extern.java.Log;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileSystemView;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.logging.Level;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import static com.skcraft.launcher.bootstrap.SharedLocale.tr;
 
@@ -96,10 +106,15 @@ public class Bootstrap {
             }
         }
 
-        if (!binaries.isEmpty()) {
-            launchExisting(binaries, true);
-        } else {
+        if (binaries.isEmpty()) {
             launchInitial();
+        } else if (isNewerVersionPublished(binaries)) {
+            // download the published version right away instead of starting the old one and asking to self-update;
+            // if that download fails, the installed version is started as before
+            Bootstrap.log.info("Downloading the newer published launcher...");
+            new Thread(new Downloader(this, binaries)).start();
+        } else {
+            launchExisting(binaries, true);
         }
     }
 
@@ -107,6 +122,76 @@ public class Bootstrap {
         Bootstrap.log.info("Downloading the launcher...");
         Thread thread = new Thread(new Downloader(this));
         thread.start();
+    }
+
+    /**
+     * Compares the newest installed launcher jar with the version in {@code latestUrl}. Any problem (offline, timeout,
+     * unreadable jar) counts as "no newer version", so starting without internet works exactly as before.
+     */
+    private boolean isNewerVersionPublished(List<LauncherBinary> binaries) {
+        try {
+            List<LauncherBinary> sorted = new ArrayList<LauncherBinary>(binaries);
+            Collections.sort(sorted);
+            String installed = readLauncherVersion(sorted.get(0).getPath());
+            String published = readPublishedVersion();
+            if (installed == null || published == null) {
+                return false;
+            }
+            log.info("Installed launcher " + installed + ", published " + published);
+            return compareVersions(published, installed) > 0;
+        } catch (Exception e) {
+            log.log(Level.INFO, "Could not check for a newer launcher, starting the installed one", e);
+            return false;
+        }
+    }
+
+    private static String readLauncherVersion(File jar) throws IOException {
+        try (ZipFile zip = new ZipFile(jar)) {
+            ZipEntry entry = zip.getEntry("com/skcraft/launcher/launcher.properties");
+            if (entry == null) {
+                return null;
+            }
+            Properties props = new Properties();
+            try (InputStream in = zip.getInputStream(entry)) {
+                props.load(in);
+            }
+            return props.getProperty("version");
+        }
+    }
+
+    private String readPublishedVersion() throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(getProperties().getProperty("latestUrl")).openConnection();
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+        conn.setRequestProperty("User-Agent", Toolbox.USER_AGENT);
+        try (Reader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
+            Object json = JSONValue.parse(reader);
+            if (json instanceof JSONObject && ((JSONObject) json).get("version") != null) {
+                return String.valueOf(((JSONObject) json).get("version")).trim();
+            }
+            return null;
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    /** Numeric, dot-separated comparison ("1.29" > "1.27", "1.10" > "1.9"); non-digit characters are ignored. */
+    static int compareVersions(String a, String b) {
+        String[] x = a.split("\\.");
+        String[] y = b.split("\\.");
+        for (int i = 0; i < Math.max(x.length, y.length); i++) {
+            long p = i < x.length ? parsePart(x[i]) : 0;
+            long q = i < y.length ? parsePart(y[i]) : 0;
+            if (p != q) {
+                return p > q ? 1 : -1;
+            }
+        }
+        return 0;
+    }
+
+    private static long parsePart(String part) {
+        String digits = part.replaceAll("[^0-9]", "");
+        return digits.isEmpty() ? 0 : Long.parseLong(digits);
     }
 
     public void launchExisting(List<LauncherBinary> binaries, boolean redownload) throws Exception {
