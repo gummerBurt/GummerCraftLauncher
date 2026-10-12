@@ -1,8 +1,28 @@
+<div align="center">
+
+![GummerCraft - З України, з любов'ю!](launcher/src/main/resources/com/skcraft/launcher/ui/frame/logo.png)
+
+</div>
+
 # GummerCraft Launcher
 
 Лаунчер Minecraft для серверів [GummerCraft](https://gummercraft.fun): встановлює та оновлює збірки модів і запускає гру з акаунтом Microsoft.
 
+**[Завантажити лаунчер для Windows](https://launch.gummercraft.fun/install/exe)** · [jar для Linux і macOS](https://launch.gummercraft.fun/install/jar) · [сайт GummerCraft](https://gummercraft.fun)
+
 *Minecraft launcher for the GummerCraft servers. A fork of [SKCraft Launcher](https://github.com/SKCraft/Launcher), licensed under LGPL v3. English summary at the bottom.*
+
+## StalDayZ
+
+<div align="center">
+
+![StalDayZ - Прип'ять](docs/images/staldayz.jpg)
+
+</div>
+
+**[StalDayZ](https://staldayz.gummercraft.fun/)** - наш сервер за мотивами S.T.A.L.K.E.R. і DayZ у Minecraft: Зона відчуження, лутінг, аномалії й артефакти, викиди, радіація, мутанти, квести, торгівля та бази гравців.
+
+Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку збірку **StalDayZ**, натискаєш «Грати», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки Main для різних версій Minecraft.
 
 ## Що нового в 1.29
 
