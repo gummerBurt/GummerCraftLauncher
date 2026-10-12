@@ -1,0 +1,9 @@
+rootProject.name = 'GCLaucnher'
+
+include 'launcher',
+        'launcher-flat',
+        'launcher-shared',
+        //'launcher-fancy',
+        'launcher-builder',
+        'launcher-bootstrap',
+        'creator-tools'

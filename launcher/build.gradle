@@ -1,0 +1,80 @@
+plugins {
+    id 'application'
+    id 'java-library'
+    id "com.github.johnrengelman.shadow"
+    id 'io.freefair.lombok'
+    id 'net.kyori.blossom'
+}
+
+// get repo info
+def gitCommit = 'git rev-parse --short HEAD'.execute(null, project.rootDir).text.trim()
+def branchName = 'git rev-parse --abbrev-ref HEAD'.execute(null, project.rootDir).text.trim()
+
+// use blossom to replace placeholders on build
+blossom {
+  replaceToken("@version@", version)
+}
+
+application {
+    mainClassName = "com.skcraft.launcher.Launcher"
+}
+
+jar {
+  manifest {
+    attributes("Main-Class": "com.skcraft.launcher.Launcher")
+    attributes("SplashScreen-Image": "com/gummer/launcher/splashscreen.png")
+  }
+}
+
+dependencies {
+    api 'javax.xml.bind:jaxb-api:2.3.1'
+    api 'com.fasterxml.jackson.core:jackson-databind:2.13.2.2'
+    api 'commons-lang:commons-lang:2.6'
+    api 'commons-io:commons-io:1.2'
+    api 'com.google.guava:guava:15.0'
+    api 'com.beust:jcommander:1.82'
+    api 'com.miglayout:miglayout:3.7.4'
+    api 'com.google.code.findbugs:jsr305:3.0.2'
+    //api("org.apache.commons:commons-lang3:3.12.0") // off for now
+    //api("org.apache.commons:commons-text:1.9")
+
+    implementation 'com.googlecode.plist:dd-plist:1.23'
+    implementation 'net.java.dev.jna:jna-platform:5.11.0'
+    implementation 'net.java.dev.timingframework:timingframework:1.0'
+    implementation 'org.json:json:20210307'
+
+    implementation project(path: ':launcher-shared')
+}
+
+processResources {
+    filesMatching('**/*.properties') {
+        filter {
+            it.replace('${project.version}', project.version)
+        }
+        filter {
+            it.replace('${pipelineId}', System.getenv('CI_PIPELINE_ID') ?: 'local')
+        }
+        filter {
+            it.replace('${branch}', branchName)
+        }
+        filter {
+            it.replace('${commit}', gitCommit)
+        }
+        filter {
+            // Azure app id for Microsoft login; set microsoftClientId in gradle.properties (see gradle.properties.example)
+            def clientId = project.findProperty('microsoftClientId')
+            if (!clientId) {
+                throw new GradleException("Set microsoftClientId in gradle.properties (see gradle.properties.example)")
+            }
+            it.replace('${microsoftClientId}', clientId)
+        }
+    }
+}
+
+shadowJar {
+    archiveClassifier.set("")
+}
+
+build {
+    dependsOn(shadowJar)
+}

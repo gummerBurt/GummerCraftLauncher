@@ -1,0 +1,101 @@
+plugins {
+    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id 'io.freefair.lombok' version '5.3.0'
+    id 'net.kyori.blossom' version "1.3.1" apply false
+}
+
+println """
+*******************************************
+ You are building GummerCraft Launcher!
+
+ Output files will be in [subproject]/build/libs
+*******************************************
+"""
+
+subprojects {
+    apply plugin: 'java'
+
+    group = 'com.gummer'
+    //version = '1.20'
+    version = '1.29'
+
+    java {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(8))
+        }
+    }
+
+    // enforce jdk8 for builds
+    if(JavaVersion.current() != JavaVersion.VERSION_1_8) {
+        throw new GradleException("This build must be run with Java 8")
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    if (JavaVersion.current().isJava8Compatible()) {
+        // Java 8 turns on doclint which we fail
+        tasks.withType(Javadoc) {
+            options.addStringOption('Xdoclint:none', '-quiet')
+        }
+    }
+
+    // enforce project encoding
+    compileJava.options.encoding = 'UTF-8'
+    compileTestJava.options.encoding = 'UTF-8'
+    tasks.withType(JavaCompile) {
+        options.encoding = 'UTF-8'
+    }
+
+    tasks.withType(JavaExec) {
+        workingDir = new File(rootDir, "run/")
+        workingDir.mkdirs()
+    }
+
+    // Work around gradle shadow bug
+    // see https://github.com/johnrengelman/shadow/issues/713
+    afterEvaluate {
+      if (tasks.findByName("shadowJar") != null) {
+        if (tasks.findByName("startScripts") != null) {
+          startScripts {
+            dependsOn(shadowJar)
+          }
+        }
+        if (tasks.findByName("distTar") != null) {
+          distTar {
+            dependsOn(shadowJar)
+          }
+        }
+        if (tasks.findByName("distZip") != null) {
+          distZip {
+            dependsOn(shadowJar)
+          }
+        }
+      }
+
+      if (tasks.findByName("startShadowScripts") != null) {
+        startShadowScripts {
+          dependsOn(jar)
+        }
+      }
+
+      if (tasks.findByName("shadowDistTar") != null) {
+        shadowDistTar {
+          dependsOn(jar)
+        }
+      }
+
+      if (tasks.findByName("shadowDistZip") != null) {
+        shadowDistZip {
+          dependsOn(jar)
+        }
+      }
+    }
+}
+
+task clean {
+    subprojects {
+        rootProject.clean.dependsOn tasks.matching { it.name == "clean" }
+    }
+}

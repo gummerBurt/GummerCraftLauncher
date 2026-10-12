@@ -1,0 +1,56 @@
+plugins {
+    id 'application'
+    id "com.github.johnrengelman.shadow"
+    id 'io.freefair.lombok'
+}
+
+version = "2.1.0-SNAPSHOT"
+
+application {
+    mainClassName = "com.skcraft.launcher.creator.Creator"
+}
+
+dependencies {
+    implementation project(path: ':launcher-builder')
+    implementation 'org.eclipse.jetty:jetty-server:9.3.1.v20150714'
+    implementation 'com.jidesoft:jide-oss:3.6.18'
+}
+
+processResources {
+    filesMatching('**/*.properties') {
+        filter {
+            it.replace('${project.version}', project.version)
+        }
+    }
+}
+
+shadowJar {
+    archiveClassifier.set("")
+}
+
+build {
+    dependsOn(shadowJar)
+}
+
+// allow to gradlew parallelized builds
+tasks.named('shadowJar') {
+  dependsOn ':launcher:shadowJar'
+  dependsOn(':launcher-builder:shadowJar')
+}
+
+tasks.named('startScripts') {
+  dependsOn(':launcher-builder:shadowJar')
+}
+
+tasks.named('distTar') {
+  dependsOn(':launcher-builder:shadowJar')
+}
+
+tasks.named('distZip') {
+  dependsOn(':launcher-builder:shadowJar')
+}
+
+// fix deprecated API warnings
+tasks.withType(JavaCompile).configureEach {
+  options.compilerArgs += ["-Xlint:deprecation","-Xlint:unchecked"]
+}
