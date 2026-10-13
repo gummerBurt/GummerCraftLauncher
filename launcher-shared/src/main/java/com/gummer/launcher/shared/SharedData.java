@@ -10,8 +10,9 @@ import javax.swing.filechooser.*;
 
 public class SharedData {
 	public static File getFileChooseDefaultDir() {
-		JFileChooser chooser = new JFileChooser();
-		FileSystemView fsv = chooser.getFileSystemView();
-		return fsv.getDefaultDirectory();
+		// Папка "Документи" через FileSystemView напряму. Раніше тут створювався JFileChooser лише заради getFileSystemView():
+		// він будує модель вікна вибору файлів і перебирає вміст робочого стола (читає атрибути ярликів .lnk) - пісочниці показували це як
+		// "лаунчер читає ярлики на робочому столі". Результат той самий (FileSystemView.getDefaultDirectory), тож шлях до наявних установок не змінюється.
+		return FileSystemView.getFileSystemView().getDefaultDirectory();
 	}
 }

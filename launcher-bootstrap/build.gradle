@@ -61,7 +61,9 @@ launch4j  {
     trademarks = "GummerCraft"
     supportUrl = "https://gummercraft.fun/support"
     errTitle = "Please install Java"
-    downloadUrl = "https://launch.gummercraft.fun/install/java"
+    // немає Java - відкривається пряме завантаження інсталятора Java 8 (x64) з сайту Oracle, без проміжного редиректу через наш домен.
+    // Посилання Oracle з часом застарівають (BundleId): якщо почне вести на 404 - оновити тут і перезібрати exe.
+    downloadUrl = "https://javadl.oracle.com/webapps/download/AutoDL?BundleId=253608_2fde65a2208f40a5b5f4c844b0dff092"
     //jar = "../libs/${project.tasks.shadowJar.archiveFileName}" // now in afterEvaluate
     outfile = "Gummer_Craft_launcher.exe"
 }

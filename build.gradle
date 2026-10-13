@@ -17,7 +17,7 @@ subprojects {
 
     group = 'com.gummer'
     //version = '1.20'
-    version = '1.30'
+    version = '1.31'
 
     java {
         toolchain {

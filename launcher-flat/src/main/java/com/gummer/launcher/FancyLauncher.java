@@ -32,6 +32,9 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
 public class FancyLauncher {
 
     public static void main(final String[] args) {
+        // ПЕРШИМ ділом, до будь-якого класу FlatLaf: на Windows FlatLaf вантажить свою DLL уже при першому зверненні до
+        // com.formdev.flatlaf.util.SystemInfo, тож flatlaf.nativeLibraryPath має бути виставлений раніше (інакше DLL іде в %TEMP%).
+        useNativesFromLauncherDir(args);
         SwingExtras.enforceMacDefaults(); // tune and enforce macos defaults
         Launcher.setupLogger();
 
@@ -44,7 +47,6 @@ public class FancyLauncher {
 
                     Launcher launcher = Launcher.createFromArguments(args);
                     SwingHelper.setSwingProperties(tr("launcher.appTitle", launcher.getVersion()));
-                    useNativesFromLauncherDir(launcher.getBaseDir());
 
                     try {
                         // init and setup UI LaF
@@ -89,20 +91,28 @@ public class FancyLauncher {
     }
 
     /**
-     * FlatLaf extracts its small native helper DLL (window decorations) to %TEMP% on every start unless
-     * {@code flatlaf.nativeLibraryPath} points to a folder that already has it. Keep it in the launcher folder
-     * instead, like any regular application, so nothing executable is dropped into the temp directory.
-     * On any failure FlatLaf simply falls back to its default behaviour.
+     * FlatLaf розпаковує свою невелику службову DLL (рамка вікна) у %TEMP% при кожному запуску, якщо {@code flatlaf.nativeLibraryPath} не вказує на папку,
+     * де вона вже лежить. Тримаємо її в папці лаунчера (&lt;--dir&gt;/launcher/natives), як звичайна програма, - нічого виконуваного в тимчасову папку.
+     * Викликається першим рядком main і НЕ чіпає класів FlatLaf (SystemInfo сам вантажить DLL): ОС і архітектура - з os.name/os.arch, сама DLL -
+     * ресурсом із jar. Будь-яка помилка - FlatLaf просто працює як раніше.
      */
-    private static void useNativesFromLauncherDir(File baseDir) {
-        if (!SystemInfo.isWindows) {
+    private static void useNativesFromLauncherDir(String[] args) {
+        if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows")) {
             return;
         }
-        String classifier = SystemInfo.isAARCH64 ? "windows-arm64" : (SystemInfo.isX86_64 ? "windows-x86_64" : "windows-x86");
+        File baseDir = null;
+        for (int i = 0; i + 1 < args.length; i++) {
+            if ("--dir".equals(args[i])) baseDir = new File(args[i + 1]);
+        }
+        if (baseDir == null) return;
+
+        String arch = System.getProperty("os.arch", "").toLowerCase(java.util.Locale.ROOT);
+        String classifier = arch.contains("aarch64") || arch.contains("arm64") ? "windows-arm64"
+                : (arch.contains("64") ? "windows-x86_64" : "windows-x86");
         String name = "flatlaf-" + classifier + ".dll";
         File dir = new File(baseDir, "launcher/natives");
         File target = new File(dir, name);
-        try (InputStream in = FlatLaf.class.getResourceAsStream("/com/formdev/flatlaf/natives/" + name)) {
+        try (InputStream in = FancyLauncher.class.getClassLoader().getResourceAsStream("com/formdev/flatlaf/natives/" + name)) {
             if (in == null) {
                 return;
             }
@@ -114,8 +124,8 @@ public class FancyLauncher {
                 Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
             }
             System.setProperty("flatlaf.nativeLibraryPath", dir.getAbsolutePath());
-        } catch (IOException e) {
-            log.log(Level.WARNING, "Could not place FlatLaf native library in " + dir, e);
+        } catch (IOException | RuntimeException e) {
+            System.err.println("Could not place FlatLaf native library in " + dir + ": " + e);
         }
     }
 

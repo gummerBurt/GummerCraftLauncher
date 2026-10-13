@@ -7,8 +7,9 @@ plugins {
 }
 
 // get repo info
-def gitCommit = 'git rev-parse --short HEAD'.execute(null, project.rootDir).text.trim()
-def branchName = 'git rev-parse --abbrev-ref HEAD'.execute(null, project.rootDir).text.trim()
+// офіційні збірки передають коміт ПУБЛІЧНОЇ репи (-PsourceCommit=...), щоб у jar стояв коміт, який є на GitHub (дивись tools/verify-cdn.py)
+def gitCommit = project.findProperty('sourceCommit') ?: 'git rev-parse --short HEAD'.execute(null, project.rootDir).text.trim()
+def branchName = project.findProperty('sourceBranch') ?: 'git rev-parse --abbrev-ref HEAD'.execute(null, project.rootDir).text.trim()
 
 // use blossom to replace placeholders on build
 blossom {

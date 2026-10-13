@@ -179,3 +179,7 @@ $RECYCLE.BIN/
 /versions
 /accounts.dat
 /config.json
+
+# Python
+__pycache__/
+*.pyc
