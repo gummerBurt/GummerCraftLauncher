@@ -24,6 +24,11 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку збірку **StalDayZ**, натискаєш «Грати», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки Main для різних версій Minecraft.
 
+## Що нового в 1.30
+
+- Фон і логотип вікна лаунчера міняються разом із вибраною збіркою, з плавним переходом: у StalDayZ свій фон і логотип S.T.A.L.DAYZ, у решти - звичні.
+- Кнопки «Вікі та FAQ» і «Новини та чат» для StalDayZ ведуть на вікі й Telegram-канал StalDayZ.
+
 ## Що нового в 1.29
 
 Разом із відкриттям коду ми провели аудит лаунчера і виправили знайдене:
@@ -101,6 +106,7 @@
 
 - Переклади лаунчера: `launcher/src/main/resources/com/gummer/launcher/lang/Launcher_uk_ua.properties` і `Launcher_en_us.properties`; бутстрапера - `launcher-bootstrap/src/main/resources/com/skcraft/launcher/lang/Bootstrap.properties`.
 - Вікно та форми: `launcher-flat/src/main/java/com/gummer/launcher/dialog/LauncherFrameFlat.java`; іконки та формати - `launcher/src/main/resources/com/skcraft/launcher`.
+- Фон вікна: `launcher/src/main/resources/com/skcraft/launcher/ui/frame/bg.jpg` (1276x718). Власний фон збірки - `bg_<назва збірки>.jpg` поруч (назва з маніфесту, малими літерами, наприклад `bg_staldayz.jpg`, 1276x718, малюється по центру), власний логотип - `logo_<назва збірки>.png` (PNG з прозорістю, вписується без розтягування в зону стандартного logo.png 724x180). Показуються, коли збірку вибрано в списку (`FlatBackgroundPanel.showPack`). Зсуви фону й логотипа збірки (у пікселях) і власні адреси кнопок - `frame_<назва збірки>.properties` поруч: `background.x/y`, `logo.x/y`, `wiki.url`, `telegram.url`, `discord.url`. Картинки кнопок Telegram/Discord зі своєю назвою каналу - `ui/button/telegram_<мова>_<назва збірки>.png` (і `discord_...`).
 - Адреси CDN, новин і самооновлення: `launcher/src/main/resources/com/skcraft/launcher/launcher.properties` та `launcher-bootstrap/src/main/resources/com/skcraft/launcher/bootstrap.properties`.
 - Кольори: темний `#181818`, світлий `#F2F2F2`; іконки - [boxicons](https://boxicons.com); кнопки бічної панелі 200×48; нікнейм 3–16 символів.
 - Налагодження Java-рантаймів: `launcher/src/main/java/com/skcraft/launcher/update/Updater.java`.

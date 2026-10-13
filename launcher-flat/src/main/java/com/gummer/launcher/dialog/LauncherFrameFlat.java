@@ -277,9 +277,10 @@ public class LauncherFrameFlat extends JFrame {
         });
 
         // sidebar buttons events
-        discordButton.addActionListener(ActionListeners.openURL(this, launcher.getConfig().getDiscordUrl()));
-        telegramButton.addActionListener(ActionListeners.openURL(this, launcher.getConfig().getTelegramUrl()));
-        wikiButton.addActionListener(ActionListeners.openURL(this, launcher.getConfig().getWikiUrl()));
+        // адреси читаються в момент натискання: у збірки можуть бути власні (FlatLauncherFrame.discordUrl/telegramUrl/wikiUrl)
+        discordButton.addActionListener(e -> SwingHelper.openURL(discordUrl(), this));
+        telegramButton.addActionListener(e -> SwingHelper.openURL(telegramUrl(), this));
+        wikiButton.addActionListener(e -> SwingHelper.openURL(wikiUrl(), this));
 
         // instancesTable events
         instancesTable.setModel(instancesModel);
@@ -340,6 +341,52 @@ public class LauncherFrameFlat extends JFrame {
 //        if(SystemInfo.isMacOS) {
 //            container.setBorder(new EmptyBorder(new Insets(20, 0, 0, 0)));
 //        }
+    }
+
+    /** Куди веде кнопка Discord (за замовчуванням - з налаштувань лаунчера; FlatLauncherFrame підставляє адресу вибраної збірки). */
+    protected String discordUrl() {
+        return launcher.getConfig().getDiscordUrl();
+    }
+
+    /** Куди веде кнопка "Новини та чат" (Telegram); як discordUrl. */
+    protected String telegramUrl() {
+        return launcher.getConfig().getTelegramUrl();
+    }
+
+    private final java.util.Map<String, java.awt.image.BufferedImage> buttonImages = new java.util.HashMap<>();
+
+    /**
+     * Картинки кнопок Telegram/Discord для вибраної збірки: {@code ui/button/telegram_<мова>_<назва збірки>.png} (і discord_...), якщо є, інакше стандартні
+     * (на кнопці намальовано назву каналу, тож для збірки зі своїм каналом потрібна своя картинка).
+     */
+    protected void showPackButtons(String packKey) {
+        applyButtonImage((CustomImageButton) telegramButton, "telegram", packKey);
+        applyButtonImage((CustomImageButton) discordButton, "discord", packKey);
+    }
+
+    private void applyButtonImage(CustomImageButton button, String kind, String packKey) {
+        java.awt.image.BufferedImage image = null;
+        if (packKey != null && packKey.matches("[a-z0-9_.-]+")) image = buttonImage("ui/button/" + kind + "_" + langCode + "_" + packKey + ".png");
+        if (image == null) image = buttonImage("ui/button/" + kind + "_" + langCode + ".png");
+        if (image != null) button.setImage(image, 200, 45);
+    }
+
+    private java.awt.image.BufferedImage buttonImage(String path) {
+        if (!buttonImages.containsKey(path)) {
+            java.awt.image.BufferedImage image = null;
+            try (java.io.InputStream in = Launcher.class.getResourceAsStream(path)) {
+                if (in != null) image = ImageIO.read(in);
+            } catch (IOException e) {
+                image = null;
+            }
+            buttonImages.put(path, image);
+        }
+        return buttonImages.get(path);
+    }
+
+    /** Куди веде кнопка "Вікі та FAQ" (за замовчуванням - з налаштувань лаунчера; FlatLauncherFrame підставляє вікі вибраної збірки). */
+    protected String wikiUrl() {
+        return launcher.getConfig().getWikiUrl();
     }
 
     protected JPanel createContainerPanel() {

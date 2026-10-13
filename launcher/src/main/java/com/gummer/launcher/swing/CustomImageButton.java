@@ -40,6 +40,15 @@ public class CustomImageButton extends JButton {
         });
     }
 
+    /** Замінити картинку кнопки (наприклад, кнопка соцмережі вибраної збірки); стан наведення зберігається. */
+    public void setImage(BufferedImage icon, int width, int height) {
+        boolean hovered = getIcon() == hoverIcon;
+        Image resized = getResizedImage(icon, width, height);
+        defaultIcon = new ImageIcon(resized);
+        hoverIcon = new ImageIcon(getHoveredImage(resized));
+        setIcon(hovered ? hoverIcon : defaultIcon);
+    }
+
     public static Image getResizedImage(BufferedImage icon, int width, int height) {
         Image tmp = icon.getScaledInstance(width, height, Image.SCALE_SMOOTH);
         BufferedImage resize = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
