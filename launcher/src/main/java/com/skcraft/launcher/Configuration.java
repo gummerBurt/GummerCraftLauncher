@@ -51,6 +51,8 @@ public class Configuration {
 
     private String customInstancesDirectory = null; // by default use homedir
     private String lang = Lang.UKRAINIAN.getName(); // use UA-uk lang by default
+    private String lastInstance = null; // назва останньої вибраної збірки: її вибрано й оформлено одразу при старті
+    private String autoUpdatedTo = null; // версія, яку лаунчер уже ставив автоматично (запобіжник від циклу оновлення-перезапуску)
 
     // social links
     private String discordUrl = "https://go.gummer.cc/out/discord?src=launcher-sidebar";

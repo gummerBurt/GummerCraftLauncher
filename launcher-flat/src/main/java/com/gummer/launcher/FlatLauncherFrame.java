@@ -33,22 +33,36 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
         SwingHelper.removeOpaqueness(getInstanceScroll());
         getInstanceScroll().setBorder(BorderFactory.createEmptyBorder());
 
-        // фон міняється разом із вибраною збіркою (FlatBackgroundPanel.showPack)
+        // одразу вигляд останньої вибраної збірки (ще до завантаження списку збірок) - без "стандартний, а потім перемикання"
+        String last = launcher.getConfig().getLastInstance();
+        if (backgroundPanel != null && last != null) {
+            backgroundPanel.showPack(last, false);
+            showPackButtons(last.toLowerCase(java.util.Locale.ROOT));
+        }
+
+        // фон міняється разом із вибраною збіркою (FlatBackgroundPanel.showPack); перший вибір після старту - без переходу
         getInstancesTable().getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) updatePackBackground();
         });
         updatePackBackground();
     }
 
+    private boolean firstSelection = true;
+
     private void updatePackBackground() {
         if (backgroundPanel == null) return;
         int row = getInstancesTable().getSelectedRow();
-        String name = null;
-        if (row >= 0 && row < launcher.getInstances().size()) {
-            name = launcher.getInstances().get(row).getName();
-        }
-        backgroundPanel.showPack(name);
+        if (row < 0 || row >= launcher.getInstances().size()) return; // нічого не вибрано (список ще вантажиться) - лишаємо поточний вигляд
+        String name = launcher.getInstances().get(row).getName();
+        backgroundPanel.showPack(name, !firstSelection);
         showPackButtons(name != null ? name.toLowerCase(java.util.Locale.ROOT) : null);
+        firstSelection = false;
+
+        // запам'ятати вибір (config.json) - наступного разу лаунчер одразу відкриється з цією збіркою
+        if (name != null && !name.equals(launcher.getConfig().getLastInstance())) {
+            launcher.getConfig().setLastInstance(name);
+            com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+        }
     }
 
     /** Вікі вибраної збірки (wiki.url у frame_&lt;назва&gt;.properties), інакше - загальна. */

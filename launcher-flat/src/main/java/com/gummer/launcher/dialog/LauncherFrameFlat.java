@@ -288,7 +288,7 @@ public class LauncherFrameFlat extends JFrame {
             @Override
             public void tableChanged(TableModelEvent e) {
                 if (instancesTable.getRowCount() > 0) {
-                    instancesTable.setRowSelectionInterval(0, 0);
+                    selectRememberedInstance();
                 }
             }
         });
@@ -341,6 +341,21 @@ public class LauncherFrameFlat extends JFrame {
 //        if(SystemInfo.isMacOS) {
 //            container.setBorder(new EmptyBorder(new Insets(20, 0, 0, 0)));
 //        }
+    }
+
+    /** Вибрати в списку останню вибрану збірку (Configuration.lastInstance), якщо вона є в списку, інакше першу. */
+    private void selectRememberedInstance() {
+        int row = 0;
+        String last = launcher.getConfig().getLastInstance();
+        if (last != null) {
+            for (int i = 0; i < launcher.getInstances().size() && i < instancesTable.getRowCount(); i++) {
+                if (last.equals(launcher.getInstances().get(i).getName())) {
+                    row = i;
+                    break;
+                }
+            }
+        }
+        instancesTable.setRowSelectionInterval(row, row);
     }
 
     /** Куди веде кнопка Discord (за замовчуванням - з налаштувань лаунчера; FlatLauncherFrame підставляє адресу вибраної збірки). */
@@ -549,7 +564,7 @@ public class LauncherFrameFlat extends JFrame {
             public void run() {
                 instancesModel.update();
                 if (instancesTable.getRowCount() > 0) {
-                    instancesTable.setRowSelectionInterval(0, 0);
+                    selectRememberedInstance();
                 }
                 requestFocus();
             }

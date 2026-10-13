@@ -12,6 +12,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.gummer.launcher.util.SelfRestart;
 import com.skcraft.concurrency.ObservableFuture;
 import com.skcraft.launcher.Launcher;
+import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.dialog.ProgressDialog;
 import com.skcraft.launcher.selfupdate.LatestVersionInfo;
 import com.skcraft.launcher.selfupdate.SelfUpdater;
@@ -58,6 +59,13 @@ public class UpdateManager {
             public void onSuccess(LatestVersionInfo result) {
                 if (result != null) {
                     requestUpdate(result);
+                    // оновлення без питань: одразу ставимо й перезапускаємось. Якщо цю саму версію вже ставили автоматично, а лаунчер досі старий
+                    // (новий jar не запустився) - не зациклюємось, лишаємо кнопку оновлення.
+                    if (!result.getVersion().equals(launcher.getConfig().getAutoUpdatedTo())) {
+                        launcher.getConfig().setAutoUpdatedTo(result.getVersion());
+                        Persistence.commitAndForget(launcher.getConfig());
+                        performUpdate(window);
+                    }
                 }
             }
 
@@ -83,12 +91,11 @@ public class UpdateManager {
                 public void onSuccess(File result) {
                     propertySupport.firePropertyChange("pendingUpdate", true, false);
                     UpdateManager.this.pendingUpdate = null;
-                    SelfRestart.restartRequiredDialog(
-                        UpdateManager.class,
-                        SharedLocale.tr("launcher.selfUpdateCompleteTitle"),
-                        SharedLocale.tr("launcher.selfUpdateComplete")
-                    );
-                    //RestartRequiredDialog.show();
+                    // перезапуск через бутстрапер (він стартує щойно завантажений jar); не вийшло - просимо перезапустити вручну
+                    if (!SelfRestart.relaunchBootstrap()) {
+                        SwingHelper.showMessageDialog(window, SharedLocale.tr("launcher.selfUpdateComplete"),
+                                SharedLocale.tr("launcher.selfUpdateCompleteTitle"), null, javax.swing.JOptionPane.INFORMATION_MESSAGE);
+                    }
                 }
 
                 @Override

@@ -102,6 +102,11 @@ public class FlatBackgroundPanel extends JPanel {
 
     /** Показати фон і логотип вибраної збірки (або стандартні, якщо своїх нема чи збірку не вибрано) з плавним переходом. */
     public void showPack(String packName) {
+        showPack(packName, true);
+    }
+
+    /** @param animate false - одразу, без переходу (старт лаунчера) */
+    public void showPack(String packName, boolean animate) {
         Image background = null;
         Image logo = null;
         Properties layout = new Properties();
@@ -119,6 +124,14 @@ public class FlatBackgroundPanel extends JPanel {
                 logo != null ? logo : defaultLogo, intOf(layout, "logo.x"), intOf(layout, "logo.y"));
         if (next.looksSame(current)) return;
 
+        if (!animate) {
+            fadeTimer.stop();
+            previous = null;
+            current = next;
+            fade = 1.0F;
+            repaint();
+            return;
+        }
         previous = current;
         current = next;
         fade = 0.0F;

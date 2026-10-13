@@ -11,6 +11,48 @@ import java.util.logging.Logger;
 
 public class SelfRestart {
 
+    /**
+     * Перезапуск лаунчера після самооновлення: запускає новий процес бутстрапера (exe Launch4j або jar бутстрапера) у тій самій робочій папці
+     * (портативний режим визначається по portable.txt у ній) і завершує цей. Бутстрапер стартує найновіший jar з папки launcher.
+     *
+     * @return false - не вдалося визначити, чим запускати (наприклад, лаунчер запущено напряму без бутстрапера); тоді гравцю треба перезапустити вручну
+     */
+    public static boolean relaunchBootstrap() {
+        java.util.List<String> command = bootstrapCommand();
+        if (command == null) return false;
+        try {
+            new ProcessBuilder(command).directory(new File(System.getProperty("user.dir"))).start();
+        } catch (IOException e) {
+            Logger.getLogger(SelfRestart.class.getName()).log(Level.WARNING, "Failed to relaunch " + command, e);
+            return false;
+        }
+        System.exit(0);
+        return true;
+    }
+
+    private static java.util.List<String> bootstrapCommand() {
+        String exe = System.getProperty("launch4j.exefile"); // Launch4j сам виставляє шлях до exe
+        if (exe != null && new File(exe).isFile()) return java.util.Collections.singletonList(exe);
+
+        // інакше перший елемент classpath - exe/jar бутстрапера (сам лаунчер підвантажений бутстрапером окремим класлоадером з папки launcher)
+        String first = System.getProperty("java.class.path", "").split(java.util.regex.Pattern.quote(File.pathSeparator))[0];
+        File entry = new File(first);
+        if (first.isEmpty() || !entry.isFile()) return null;
+        try {
+            File self = new File(Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            if (self.getAbsoluteFile().equals(entry.getAbsoluteFile())) return null; // лаунчер без бутстрапера - нема що перезапускати
+        } catch (URISyntaxException | RuntimeException e) {
+            return null;
+        }
+        String name = first.toLowerCase(java.util.Locale.ROOT);
+        if (name.endsWith(".exe")) return java.util.Collections.singletonList(entry.getAbsolutePath());
+        if (name.endsWith(".jar")) {
+            String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+            return java.util.Arrays.asList(javaBin, "-jar", entry.getAbsolutePath());
+        }
+        return null;
+    }
+
     public static void restartRequiredDialog(Class<?> clazz, String title, String message) {
         try {
             int response = JOptionPane.showConfirmDialog(null, message, title,
