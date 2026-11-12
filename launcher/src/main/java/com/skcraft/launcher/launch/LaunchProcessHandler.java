@@ -37,13 +37,22 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
     @Getter
     private final Image trayErrorIcon = SwingHelper.createImage(Launcher.class, "ui/notification/error.png");;
 
+    /** 1.32: пак, що запущено (для розбору вильоту), або null. */
+    private final com.skcraft.launcher.Instance instance;
+
     public LaunchProcessHandler(@NonNull Launcher launcher) {
+        this(launcher, null);
+    }
+
+    public LaunchProcessHandler(@NonNull Launcher launcher, com.skcraft.launcher.Instance instance) {
         this.launcher = launcher;
+        this.instance = instance;
     }
 
     @Override
     public ProcessConsoleFrame apply(final Process process) {
         log.info("Watching process " + process);
+        final long startedAt = System.currentTimeMillis();
 
         try {
             SwingUtilities.invokeAndWait(new Runnable() {
@@ -75,6 +84,25 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
 
         log.info("Process ended, re-showing launcher...");
 
+        // 1.32: розбір вильоту (поза EDT: читає звіти про збій і логи)
+        int exit = 0;
+        try {
+            exit = process.exitValue();
+        } catch (IllegalThreadStateException ignored) {
+        }
+        final int exitCode = exit;
+        com.gummer.launcher.crash.CrashAnalyzer.Diagnosis diagnosis = null;
+        if (exitCode != 0 && instance != null) {
+            try {
+                String console = consoleFrame != null ? consoleFrame.getMessageLog().getPastableText() : "";
+                diagnosis = com.gummer.launcher.crash.CrashAnalyzer.analyze(instance, startedAt, console, exitCode);
+                log.info("Game exited with code " + exitCode + ", crash diagnosis: " + diagnosis.key);
+            } catch (RuntimeException e) {
+                log.log(Level.WARNING, "Crash analysis failed", e);
+            }
+        }
+        final com.gummer.launcher.crash.CrashAnalyzer.Diagnosis crash = diagnosis;
+
         // Restore the launcher
         SwingUtilities.invokeLater(new Runnable() {
             @Override
@@ -83,7 +111,16 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
                     consoleFrame.setProcess(null);
 
                     // show client console on minecraft crash
-                    if (!launcher.getConfig().isShowConsole() && process != null && process.exitValue() != 0) {
+                    if (crash != null) {
+                        // 1.32: замість голої консолі вікно з причиною і що робити; консоль за кнопкою
+                        final ProcessConsoleFrame frame = consoleFrame;
+                        com.gummer.launcher.crash.CrashDialog.show(null, instance, crash, () -> {
+                            frame.setVisible(true);
+                            frame.setTitle(tr("splash.client.crashed"));
+                            frame.setIconImage(getTrayErrorIcon());
+                            frame.toFront();
+                        });
+                    } else if (!launcher.getConfig().isShowConsole() && process != null && exitCode != 0) {
                         consoleFrame.setVisible(true);
                         consoleFrame.setLocationRelativeTo(null);
                         consoleFrame.setLocation(5, 5);

@@ -99,6 +99,8 @@ public final class Launcher {
 
         this.baseDir = baseDir.getAbsoluteFile();
         this.properties = LauncherUtils.loadProperties(Launcher.class, "launcher.properties", "com.skcraft.launcher.propertiesFile");
+        com.skcraft.launcher.swing.SwingHelper.setNewLauncherDownloadUrl(properties.getProperty("newLauncherDownloadUrl"));
+        com.gummer.launcher.support.SupportLogBuffer.install(); // лог лаунчера для звернень у підтримку (1.32)
         this.instances = new InstanceList(this);
         this.assets = new AssetsRoot(new File(baseDir, "assets"));
         this.accounts = Persistence.load(new File(configDir, "accounts.dat"), AccountList.class);
@@ -355,10 +357,32 @@ public final class Launcher {
      * @return the packages URL
      */
     public URL getPackagesURL() {
+        return packagesUrlFrom("packageListUrl");
+    }
+
+    /**
+     * Адреса списку модпаків v2 (1.32+, нові поля group, server, recommendedMemory), або null, якщо її не задано.
+     * Старий список v1 не змінюється, бо лаунчери 1.31 і старші падають на будь-якому новому полі.
+     */
+    public URL getPackagesURLV2() {
+        String template = getProperties().getProperty("packageListUrlV2");
+        if (template == null || template.trim().isEmpty()) {
+            return null;
+        }
+        URL url = packagesUrlFrom("packageListUrlV2");
+        // анонімний ID установки для статистики (com.gummer.launcher.stats.InstallId): лише в цьому запиті і лише на наш CDN
+        String id = com.gummer.launcher.stats.InstallId.get(getBaseDir());
+        if (id != null && url.getHost().toLowerCase(java.util.Locale.ROOT).endsWith("gummercraft.fun")) {
+            url = HttpRequest.url(url.toString() + (url.getQuery() != null ? "&" : "?") + "i=" + id);
+        }
+        return url;
+    }
+
+    private URL packagesUrlFrom(String property) {
         try {
             String key = Strings.nullToEmpty(getConfig().getGameKey());
             return HttpRequest.url(
-                    String.format(getProperties().getProperty("packageListUrl"),
+                    String.format(getProperties().getProperty(property),
                             URLEncoder.encode(key, "UTF-8")));
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);

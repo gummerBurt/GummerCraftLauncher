@@ -45,6 +45,14 @@ public class InstanceList {
     @Getter
     private HashMap<String, JavaManifest[]> javaVersions = new HashMap<>();
 
+    /** Назви груп паків зі списку v2 (id групи -> назва для картки), порожньо для списку v1. */
+    @Getter
+    private Map<String, String> groupTitles = new LinkedHashMap<String, String>();
+
+    /** Описи груп зі списку v2 (id групи -> опис для другого рядка картки). */
+    @Getter
+    private Map<String, String> groupSubtitles = new LinkedHashMap<String, String>();
+
     /**
      * Create a new instance list.
      *
@@ -141,6 +149,12 @@ public class InstanceList {
                     instance.setName(dir.getName());
                     instance.setSelected(true);
                     instance.setLocal(true);
+                    if (instance.isVanilla()) {
+                        // вкладка Vanilla: група і назва відомі з назви теки, навіть без інтернету
+                        instance.setGroup(com.gummer.launcher.vanilla.VanillaVersions.GROUP);
+                        instance.setTitle(com.gummer.launcher.vanilla.VanillaVersions.titleOf(
+                                com.gummer.launcher.vanilla.VanillaVersions.versionIdOf(instance)));
+                    }
                     local.add(instance);
 
                     log.info(instance.getName() + " local instance found at " + dir.getAbsolutePath());
@@ -148,6 +162,42 @@ public class InstanceList {
             }
 
             progress = new DefaultProgress(0.3, SharedLocale.tr("instanceLoader.checkingRemote"));
+
+            // 1.32: вкладка Vanilla, релізи з маніфесту Mojang. Окремо від списку модпаків: його помилка не ховає ванілу
+            // і навпаки. Без інтернету: збережений список (vanilla_versions.json) або лише встановлені версії.
+            Set<String> vanillaNames = new HashSet<String>();
+            try {
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : com.gummer.launcher.vanilla.VanillaVersions.releases(launcher)) {
+                    String vname = com.gummer.launcher.vanilla.VanillaVersions.nameOf(r.id);
+                    vanillaNames.add(vname.toLowerCase(Locale.ROOT));
+                    Instance found = null;
+                    for (Instance instance : local) {
+                        if (instance.getName().equalsIgnoreCase(vname)) found = instance;
+                    }
+                    URL vurl = new URL(r.url);
+                    if (found != null) {
+                        found.setManifestURL(vurl);
+                    } else {
+                        File dir = new File(launcher.getInstancesDir(), vname);
+                        // через Persistence.load, як і паки з CDN: інакше Updater не може записати instance.json
+                        // («Cannot persist unbound object») і установка ванільної версії падає одразу
+                        Instance instance = Persistence.load(new File(dir, "instance.json"), Instance.class);
+                        instance.setDir(dir);
+                        instance.setName(vname);
+                        instance.setTitle(com.gummer.launcher.vanilla.VanillaVersions.titleOf(r.id));
+                        instance.setVersion(r.id);
+                        instance.setGroup(com.gummer.launcher.vanilla.VanillaVersions.GROUP);
+                        instance.setSelected(false);
+                        instance.setManifestURL(vurl);
+                        instance.setUpdatePending(true);
+                        instance.setLocal(false);
+                        remote.add(instance);
+                    }
+                }
+                log.info(vanillaNames.size() + " vanilla release(s) listed");
+            } catch (Exception e) {
+                log.log(java.util.logging.Level.WARNING, "The vanilla version list is unavailable", e);
+            }
 
             try {
                 URL javaManifestUrl = launcher.getJavaManifestURL();
@@ -170,22 +220,77 @@ public class InstanceList {
                 InstanceList.this.javaVersions = javaManifests.get(currentOs);
                 SwingExtras.logDebugMessage(launcher, "javaManifests.get(currentOs)", String.valueOf(InstanceList.this.javaVersions));
                 //#endregion
-            } catch (IOException e) {
-                throw new IOException("The Java versions could not be downloaded.", e);
+            } catch (Exception e) {
+                // Без маніфесту Java список модпаків однаково показуємо: грати можна з уже встановленою Java,
+                // а помилку про Java гравець побачить лише при встановленні модпаку (Updater). До 1.32 тут кидалась
+                // помилка, і недоступний маніфест Java ховав увесь список модпаків.
+                log.log(java.util.logging.Level.WARNING, "The Java versions could not be downloaded, continuing with the modpack list", e);
             }
 
             try {
-                URL packagesURL = launcher.getPackagesURL();
+                // 1.32+: спершу список v2 (ті самі паки + group, server, recommendedMemory). Не вдалося з будь-якої
+                // причини: старий список v1, як у 1.31. Так лаунчер працює, навіть поки v2 не викладено на CDN.
+                URL packagesURL = null;
+                PackageList packages = null;
+                URL packagesV2URL = launcher.getPackagesURLV2();
+                if (packagesV2URL != null) {
+                    try {
+                        packages = fetchPackageList(packagesV2URL);
+                        if (packages.getPackages() == null) {
+                            throw new IOException("The modpack list v2 has no packages");
+                        }
+                        packagesURL = packagesV2URL;
+                        log.info("Using the modpack list v2");
+                    } catch (InterruptedException e) {
+                        throw e;
+                    } catch (Exception e) {
+                        log.log(java.util.logging.Level.WARNING, "The modpack list v2 could not be used, falling back to v1", e);
+                        packages = null;
+                    }
+                }
+                if (packages == null) {
+                    packagesURL = launcher.getPackagesURL();
+                    packages = fetchPackageList(packagesURL);
+                }
 
-                PackageList packages = HttpRequest
-                        .get(packagesURL)
-                        .execute()
-                        .expectResponseCode(200)
-                        .returnContent()
-                        .asJson(PackageList.class);
+                Map<String, String> titles = new LinkedHashMap<String, String>();
+                titles.put(com.gummer.launcher.vanilla.VanillaVersions.GROUP, "Vanilla");
+                if (packages.getGroups() != null) {
+                    for (Map.Entry<String, PackageList.PackageGroup> g : packages.getGroups().entrySet()) {
+                        if (g.getValue() != null && g.getValue().getTitle() != null) {
+                            titles.put(g.getKey(), g.getValue().getTitle());
+                        }
+                    }
+                }
+                InstanceList.this.groupTitles = titles;
+                Map<String, String> subtitles = new LinkedHashMap<String, String>();
+                if (packages.getGroups() != null) {
+                    for (Map.Entry<String, PackageList.PackageGroup> g : packages.getGroups().entrySet()) {
+                        if (g.getValue() != null && g.getValue().getSubtitle() != null) {
+                            subtitles.put(g.getKey(), g.getValue().getSubtitle());
+                        }
+                    }
+                }
+                InstanceList.this.groupSubtitles = subtitles;
 
                 if (packages.getMinimumVersion() > Launcher.PROTOCOL_VERSION) {
                     throw new LauncherException("Update required", SharedLocale.tr("errors.updateRequiredError"));
+                }
+
+                Set<String> listedNames = new HashSet<String>();
+                for (ManifestInfo manifest : packages.getPackages()) {
+                    if (manifest.getName() != null) {
+                        listedNames.add(manifest.getName().toLowerCase(Locale.ROOT));
+                    }
+                }
+                // Пак на диску, якого вже немає в списку CDN (наприклад main-1.19.3): позначка «більше не підтримується»
+                // і місце в кінці списку. Лише коли список завантажився успішно: без інтернету нічого не позначаємо.
+                for (Instance instance : local) {
+                    if (instance.isVanilla()) continue; // ванільні версії не з нашого списку, вони не «покинуті»
+                    instance.setOrphaned(!listedNames.contains(instance.getName().toLowerCase(Locale.ROOT)));
+                    if (instance.isOrphaned()) {
+                        log.info(instance.getName() + " is not in the modpack list anymore (orphaned)");
+                    }
                 }
 
                 for (ManifestInfo manifest : packages.getPackages()) {
@@ -198,6 +303,7 @@ public class InstanceList {
                             instance.setTitle(manifest.getTitle());
                             instance.setPriority(manifest.getPriority());
                             instance.setJavaRuntime(manifest.getJavaRuntime());
+                            applyListFields(instance, manifest);
                             URL url = concat(packagesURL, manifest.getLocation());
                             instance.setManifestURL(url);
 
@@ -225,6 +331,7 @@ public class InstanceList {
                         instance.setVersion(manifest.getVersion());
                         instance.setPriority(manifest.getPriority());
                         instance.setJavaRuntime(manifest.getJavaRuntime());
+                        applyListFields(instance, manifest);
                         instance.setSelected(false);
                         instance.setManifestURL(concat(packagesURL, manifest.getLocation()));
                         instance.setUpdatePending(true);
@@ -248,6 +355,23 @@ public class InstanceList {
             }
 
             return InstanceList.this;
+        }
+
+        private PackageList fetchPackageList(URL url) throws IOException, InterruptedException {
+            return HttpRequest
+                    .get(url)
+                    .execute()
+                    .expectResponseCode(200)
+                    .returnContent()
+                    .asJson(PackageList.class);
+        }
+
+        /** Поля списку v2 (у v1 їх немає: null, false, null). */
+        private void applyListFields(Instance instance, ManifestInfo manifest) {
+            instance.setGroup(manifest.getGroup());
+            instance.setServer(manifest.isServer());
+            instance.setRecommendedMemory(manifest.getRecommendedMemory());
+            instance.setServerAddress(manifest.getServerAddress());
         }
 
         @Override

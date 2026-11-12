@@ -39,7 +39,32 @@ public class Environment {
      * @return the current environment
      */
     public static Environment getInstance() {
-        return new Environment(detectPlatform(), System.getProperty("os.version"), System.getProperty("os.arch"));
+        Platform platform = detectPlatform();
+        return new Environment(platform, System.getProperty("os.version"), detectOsArch(platform));
+    }
+
+    /**
+     * Розрядність самої ОС, а не Java, на якій працює лаунчер.
+     *
+     * <p>До 1.32 бралось {@code os.arch} Java лаунчера: 64-бітна Windows + 32-бітна системна Java = лаунчер вважав систему
+     * 32-бітною і ставив для гри 32-бітну Java (максимум ~1.5 ГБ пам'яті). На Windows 32-бітний процес бачить справжню
+     * архітектуру в {@code PROCESSOR_ARCHITEW6432} (WOW64), інакше в {@code PROCESSOR_ARCHITECTURE} (AMD64, x86, ARM64).
+     * На інших ОС лишається {@code os.arch}.</p>
+     */
+    static String detectOsArch(Platform platform) {
+        String jvmArch = System.getProperty("os.arch");
+        if (platform != Platform.WINDOWS) {
+            return jvmArch;
+        }
+        String wow64 = System.getenv("PROCESSOR_ARCHITEW6432");
+        if (wow64 != null && !wow64.trim().isEmpty()) {
+            return wow64.trim();
+        }
+        String native_ = System.getenv("PROCESSOR_ARCHITECTURE");
+        if (native_ != null && !native_.trim().isEmpty()) {
+            return native_.trim();
+        }
+        return jvmArch;
     }
 
     public String getArchBits() {

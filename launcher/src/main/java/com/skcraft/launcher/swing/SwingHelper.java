@@ -142,6 +142,42 @@ public final class SwingHelper {
      * @param title the title string for the dialog
      * @see #showMessageDialog(java.awt.Component, String, String, String, int) for details
      */
+    /** 1.32: куди вести гравців зі старим exe (launcher.properties newLauncherDownloadUrl); порожнє - не пропонувати. */
+    private static volatile String newLauncherDownloadUrl;
+
+    public static void setNewLauncherDownloadUrl(String url) {
+        newLauncherDownloadUrl = url != null && !url.trim().isEmpty() ? url.trim() : null;
+    }
+
+    /**
+     * Чи пропонувати в діалозі помилки новий лаунчер: Windows і лаунчер запущено не з вбудованою Java нового exe
+     * (тобто старим Gummer_Craft_launcher.exe на системній Java, з якою найчастіше й бувають проблеми).
+     */
+    static boolean shouldSuggestNewLauncher() {
+        try {
+            return newLauncherDownloadUrl != null
+                    && Environment.getInstance().getPlatform() == Platform.WINDOWS
+                    && !"bundled".equals(com.gummer.launcher.shared.Toolbox.javaKind());
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private static JComponent createNewLauncherHint() {
+        final String url = newLauncherDownloadUrl;
+        JPanel hint = new JPanel(new BorderLayout(12, 0));
+        hint.setOpaque(false);
+        hint.add(new JLabel("<html><div style=\"width: 360px\"><b>" + htmlEscape(tr("errors.oldExeHintTitle")) + "</b><br>"
+                + htmlEscape(tr("errors.oldExeHint")) + "</div></html>"), BorderLayout.CENTER);
+        final JButton download = new JButton(tr("errors.oldExeHintButton"));
+        download.addActionListener(e -> openURL(url, download));
+        JPanel buttonWrap = new JPanel(new GridBagLayout()); // кнопка по центру висоти, не розтягнута
+        buttonWrap.setOpaque(false);
+        buttonWrap.add(download);
+        hint.add(buttonWrap, BorderLayout.EAST);
+        return hint;
+    }
+
     public static void showErrorDialog(Component parentComponent, @NonNull String message,
                                        @NonNull String title) {
         showErrorDialog(parentComponent, message, title, null);
@@ -170,9 +206,112 @@ public final class SwingHelper {
             detailsText = sw.toString();
         }
 
-        showMessageDialog(parentComponent,
-                message, title,
-                detailsText, JOptionPane.ERROR_MESSAGE);
+        // 1.32: зрозуміле вікно помилки (причина людською мовою, деталі під кнопкою, звернення в підтримку)
+        final String why = throwable != null ? com.gummer.launcher.crash.ErrorExplainer.explain(throwable) : null;
+        final String details = detailsText;
+        if (SwingUtilities.isEventDispatchThread()) {
+            showFriendlyError(parentComponent, message, title, details, why);
+        } else {
+            try {
+                SwingUtilities.invokeAndWait(() -> showFriendlyError(parentComponent, message, title, details, why));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (InvocationTargetException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    /** Технічні дані для деталей помилки і звернення: версії лаунчера, ОС, Java. */
+    private static String environmentInfo() {
+        String jar = "";
+        try {
+            jar = SwingHelper.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+        } catch (Exception ignored) {
+        }
+        return String.format("APP: v@version@ (%s/%s)\nJVM: v%s (%s/%s/%s/%s)\n%s\n",
+                System.getProperty("os.name"), System.getProperty("os.arch"),
+                System.getProperty("java.specification.version"), System.getProperty("java.runtime.version"),
+                System.getProperty("java.version.date"), System.getProperty("java.vm.vendor"),
+                System.getProperty("java.vm.name"), jar);
+    }
+
+    /**
+     * 1.32: вікно помилки. Зверху причина людською мовою (якщо відома, ErrorExplainer) і текст помилки, деталі
+     * (стек) сховані під кнопкою «Показати деталі», кнопки «Скопіювати деталі» і «Написати в підтримку»
+     * (деталі вже вписано в текст звернення). Раніше тут була велика стіна стеку і порада зробити скріншот.
+     */
+    private static void showFriendlyError(Component parent, String message, String title, String details, String why) {
+        final JPanel panel = new JPanel(new BorderLayout(0, 12));
+        StringBuilder html = new StringBuilder("<html><div style=\"width: 440px\">");
+        if (why != null) {
+            html.append("<b>").append(htmlEscape(tr("errors.why." + why + ".title"))).append("</b><br>")
+                    .append(htmlEscape(tr("errors.why." + why))).append("<br><br>")
+                    .append("<span style=\"color:#8a8f98\">").append(htmlEscape(tr("errors.technical"))).append(" ")
+                    .append(htmlEscape(message)).append("</span>");
+        } else {
+            html.append("<b>").append(htmlEscape(message)).append("</b>");
+            if (details != null) {
+                html.append("<br><br>").append(htmlEscape(tr("errors.unknownHint")));
+            }
+        }
+        html.append("</div></html>");
+        panel.add(new JLabel(html.toString()), BorderLayout.NORTH);
+
+        final String fullDetails = details != null ? environmentInfo() + details : null;
+        if (fullDetails != null) {
+            final JTextArea textArea = new JTextArea(fullDetails);
+            textArea.setFont(new JLabel().getFont());
+            textArea.setTabSize(2);
+            textArea.setEditable(false);
+            textArea.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
+            final JScrollPane scroll = new JScrollPane(textArea);
+            scroll.setPreferredSize(new Dimension(560, 260));
+            scroll.setVisible(false);
+
+            JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            buttons.setOpaque(false);
+            final JButton toggle = new JButton(tr("errors.showDetails"));
+            toggle.addActionListener(e -> {
+                scroll.setVisible(!scroll.isVisible());
+                toggle.setText(tr(scroll.isVisible() ? "errors.hideDetails" : "errors.showDetails"));
+                Window w = SwingUtilities.getWindowAncestor(panel);
+                if (w != null) w.pack();
+            });
+            JButton copy = new JButton(tr("errors.copyDetails"));
+            copy.addActionListener(e -> setClipboard(message + "\n\n" + fullDetails));
+            buttons.add(toggle);
+            buttons.add(Box.createHorizontalStrut(8));
+            buttons.add(copy);
+            final com.gummer.launcher.ui.UiHooks.Support support = com.gummer.launcher.ui.UiHooks.support;
+            if (support != null) {
+                JButton write = new JButton(tr("errors.writeSupport"));
+                write.addActionListener(e -> {
+                    Window w = SwingUtilities.getWindowAncestor(panel);
+                    String text = tr("errors.supportText") + "\n\n" + message + "\n\n"
+                            + (fullDetails.length() > 3000 ? fullDetails.substring(0, 3000) + "\n..." : fullDetails);
+                    if (w != null) w.dispose();
+                    support.open(parent instanceof Window ? (Window) parent : null, "Лаунчер", text);
+                });
+                buttons.add(Box.createHorizontalStrut(8));
+                buttons.add(write);
+            }
+            JPanel center = new JPanel(new BorderLayout(0, 8));
+            center.setOpaque(false);
+            center.add(buttons, BorderLayout.NORTH);
+            center.add(scroll, BorderLayout.CENTER);
+            panel.add(center, BorderLayout.CENTER);
+        }
+
+        if (shouldSuggestNewLauncher()) {
+            JPanel south = new JPanel(new BorderLayout());
+            south.setOpaque(false);
+            south.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+            south.add(createNewLauncherHint(), BorderLayout.CENTER);
+            panel.add(south, BorderLayout.SOUTH);
+        }
+
+        JOptionPane.showMessageDialog(parent, panel, title, JOptionPane.ERROR_MESSAGE);
     }
 
     /**
@@ -238,6 +377,14 @@ public final class SwingHelper {
                     scrollPane.setPreferredSize(new Dimension(350, 120));
                 }
                 panel.add(scrollPane, BorderLayout.CENTER);
+            }
+
+            if (messageType == JOptionPane.ERROR_MESSAGE && shouldSuggestNewLauncher()) {
+                JPanel south = new JPanel(new BorderLayout());
+                south.setOpaque(false);
+                south.setBorder(BorderFactory.createEmptyBorder(16, 0, 0, 0));
+                south.add(createNewLauncherHint(), BorderLayout.CENTER);
+                panel.add(south, BorderLayout.SOUTH);
             }
 
             JOptionPane.showMessageDialog(

@@ -44,6 +44,22 @@ public class Instance implements Comparable<Instance> {
     @JsonIgnore private int priority;
     @JsonIgnore private boolean selected;
     @JsonIgnore private boolean local;
+    /** Пак є на диску, але його вже немає в успішно завантаженому списку модпаків CDN (з 1.32). */
+    @JsonIgnore private boolean orphaned;
+    /** Зі списку v2 (1.32+): група паків (наприклад "main"), або null. */
+    @JsonIgnore private String group;
+    /** Зі списку v2: у паку є свій сервер. */
+    @JsonIgnore private boolean server;
+    /** Зі списку v2: рекомендована пам'ять у МБ, або null. */
+    @JsonIgnore private Integer recommendedMemory;
+    /** Зі списку v2 (1.32+): адреса сервера паку для «Запуск одразу на сервер» і онлайну на картці, або null. */
+    @JsonIgnore private String serverAddress;
+
+    /** Пак вкладки Vanilla: чиста версія Minecraft з маніфесту Mojang (назва vanilla-&lt;версія&gt;). */
+    @JsonIgnore
+    public boolean isVanilla() {
+        return com.gummer.launcher.vanilla.VanillaVersions.isVanilla(this);
+    }
 
     /**
      * Get the tile of the instance, which might be the same as the
@@ -144,33 +160,68 @@ public class Instance implements Comparable<Instance> {
         return super.equals(other);
     }
 
+    /**
+     * Порядок у списку (з 1.32): покинуті паки в кінці; далі пріоритет зі списку модпаків (більший вище);
+     * далі версія Minecraft з назви паку, від новішої до старішої, числами (26.2 вище 1.21, 1.21 вище 1.9);
+     * далі назва. До 1.32 встановлені паки йшли першими за датою запуску, а решта за пріоритетом, тож список
+     * виглядав випадковим. Останній вибраний пак і так запам'ятовується (Configuration.lastInstance).
+     */
     @Override
     public int compareTo(Instance o) {
-        if (isLocal() && !o.isLocal()) {
-            return -1;
-        } else if (!isLocal() && o.isLocal()) {
-            return 1;
-        } else if (isLocal() && o.isLocal()) {
-            Date otherDate = o.getLastAccessed();
+        if (orphaned != o.orphaned) {
+            return orphaned ? 1 : -1;
+        }
+        if (priority != o.priority) {
+            return priority > o.priority ? -1 : 1;
+        }
+        int byVersion = compareVersions(versionOf(o), versionOf(this));
+        if (byVersion != 0) {
+            return byVersion;
+        }
+        String a = title != null ? title : (name != null ? name : "");
+        String b = o.title != null ? o.title : (o.name != null ? o.name : "");
+        return a.compareToIgnoreCase(b);
+    }
 
-            if (otherDate == null && lastAccessed == null) {
-                return 0;
-            } else if (otherDate == null) {
-                return -1;
-            } else if (lastAccessed == null) {
-                return 1;
-            } else {
-                return -lastAccessed.compareTo(otherDate);
-            }
-        } else {
-            if (priority > o.priority) {
-                return -1;
-            } else if (priority < o.priority) {
-                return 1;
-            } else {
-                return 0;
+    /** Версія Minecraft з назви паку (main-1.19.3 -> [1, 19, 3]), або з заголовка; немає -> порожній масив. */
+    public static int[] versionOf(Instance instance) {
+        int[] v = parseVersion(instance.getName());
+        return v.length > 0 ? v : parseVersion(instance.getTitle());
+    }
+
+    static int[] parseVersion(String text) {
+        if (text == null) {
+            return new int[0];
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+(?:\\.\\d+)+)").matcher(text);
+        if (!m.find()) {
+            return new int[0];
+        }
+        String[] parts = m.group(1).split("\\.");
+        int[] out = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            try {
+                out[i] = Integer.parseInt(parts[i]);
+            } catch (NumberFormatException e) {
+                out[i] = 0;
             }
         }
+        return out;
+    }
+
+    /** Порівняння версій покомпонентно; пак без версії вважається найстарішим. */
+    static int compareVersions(int[] a, int[] b) {
+        if (a.length == 0 || b.length == 0) {
+            return Integer.compare(a.length == 0 ? 0 : 1, b.length == 0 ? 0 : 1);
+        }
+        for (int i = 0; i < Math.max(a.length, b.length); i++) {
+            int x = i < a.length ? a[i] : 0;
+            int y = i < b.length ? b[i] : 0;
+            if (x != y) {
+                return Integer.compare(x, y);
+            }
+        }
+        return 0;
     }
 
     /**

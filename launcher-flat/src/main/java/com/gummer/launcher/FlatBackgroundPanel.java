@@ -22,6 +22,7 @@ import java.util.Properties;
 /**
  * Тло головного вікна: фон, рамка (borders.png) і логотип. Для вибраної збірки можуть бути власні фон і логотип:
  * {@code ui/frame/bg_<назва збірки>.jpg} і {@code ui/frame/logo_<назва збірки>.png} (назва з маніфесту, малими літерами, наприклад bg_staldayz.jpg).
+ * Усі ванільні версії (група vanilla) беруть bg_vanilla.jpg і logo_vanilla.png (FlatLauncherFrame, з 1.32).
  * Немає файлу - малюється стандартний (bg.jpg / logo.png). Налаштування збірки - {@code ui/frame/frame_<назва збірки>.properties}:
  * зсуви background.x/y і logo.x/y у пікселях, wiki.url - куди веде кнопка "Вікі та FAQ" (дивись frame_staldayz.properties).
  * Зміна збірки - плавний перехід (старі фон і логотип розчиняються в нові за {@link #FADE_MS}).

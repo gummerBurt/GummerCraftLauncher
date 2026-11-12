@@ -40,7 +40,7 @@ public class HttpRequest implements Closeable, ProgressObservable {
     private static final int READ_TIMEOUT = 1000 * 60 * 10;
     private static final int READ_BUFFER_SIZE = 1024 * 8;
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = com.gummer.launcher.util.Json.newMapper();
     private final Map<String, String> headers = new HashMap<String, String>();
     private String method;
     @Getter
@@ -420,6 +420,11 @@ public class HttpRequest implements Closeable, ProgressObservable {
 
     public boolean isResumedRequest() {
         return resumeInfo != null;
+    }
+
+    /** Скільки байтів цього запиту вже прочитано (1.32: швидкість у вікні прогресу). */
+    public long getReadBytes() {
+        return readBytes;
     }
 
     @Override

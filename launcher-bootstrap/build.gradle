@@ -64,6 +64,13 @@ launch4j  {
     // немає Java - відкривається пряме завантаження інсталятора Java 8 (x64) з сайту Oracle, без проміжного редиректу через наш домен.
     // Посилання Oracle з часом застарівають (BundleId): якщо почне вести на 404 - оновити тут і перезібрати exe.
     downloadUrl = "https://javadl.oracle.com/webapps/download/AutoDL?BundleId=253608_2fde65a2208f40a5b5f4c844b0dff092"
+    // 1.32: вбудована Java. Тека jre поруч з exe (установка Inno Setup і портативний zip кладуть туди Temurin JRE 17 x64,
+    // tools/installer/jre.lock: 17, бо Java 8 не масштабує вікно під масштаб Windows). Немає теки jre (exe скачали окремо,
+    // як раніше) - Launch4j шукає встановлену Java 8+ як до 1.32.
+    bundledJrePath = "jre"
+    bundledJre64Bit = true
+    bundledJreAsFallback = false
+    jreMinVersion = "1.8.0"
     //jar = "../libs/${project.tasks.shadowJar.archiveFileName}" // now in afterEvaluate
     outfile = "Gummer_Craft_launcher.exe"
 }

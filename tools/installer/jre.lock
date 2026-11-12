@@ -1,0 +1,11 @@
+# Вбудована Java лаунчера (1.32+): офіційні архіви Adoptium, sha256 з api.adoptium.net. Установка кладе в {app}\jre одну з двох:
+#   jre17 - Windows 10 і новіші: Java 17 масштабує вікно під масштаб Windows (125%, 150%), на Java 8 вікно дрібніше;
+#   jre8  - Windows 7 і 8.1 (5% гравців у логах CDN): Temurin 17 там офіційно не підтримується, а Java 8 працює.
+# Портативний zip лише з jre17 (Windows 10+). Java для самої гри від цього не залежить (вона своя, з runtime\).
+# Оновити: https://api.adoptium.net/v3/assets/latest/<17|8>/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse
+jre17.name=OpenJDK17U-jre_x64_windows_hotspot_17.0.21_9.zip
+jre17.url=https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.21%2B9/OpenJDK17U-jre_x64_windows_hotspot_17.0.21_9.zip
+jre17.sha256=fe4656bd78fb09812dc38c49da777f79cc33e7ee435a254be82f9e7f40d9d117
+jre8.name=OpenJDK8U-jre_x64_windows_hotspot_8u512b09.zip
+jre8.url=https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jre_x64_windows_hotspot_8u512b09.zip
+jre8.sha256=ae1ae12f817d7735477c6555107eece73854da0654da69077309ef9bff0b78bf

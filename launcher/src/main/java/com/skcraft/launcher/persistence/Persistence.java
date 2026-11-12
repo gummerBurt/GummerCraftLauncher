@@ -37,7 +37,7 @@ import java.util.logging.Level;
 @Log
 public final class Persistence {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final ObjectMapper mapper = com.gummer.launcher.util.Json.newMapper();
     private static final WeakHashMap<Object, ByteSink> bound = new WeakHashMap<Object, ByteSink>();
     public static final DefaultPrettyPrinter L2F_LIST_PRETTY_PRINTER;
 

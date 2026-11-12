@@ -48,7 +48,7 @@
 - **Exe одразу запускає найновішу версію:** при кожному старті він звіряє встановлену версію з опублікованою і, якщо вийшла новіша, ставить її до запуску. Без інтернету запускається встановлена.
 - **Лог консолі відправляється по HTTPS** (лише після натискання кнопки «Завантажити лог»).
 - **Бібліотека інтерфейсу FlatLaf більше не розпаковує DLL у тимчасову папку Windows** - файл лежить у папці лаунчера.
-- **Прибрано невикористаний код телеметрії та ідентифікатор `uuid` з налаштувань.** Лаунчер не збирає й не відправляє даних про комп'ютер.
+- **Прибрано невикористаний код телеметрії та ідентифікатор `uuid` з налаштувань.** Лаунчер не збирає й не відправляє даних про комп'ютер. (З 1.32 є лише анонімний випадковий ID установки для підрахунку гравців, див. [SECURITY.md](SECURITY.md).)
 - **Офіційний ID застосунку Microsoft винесено з коду** в налаштування збірки.
 
 Що лаунчер робить і з якими серверами з'єднується - у [SECURITY.md](SECURITY.md).
@@ -62,7 +62,8 @@
 ## Що лаунчер робить на комп'ютері
 
 - Усі файли - **в одній папці**: `Документи\GummerCraft` (Windows) або `~/.gummercraft` / `$XDG_DATA_HOME/GummerCraft` (Linux, macOS). Шлях зберігається в `bootstrap.yml` і його можна змінити. Портативний режим - файл `portable.txt` поруч із лаунчером.
-- Вміст папки: `launcher/` (jar лаунчера), `runtime/` (портативна Java - збірки Eclipse Temurin), `assets/`, `libraries/`, `versions/` (файли Minecraft), `instances/` (збірки), `config.json` (налаштування), `accounts.dat` (збережені акаунти).
+- Вміст папки: `launcher/` (jar лаунчера), `runtime/` (портативна Java - збірки Eclipse Temurin), `assets/`, `libraries/`, `versions/` (файли Minecraft), `instances/` (збірки), `config.json` (налаштування), `accounts.dat` (збережені акаунти), з 1.32 `support.json` (звернення в підтримку з лаунчера), `launcher-ui.json` (вкладка, остання збірка, «Одразу на сервер»), `news-cache.json` і `vanilla_versions.json` (копії новин і списку версій Mojang), `stats-id.txt` (анонімний випадковий ID установки для підрахунку гравців, нічого про вас не містить; `off` у файлі вимикає, деталі в [SECURITY.md](SECURITY.md)). Ванільні версії з вкладки Vanilla ставляться в `instances/vanilla-<версія>`. З 1.32 може з'явитись `launcher/ui-scale.txt`: зменшений масштаб інтерфейсу, якщо вікно лаунчера з масштабом Windows не влазить в екран (видалення файлу нічого не ламає).
+- З 1.32 для нових гравців є установка `GummerCraft-Setup` з вбудованою Java (Eclipse Temurin JRE 17 на Windows 10+, JRE 8 на Windows 7/8.1): вона ставить лаунчер у `%LOCALAPPDATA%\Programs\GummerCraft` без прав адміністратора, створює ярлики в меню Пуск і на робочому столі та запис у «Програми та компоненти» (гілка реєстру поточного користувача). Пункт нижче стосується самого лаунчера.
 - Лаунчер **не пише в реєстр** (лише читає ключі встановленої Java, щоб її знайти), **не додає себе в автозапуск**, не створює служб, задач планувальника чи ярликів і не змінює файли поза своєю папкою.
 - Єдиний процес, який він запускає, - сама гра.
 
@@ -140,6 +141,6 @@ GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft
 
 **1.29 (open-source release):** full HTTPS certificate validation (it used to be disabled as a workaround for outdated Java/Windows root stores, which made the launcher's connections interceptable on untrusted networks; outdated JREs now get a few official root CAs added on top of the system store), launcher downloads over HTTPS only and verified against the SHA-256 published in `release.json`, the exe starts the newest published version right away, log upload over HTTPS, FlatLaf's native DLL no longer extracted to `%TEMP%`, unused telemetry code and the `uuid` setting removed, official Microsoft app id moved out of the source.
 
-Everything lives in one folder (`Documents\GummerCraft` on Windows). The launcher does not write to the registry, add autostart entries, services or scheduled tasks, or touch files outside that folder. Network endpoints, account handling and known limitations are listed in [SECURITY.md](SECURITY.md).
+Everything lives in one folder (`Documents\GummerCraft` on Windows). The launcher does not write to the registry, add autostart entries, services or scheduled tasks, or touch files outside that folder. Since 1.32 it keeps an anonymous random install ID in `stats-id.txt` (not derived from your name, account or hardware) and sends it only with the modpack list request to our CDN, so we can count players rather than IP addresses; write `off` into the file to disable it. Network endpoints, account handling and known limitations are listed in [SECURITY.md](SECURITY.md).
 
 Build with JDK 8: copy `gradle.properties.example` to `gradle.properties`, set `microsoftClientId` to your own Azure app id (the official GummerCraft id is not part of the repository), then run `./gradlew clean build` (add `createAllExecutables` for the Windows exe).

@@ -96,13 +96,19 @@ public abstract class BaseUpdater {
         final UpdateCache updateCache = Persistence.read(cachePath, UpdateCache.class);
         final FeatureCache featuresCache = Persistence.read(featuresPath, FeatureCache.class);
 
-        Manifest manifest = HttpRequest
-                .get(instance.getManifestURL())
-                .execute()
-                .expectResponseCode(200)
-                .returnContent()
-                .saveContent(instance.getManifestPath())
-                .asJson(Manifest.class);
+        Manifest manifest;
+        if (instance.isVanilla()) {
+            // 1.32, вкладка Vanilla: маніфест збирається з JSON версії від Mojang (без модів і файлів паку)
+            manifest = com.gummer.launcher.vanilla.VanillaVersions.buildManifest(instance);
+        } else {
+            manifest = HttpRequest
+                    .get(instance.getManifestURL())
+                    .execute()
+                    .expectResponseCode(200)
+                    .returnContent()
+                    .saveContent(instance.getManifestPath())
+                    .asJson(Manifest.class);
+        }
 
         if (manifest.getMinimumVersion() > Launcher.PROTOCOL_VERSION) {
             throw new LauncherException("Update required", SharedLocale.tr("errors.updateRequiredError"));

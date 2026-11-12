@@ -17,6 +17,12 @@ import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 @SuppressWarnings("ConstantConditions")
 public class InstanceTableModel extends AbstractTableModel {
@@ -26,8 +32,38 @@ public class InstanceTableModel extends AbstractTableModel {
     private final Icon customInstanceIcon;
     private final Icon downloadIcon;
 
+    /**
+     * 1.32: групи паків зі списку v2 (поле group, наприклад "main") показуються одним рядком, версія вибирається окремо
+     * (у FlatLaf-вікні випадний список біля «Грати»). Лише для вікна, яке це вміє (конструктор з lastInstance);
+     * старі вікна працюють як раніше: рядок = індекс у InstanceList.
+     */
+    private final boolean grouped;
+    private final Supplier<String> lastInstance;
+    private final List<Instance> rows = new ArrayList<Instance>();
+    /** Вибір версії в групі за цей запуск лаунчера (група -> назва паку). Між запусками: lastInstance і дата запуску. */
+    private final Map<String, String> groupChoice = new HashMap<String, String>();
+    /** 1.32: які паки показувати (вкладки GummerCraft і Vanilla), null - усі. */
+    private java.util.function.Predicate<Instance> filter;
+    /** 1.32: онлайн сервера паку для другого рядка (назва паку -> «5 онлайн»). */
+    private final Map<String, String> onlineLines = new java.util.concurrent.ConcurrentHashMap<String, String>();
+
+    public void setFilter(java.util.function.Predicate<Instance> filter) {
+        this.filter = filter;
+    }
+
+    public void setOnlineLine(String instanceName, String line) {
+        if (instanceName == null) return;
+        if (line == null) onlineLines.remove(instanceName); else onlineLines.put(instanceName, line);
+    }
+
     public InstanceTableModel(InstanceList instances) {
+        this(instances, null);
+    }
+
+    public InstanceTableModel(InstanceList instances, Supplier<String> lastInstance) {
         this.instances = instances;
+        this.grouped = lastInstance != null;
+        this.lastInstance = lastInstance;
         instanceIcon = SwingHelper.createIcon(Launcher.class, "instance_icon.png", 32, 32);
         customInstanceIcon = instanceIcon;
         downloadIcon = SwingHelper.createIcon(Launcher.class, "download_icon.png", 32, 32);
@@ -35,7 +71,142 @@ public class InstanceTableModel extends AbstractTableModel {
 
     public void update() {
         instances.sort();
+        rebuildRows();
         fireTableDataChanged();
+    }
+
+    /** Пак у рядку таблиці (для групи: вибрана версія). */
+    public Instance getInstanceAt(int row) {
+        return grouped ? rows.get(row) : instances.get(row);
+    }
+
+    /** Рядок, у якому показано цей пак (або його групу), або -1. */
+    public int rowOf(String instanceName) {
+        if (instanceName == null) {
+            return -1;
+        }
+        for (int i = 0; i < getRowCount(); i++) {
+            Instance shown = getInstanceAt(i);
+            if (instanceName.equalsIgnoreCase(shown.getName())) {
+                return i;
+            }
+            for (Instance member : getGroupMembers(shown)) {
+                if (instanceName.equalsIgnoreCase(member.getName())) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /** Версії групи цього паку (без покинутих), від новішої; порожньо, якщо пак не в групі або групування вимкнено. */
+    public List<Instance> getGroupMembers(Instance instance) {
+        List<Instance> members = new ArrayList<Instance>();
+        if (!grouped || instance == null || instance.getGroup() == null || instance.isOrphaned()) {
+            return members;
+        }
+        synchronized (instances) {
+            for (Instance i : instances.getInstances()) {
+                if (instance.getGroup().equals(i.getGroup()) && !i.isOrphaned()) {
+                    members.add(i);
+                }
+            }
+        }
+        return members;
+    }
+
+    /** Гравець вибрав версію в групі: рядок групи тепер показує її. */
+    public void chooseInGroup(Instance chosen) {
+        if (chosen != null && chosen.getGroup() != null) {
+            groupChoice.put(chosen.getGroup(), chosen.getName());
+        }
+    }
+
+    private void rebuildRows() {
+        rows.clear();
+        if (!grouped) {
+            return;
+        }
+        Map<String, Boolean> emitted = new HashMap<String, Boolean>();
+        synchronized (instances) {
+            for (Instance instance : instances.getInstances()) {
+                if (filter != null && !filter.test(instance)) {
+                    continue;
+                }
+                String group = instance.getGroup();
+                if (group == null || instance.isOrphaned()) {
+                    rows.add(instance);
+                } else if (!emitted.containsKey(group)) {
+                    emitted.put(group, true);
+                    rows.add(chosenOf(getGroupMembers(instance)));
+                }
+            }
+        }
+    }
+
+    /** Яку версію групи показати: вибрана за цей запуск, далі остання вибрана (config lastInstance), далі остання запущена, далі найновіша. */
+    private Instance chosenOf(List<Instance> members) {
+        String group = members.get(0).getGroup();
+        String byChoice = groupChoice.get(group);
+        String byLast = lastInstance != null ? lastInstance.get() : null;
+        for (String wanted : new String[]{byChoice, byLast}) {
+            if (wanted != null) {
+                for (Instance m : members) {
+                    if (wanted.equalsIgnoreCase(m.getName())) {
+                        return m;
+                    }
+                }
+            }
+        }
+        Instance recent = null;
+        for (Instance m : members) {
+            Date d = m.getLastAccessed();
+            if (d != null && (recent == null || d.after(recent.getLastAccessed()))) {
+                recent = m;
+            }
+        }
+        return recent != null ? recent : members.get(0);
+    }
+
+    /** Версія паку для вибору версії і рядка групи: «Main 1.21» у групі «Main» -> «1.21». */
+    public String versionLabelOf(Instance instance) {
+        // число версії з назви паку (main-1.19.3 -> 1.19.3): назви паків на CDN («Main 26.2») не збігаються з назвою групи
+        int[] v = Instance.versionOf(instance);
+        if (v.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < v.length; i++) {
+                sb.append(i > 0 ? "." : "").append(v[i]);
+            }
+            return sb.toString();
+        }
+        String groupTitle = instance.getGroup() != null ? instances.getGroupTitles().get(instance.getGroup()) : null;
+        return versionLabel(groupTitle != null ? groupTitle : "", instance);
+    }
+
+    /** Другий рядок групи: «Minecraft 1.21». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */
+    private String groupLine(Instance instance) {
+        String online = onlineLines.get(instance.getName());
+        return "Minecraft " + versionLabelOf(instance) + (online != null ? " · " + online : "");
+    }
+
+    /** Підпис версії під назвою групи: «Main 1.21» у групі «Main» -> «1.21». */
+    private static String versionLabel(String groupTitle, Instance instance) {
+        String title = instance.getTitle() != null ? instance.getTitle() : instance.getName();
+        String prefix = groupTitle + " ";
+        return title.regionMatches(true, 0, prefix, 0, prefix.length()) && title.length() > prefix.length()
+                ? title.substring(prefix.length()) : title;
+    }
+
+    /** Назва групи для рядка (зі списку v2), або null, якщо пак показується сам по собі. */
+    private String groupTitleFor(Instance instance) {
+        if (!grouped || instance.getGroup() == null || getGroupMembers(instance).size() < 2) {
+            return null;
+        }
+        String title = instances.getGroupTitles().get(instance.getGroup());
+        if (title == null && com.gummer.launcher.vanilla.VanillaVersions.GROUP.equals(instance.getGroup())) {
+            title = "Vanilla";
+        }
+        return title != null ? title : instance.getGroup();
     }
 
     @Override
@@ -66,7 +237,7 @@ public class InstanceTableModel extends AbstractTableModel {
     public void setValueAt(Object value, int rowIndex, int columnIndex) {
         switch (columnIndex) {
             case 0:
-                instances.get(rowIndex).setSelected((boolean) (Boolean) value);
+                getInstanceAt(rowIndex).setSelected((boolean) (Boolean) value);
                 break;
             case 1:
             default:
@@ -88,7 +259,7 @@ public class InstanceTableModel extends AbstractTableModel {
 
     @Override
     public int getRowCount() {
-        return instances.size();
+        return grouped ? rows.size() : instances.size();
     }
 
     @Override
@@ -102,7 +273,7 @@ public class InstanceTableModel extends AbstractTableModel {
         Instance instance;
         switch (columnIndex) {
             case 0:
-                instance = instances.get(rowIndex);
+                instance = getInstanceAt(rowIndex);
                 if (!instance.isLocal()) {
                     return downloadIcon;
                 } else {
@@ -114,8 +285,15 @@ public class InstanceTableModel extends AbstractTableModel {
                     return instanceIcon;
                 }
             case 1:
-                instance = instances.get(rowIndex);
+                instance = getInstanceAt(rowIndex);
                 //return instance.getTitle();
+                String groupTitle = groupTitleFor(instance);
+                if (groupTitle != null) {
+                    // рядок групи: назва групи, під нею вибрана версія і її стан
+                    return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(groupTitle) + "</span>"
+                            + "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SwingHelper.htmlEscape(groupLine(instance)) + "</span>"
+                            + "</html>"; // стан версії (встановлено, оновлення) видно у виборі версії: у вузькому списку не влазить
+                }
                 return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(instance.getTitle()) + "</span>" + getAddendum(instance) + "</html>";
             default:
                 return null;
@@ -123,12 +301,16 @@ public class InstanceTableModel extends AbstractTableModel {
     }
 
     private String getAddendum(Instance instance) {
-        if (!instance.isLocal()) {
+        if (instance.isOrphaned()) {
+            return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.orphanedHint") + "</span>";
+        } else if (!instance.isLocal()) {
             return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.notInstalledHint") + "</span>";
         } else if (!instance.isInstalled()) {
             return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.requiresUpdateHint") + "</span>";
         } else if (instance.isUpdatePending()) {
             return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.updatePendingHint") + "</span>";
+        } else if (onlineLines.containsKey(instance.getName())) {
+            return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#7ccf6a;font-size:11;\">" + SwingHelper.htmlEscape(onlineLines.get(instance.getName())) + "</span>";
         } else {
             return "";
         }

@@ -52,6 +52,12 @@ public class HttpDownloader implements Downloader {
     private long downloaded = 0;
     private long total = 0;
     private int left = 0;
+    /** 1.32: байти завершених файлів (розмір з маніфесту, а якщо його немає - скільки прийшло). */
+    private long doneBytes = 0;
+    /** 1.32: заміри {час мс, байти} за останні SPEED_WINDOW_MS для швидкості. */
+    private final ArrayDeque<long[]> speedSamples = new ArrayDeque<long[]>();
+    private static final long SPEED_WINDOW_MS = 5000;
+    private long firstSampleAt = 0;
 
     /**
      * Create a new downloader using the given executor.
@@ -177,9 +183,55 @@ public class HttpDownloader implements Downloader {
         return downloaded / (double) total;
     }
 
+    /** Скільки байтів уже прийшло: завершені файли плюс прочитане в тих, що качаються зараз. */
+    private long receivedBytes() {
+        long bytes = doneBytes;
+        for (HttpDownloadJob job : running) {
+            bytes += job.readBytes();
+        }
+        return bytes;
+    }
+
+    /**
+     * 1.32: перший рядок статусу (його показує вікно прогресу): скільки завантажено з загального розміру, швидкість
+     * за останні 5 с і орієнтовно скільки лишилось. null, поки нічого не качається.
+     */
+    private String summaryLine() {
+        long now = System.currentTimeMillis();
+        long bytes = receivedBytes();
+        if (!speedSamples.isEmpty() && bytes < speedSamples.peekLast()[1]) {
+            speedSamples.clear(); // повтор файлу з нуля: старі заміри вже не про те
+        }
+        speedSamples.addLast(new long[]{now, bytes});
+        if (firstSampleAt == 0) firstSampleAt = now;
+        while (speedSamples.size() > 2 && now - speedSamples.peekFirst()[0] > SPEED_WINDOW_MS) {
+            speedSamples.removeFirst();
+        }
+        long[] oldest = speedSamples.peekFirst();
+        double speed = now > oldest[0] ? (bytes - oldest[1]) * 1000.0 / (now - oldest[0]) : 0; // байт/с
+
+        double mb = 1024.0 * 1024.0;
+        String line = total > 0
+                ? tr("downloader.summary", Math.min(bytes, total) / mb, total / mb, speed / mb)
+                : tr("downloader.summaryNoTotal", bytes / mb, speed / mb);
+        if (total > bytes && speed > 1024 && now - firstSampleAt >= 3000) { // перші секунди швидкість ще стрибає
+            long seconds = Math.round((total - bytes) / speed);
+            line += seconds < 60 ? tr("downloader.etaSeconds", Math.max(1, seconds))
+                    : tr("downloader.etaMinutes", (seconds + 59) / 60);
+        }
+        return line;
+    }
+
     @Override
     public synchronized String getStatus() {
         String failMessage = tr("downloader.failedCount", failed.size());
+        if (!running.isEmpty()) {
+            return summaryLine() + "\n" + getFilesStatus(failMessage);
+        }
+        return SharedLocale.tr("downloader.noDownloads");
+    }
+
+    private String getFilesStatus(String failMessage) {
         if (running.size() == 1) {
             return tr("downloader.downloadingItem", running.get(0).getName()) +
                     "\n" + running.get(0).getStatus() +
@@ -223,6 +275,7 @@ public class HttpDownloader implements Downloader {
 
                 synchronized (HttpDownloader.this) {
                     downloaded += size;
+                    doneBytes += size > 0 ? size : readBytes();
                 }
             } catch (IOException e) {
                 synchronized (HttpDownloader.this) {
@@ -298,6 +351,12 @@ public class HttpDownloader implements Downloader {
                     tryDownloadFrom(url, file, byteRangeSupport.get(), tries + 1);
                 }
             }
+        }
+
+        /** Прочитано поточним запитом цього файлу (0, поки запиту немає). */
+        long readBytes() {
+            HttpRequest request = this.request;
+            return request != null ? request.getReadBytes() : 0;
         }
 
         @Override

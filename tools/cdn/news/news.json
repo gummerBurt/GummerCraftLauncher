@@ -1,0 +1,60 @@
+{
+  "items": [
+    {
+      "id": "staldayz-main",
+      "tab": "gummercraft",
+      "priority": 100,
+      "title": "StalDayZ: Зона чекає",
+      "text": "Аномалії, викиди і мутанти. Збирай хабар і виживай з іншими сталкерами.",
+      "image": "staldayz-1.jpg",
+      "button": "Грати",
+      "action": "pack:staldayz",
+      "online": "play.staldayz.com"
+    },
+    {
+      "id": "gummercraft-26.2",
+      "tab": "gummercraft",
+      "priority": 90,
+      "title": "GummerCraft 26.2",
+      "text": "Найновіша версія з нашими модами. Вибери версію на картці GummerCraft.",
+      "image": "gummercraft-1.jpg",
+      "button": "Вибрати",
+      "action": "pack:main-26.2",
+      "online": "play.gummercraft.fun"
+    },
+    {
+      "id": "community",
+      "tab": "gummercraft",
+      "priority": 50,
+      "title": "Новини та чат",
+      "text": "Вайпи, оновлення та події першими в Telegram.",
+      "image": "gummercraft-1.jpg",
+      "button": "Telegram",
+      "action": "url:https://go.gummer.cc/out/telegram?src=launcher-news"
+    },
+    {
+      "id": "promo-staldayz",
+      "tab": "vanilla",
+      "priority": 100,
+      "title": "Спробуй StalDayZ",
+      "text": "Зона з аномаліями та живими гравцями. Один клік, і ти там.",
+      "image": "staldayz-1.jpg",
+      "button": "Детальніше",
+      "action": "pack:staldayz",
+      "hideIfInstalled": "staldayz",
+      "online": "play.staldayz.com"
+    },
+    {
+      "id": "promo-gummercraft",
+      "tab": "vanilla",
+      "priority": 90,
+      "title": "Сервер GummerCraft",
+      "text": "Той самий Minecraft, але з друзями і модами на швидкість.",
+      "image": "gummercraft-1.jpg",
+      "button": "Детальніше",
+      "action": "pack:main-26.2",
+      "hideIfInstalled": "main-26.2",
+      "online": "play.gummercraft.fun"
+    }
+  ]
+}

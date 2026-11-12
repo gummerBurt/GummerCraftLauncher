@@ -183,3 +183,8 @@ $RECYCLE.BIN/
 # Python
 __pycache__/
 *.pyc
+
+# 1.32: кеш JRE для tools/installer/build-installer.sh
+/tools/installer/.cache/
+# лог збірки установки (tools/release.sh, build-installer.sh)
+.rel-installer.log

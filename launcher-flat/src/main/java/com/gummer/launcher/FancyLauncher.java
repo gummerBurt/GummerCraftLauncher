@@ -35,8 +35,10 @@ public class FancyLauncher {
         // ПЕРШИМ ділом, до будь-якого класу FlatLaf: на Windows FlatLaf вантажить свою DLL уже при першому зверненні до
         // com.formdev.flatlaf.util.SystemInfo, тож flatlaf.nativeLibraryPath має бути виставлений раніше (інакше DLL іде в %TEMP%).
         useNativesFromLauncherDir(args);
+        UiScaleFit.applySaved(baseDirFromArgs(args)); // теж до AWT: збережений масштаб для малого екрана (1.32)
         SwingExtras.enforceMacDefaults(); // tune and enforce macos defaults
         Launcher.setupLogger();
+        UiScaleFit.fitOrRelaunch(baseDirFromArgs(args)); // вікно не влазить у екран: інший масштаб і перезапуск
 
         SwingUtilities.invokeLater(new Runnable() {
             @Override
@@ -100,10 +102,7 @@ public class FancyLauncher {
         if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows")) {
             return;
         }
-        File baseDir = null;
-        for (int i = 0; i + 1 < args.length; i++) {
-            if ("--dir".equals(args[i])) baseDir = new File(args[i + 1]);
-        }
+        File baseDir = baseDirFromArgs(args);
         if (baseDir == null) return;
 
         String arch = System.getProperty("os.arch", "").toLowerCase(java.util.Locale.ROOT);
@@ -127,6 +126,15 @@ public class FancyLauncher {
         } catch (IOException | RuntimeException e) {
             System.err.println("Could not place FlatLaf native library in " + dir + ": " + e);
         }
+    }
+
+    /** Тека даних з аргументу --dir (його передає бутстрапер), або null. */
+    private static File baseDirFromArgs(String[] args) {
+        File baseDir = null;
+        for (int i = 0; i + 1 < args.length; i++) {
+            if ("--dir".equals(args[i])) baseDir = new File(args[i + 1]);
+        }
+        return baseDir;
     }
 
     public static void enforcePlatformDefaults() {

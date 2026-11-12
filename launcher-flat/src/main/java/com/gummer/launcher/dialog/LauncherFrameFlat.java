@@ -72,7 +72,37 @@ public class LauncherFrameFlat extends JFrame {
     // init bottom buttons
     private final JButton optionsButton;
     private final JButton wikiButton;
+    /** 1.32: звернення в підтримку (null, якщо в launcher.properties немає supportInboxId). */
+    private final com.gummer.launcher.support.SupportService supportService;
+    private JButton supportButton;
     private final JButton launchButton;
+    /** 1.32: вибір версії для групи паків (наприклад Main), видимий лише коли у вибраної групи кілька версій. */
+    private final JComboBox<Instance> versionBox = new JComboBox<Instance>();
+    /** Блок «Версія Minecraft» висотою з кнопку «Грати»: темна напівпрозора підкладка, щоб читалось на будь-якому фоні збірки. */
+    private final JPanel versionPanel = new JPanel(new MigLayout("insets 10 16 12 16, wrap 1, gap 0 6", "[260!]", "[][]")) {
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new Color(0, 0, 0, 150));
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    };
+    private boolean updatingVersionBox = false;
+
+    // 1.32: вкладки GummerCraft (наші паки, реклама серверів) і Vanilla (чисті версії Mojang)
+    /** Підпис над вибором версії: свій для групи GummerCraft, Vanilla і решти (з 1.32). */
+    private final JLabel versionLabel = new JLabel(tr("launcher.versionLabel"));
+    /** Картки новин і реклами над кнопками (news.json з CDN). */
+    private final JPanel newsRow = new JPanel(new MigLayout("insets 0 12 8 12, gap 12", "", "[]"));
+    private java.util.List<com.gummer.launcher.news.NewsFeed.Item> news = java.util.Collections.emptyList();
+    /** Онлайн серверів (адреса -> стан), оновлюється раз на хвилину. */
+    private final java.util.Map<String, com.gummer.launcher.server.ServerPing.Status> online = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Set<String> offlineServers = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    private final JLabel onlineLabel = new JLabel(" ");
+    private final JCheckBox quickJoinBox = new JCheckBox(tr("launcher.quickJoin"));
     //private final JButton refreshButton;  // disable for now refreshBurron
     //private JButton accountButton; // disable for now accountButton
 
@@ -97,7 +127,7 @@ public class LauncherFrameFlat extends JFrame {
         super(tr("launcher.title", launcher.getVersion()));
 
         this.launcher = launcher;
-        instancesModel = new InstanceTableModel(launcher.getInstances());
+        instancesModel = new InstanceTableModel(launcher.getInstances(), () -> launcher.getConfig().getLastInstance());
         rootFrame = this;
 
         // Initialize lang from this.launcher config
@@ -154,6 +184,16 @@ public class LauncherFrameFlat extends JFrame {
             101,101,
             SharedLocale.tr("tooltip.faq")
         );
+        supportService = com.gummer.launcher.support.SupportService.create(launcher);
+        if (supportService != null) {
+            supportButton = new CustomImageButton(
+                ImageIO.read(Objects.requireNonNull(
+                    Launcher.class.getResourceAsStream("ui/button/support_" + langCode + ".png")
+                )),
+                101,101,
+                SharedLocale.tr("tooltip.support")
+            );
+        }
         launchButton = new CustomImageButton(
             ImageIO.read(Objects.requireNonNull(
                 Launcher.class.getResourceAsStream("ui/button/play_" + langCode + ".png")
@@ -168,6 +208,9 @@ public class LauncherFrameFlat extends JFrame {
 //            50,50,
 //            SharedLocale.tr("launcher.checkForUpdates")
 //        );
+
+        com.gummer.launcher.prefs.LauncherPrefs.init(launcher.getBaseDir());
+        registerUiHooks();
 
         // configure main windowFrame
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -216,6 +259,11 @@ public class LauncherFrameFlat extends JFrame {
         sidebarButtonsPanel.add(telegramButton);
         sidebarButtonsPanel.add(Box.createVerticalStrut(5));
         sidebarButtonsPanel.add(discordButton);
+        JComponent sourceLink = createSourceLink();
+        if (sourceLink != null) {
+            sidebarButtonsPanel.add(Box.createVerticalStrut(4));
+            sidebarButtonsPanel.add(sourceLink);
+        }
         sidebarButtonsPanel.add(Box.createVerticalStrut(1));
         //sidebarButtonsPanel.add(Box.createVerticalStrut(4));
         sidebarButtonsPanel.add(selfUpdateButton);
@@ -230,7 +278,7 @@ public class LauncherFrameFlat extends JFrame {
         rightPanel.setOpaque(false); // transparent
 
         // create bottom buttons panel with padding
-        JPanel rightButtonsPanel = new JPanel(new MigLayout("", "[][]push[]", "")); // productiom!
+        JPanel rightButtonsPanel = new JPanel(new MigLayout("", "[][][]push[][]", "")); // productiom! (1.32: + «Підтримка», вибір версії перед «Грати»)
         //JPanel rightButtonsPanel = new JPanel(new MigLayout("", "[][][][][]push[][]", ""));
 
         rightButtonsPanel.setOpaque(false);
@@ -241,13 +289,31 @@ public class LauncherFrameFlat extends JFrame {
         rightButtonsPanel.add(optionsButton);
         //rightButtonsPanel.add(accountButton); // disable for now accountButton
         rightButtonsPanel.add(wikiButton);
+        if (supportButton != null) {
+            rightButtonsPanel.add(supportButton);
+            supportButton.addActionListener(e -> com.gummer.launcher.dialog.SupportDialog.showFor(this, supportService, this::getSelectedInstance));
+            checkSupportReplies();
+        }
+        setupVersionBox();
+        rightButtonsPanel.add(versionPanel, "aligny center, hidemode 3, gapright 8");
         rightButtonsPanel.add(launchButton);
 
         // add elements to rightPanel
-        webView = createNewsPanel();
-        rightPanel.add(webView, BorderLayout.CENTER);
-        rightPanel.add(rightButtonsPanel, BorderLayout.PAGE_END);
-        webView.setVisible(false); // hide news panel for now
+        // 1.32: замість прихованої веб-панелі новин (у Java 8 немає браузера) картки з news.json над кнопками
+        JPanel newsArea = new JPanel(new BorderLayout());
+        newsArea.setOpaque(false);
+        newsRow.setOpaque(false);
+        newsArea.add(newsRow, BorderLayout.SOUTH);
+        rightPanel.add(newsArea, BorderLayout.CENTER);
+        JPanel bottom = new JPanel(new BorderLayout());
+        bottom.setOpaque(false);
+        bottom.add(createStatusRow(), BorderLayout.NORTH);
+        bottom.add(rightButtonsPanel, BorderLayout.CENTER);
+        rightPanel.add(bottom, BorderLayout.PAGE_END);
+        JPanel oldExeBanner = createOldExeBanner();
+        if (oldExeBanner != null) {
+            rightPanel.add(oldExeBanner, BorderLayout.PAGE_START);
+        }
 
         // add elements to Main container
         container.add(sidebarPanel, BorderLayout.WEST);
@@ -287,9 +353,18 @@ public class LauncherFrameFlat extends JFrame {
         instancesModel.addTableModelListener(new TableModelListener() {
             @Override
             public void tableChanged(TableModelEvent e) {
-                if (instancesTable.getRowCount() > 0) {
-                    selectRememberedInstance();
+                // 1.32: після EDT-черги. Слухачі моделі викликаються у зворотному порядку, тож цей іде раніше за
+                // слухача самої JTable, і той на fireTableDataChanged знімав щойно зроблений вибір: не було видно
+                // вибору версії, онлайну і «Одразу на сервер». Оновлення рядків (онлайн) вибір не чіпає.
+                if (e.getType() == TableModelEvent.UPDATE && e.getFirstRow() != TableModelEvent.HEADER_ROW
+                        && e.getLastRow() != Integer.MAX_VALUE) {
+                    return;
                 }
+                SwingUtilities.invokeLater(() -> {
+                    if (instancesTable.getRowCount() > 0) {
+                        selectRememberedInstance();
+                    }
+                });
             }
         });
         instancesTable.addMouseListener(new DoubleClickToButtonAdapter(launchButton));
@@ -331,7 +406,7 @@ public class LauncherFrameFlat extends JFrame {
                 Instance selected = null;
                 if (index >= 0) {
                     instancesTable.setRowSelectionInterval(index, index);
-                    selected = launcher.getInstances().get(index);
+                    selected = instancesModel.getInstanceAt(index);
                 }
                 popupInstanceMenu(e.getComponent(), e.getX(), e.getY(), selected);
             }
@@ -343,19 +418,549 @@ public class LauncherFrameFlat extends JFrame {
 //        }
     }
 
+    /**
+     * true, поки лаунчер сам відновлює вибір (selectRememberedInstance). Такий вибір не запам'ятовується як вибір
+     * гравця (FlatLauncherFrame.updatePackBackground): інакше, коли список ще неповний (ванільні версії Mojang ще не
+     * підвантажились, немає інтернету), вимушений перший рядок перезаписував lastInstance, і гравець Vanilla
+     * наступного разу опинявся на StalDayZ (знайдено 13.11.2026).
+     */
+    protected boolean restoringSelection;
+
     /** Вибрати в списку останню вибрану збірку (Configuration.lastInstance), якщо вона є в списку, інакше першу. */
     private void selectRememberedInstance() {
-        int row = 0;
-        String last = launcher.getConfig().getLastInstance();
-        if (last != null) {
-            for (int i = 0; i < launcher.getInstances().size() && i < instancesTable.getRowCount(); i++) {
-                if (last.equals(launcher.getInstances().get(i).getName())) {
-                    row = i;
-                    break;
+        int row = Math.max(0, instancesModel.rowOf(launcher.getConfig().getLastInstance()));
+        restoringSelection = true;
+        try {
+            instancesTable.setRowSelectionInterval(row, row);
+        } finally {
+            restoringSelection = false;
+        }
+        refreshVersionBox();
+    }
+
+    /**
+     * 1.32: непримітне посилання на відкритий код лаунчера під кнопками соцмереж (sourceCodeUrl у launcher.properties;
+     * порожнє - посилання немає). Дрібний сірий текст, світлішає під мишкою.
+     */
+    private JComponent createSourceLink() {
+        final String url = launcher.getProperties().getProperty("sourceCodeUrl");
+        if (url == null || url.trim().isEmpty()) {
+            return null;
+        }
+        final Color normal = new Color(0x8A8F98);
+        final Color hover = new Color(0xD8DCE2);
+        final JLabel link = new JLabel(tr("launcher.sourceCode"));
+        link.setFont(link.getFont().deriveFont(Font.PLAIN, 11f));
+        link.setForeground(normal);
+        link.setToolTipText(url.trim());
+        link.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        link.setAlignmentX(Component.LEFT_ALIGNMENT);
+        link.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 0));
+        link.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                SwingHelper.openURL(url.trim(), LauncherFrameFlat.this);
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                link.setForeground(hover);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                link.setForeground(normal);
+            }
+        });
+        return link;
+    }
+
+    /**
+     * 1.32: банер «новий лаунчер без Java» для тих, хто запустив лаунчер старим exe (Windows, Java не вбудована,
+     * Toolbox.javaKind() = system). Посилання з launcher.properties (newLauncherUrl); порожнє - банера немає.
+     * Закривається хрестиком до наступного запуску.
+     */
+    private JPanel createOldExeBanner() {
+        final String url = launcher.getProperties().getProperty("newLauncherUrl");
+        if (url == null || url.trim().isEmpty() || !SystemInfo.isWindows
+                || "bundled".equals(com.gummer.launcher.shared.Toolbox.javaKind())) {
+            return null;
+        }
+        final JPanel banner = new JPanel(new MigLayout("insets 8 14 8 8, gap 10", "[grow][][]", "[]")) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(0, 0, 0, 170));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        banner.setOpaque(false);
+        JLabel text = new JLabel("<html>" + SwingHelper.htmlEscape(tr("launcher.oldExeBanner")) + "</html>");
+        text.setForeground(new Color(235, 235, 235));
+        text.setFont(text.getFont().deriveFont(Font.BOLD, 13f));
+        JButton get = new JButton(tr("launcher.oldExeBannerButton"));
+        get.addActionListener(e -> SwingHelper.openURL(url, LauncherFrameFlat.this));
+        JButton close = new JButton("✕");
+        close.setToolTipText(tr("launcher.oldExeBannerClose"));
+        close.addActionListener(e -> {
+            banner.setVisible(false);
+            banner.getParent().revalidate();
+        });
+        banner.add(text, "growx, wmin 0");
+        banner.add(get);
+        banner.add(close);
+        JPanel wrap = new JPanel(new MigLayout("insets 0 12 0 12", "[grow,fill]", "[]"));
+        wrap.setOpaque(false);
+        wrap.add(banner);
+        return wrap;
+    }
+
+    /** 1.32: раз при старті, у фоні: чи відповіли адміни на звернення, поки лаунчер був закритий. */
+    private void checkSupportReplies() {
+        if (!supportService.hasConversation()) return;
+        new SwingWorker<Integer, Void>() {
+            @Override
+            protected Integer doInBackground() throws Exception {
+                return supportService.unreadReplies();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    if (get() > 0) {
+                        supportButton.setToolTipText(SharedLocale.tr("support.newReplyTooltip"));
+                        showNotification(LauncherFrameFlat.rootFrame, LauncherFrameFlat.class, Notification.Type.INFO,
+                                SharedLocale.tr("support.newReply"));
+                    }
+                } catch (Exception e) {
+                    log.log(java.util.logging.Level.INFO, "Support: could not check replies", e);
                 }
             }
+        }.execute();
+    }
+
+    /** Пак у вибраному рядку (для групи: вибрана версія), або null. */
+    protected Instance getSelectedInstance() {
+        int row = instancesTable.getSelectedRow();
+        return row >= 0 && row < instancesModel.getRowCount() ? instancesModel.getInstanceAt(row) : null;
+    }
+
+    private void setupVersionBox() {
+        versionPanel.setOpaque(false);
+        versionPanel.setVisible(false);
+        versionLabel.setForeground(new Color(230, 230, 230));
+        versionLabel.setFont(versionLabel.getFont().deriveFont(Font.BOLD, 13f));
+        versionPanel.add(versionLabel);
+        versionPanel.add(versionBox, "growx, h 44!");
+        versionBox.setFocusable(false);
+        versionBox.setFont(versionBox.getFont().deriveFont(Font.BOLD, 18f));
+        versionBox.setMaximumRowCount(12);
+        versionBox.setToolTipText(tr("launcher.versionTooltip"));
+        versionBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                Object text = value;
+                if (value instanceof Instance) {
+                    Instance i = (Instance) value;
+                    String version = instancesModel.versionLabelOf(i);
+                    if (index < 0) {
+                        text = "Minecraft " + version; // закритий список: лише версія
+                    } else {
+                        // відкритий список: версія і її стан, найновіша позначена
+                        String status = !i.isLocal() || !i.isInstalled() ? tr("launcher.versionNotInstalled")
+                                : i.isUpdatePending() ? tr("launcher.versionUpdate") : tr("launcher.versionInstalled");
+                        if (index == 0) {
+                            status = tr("launcher.versionNewest") + " · " + status;
+                        }
+                        text = "<html><b>Minecraft " + SwingHelper.htmlEscape(version) + "</b>&nbsp;&nbsp;<span style=\"color:#8a8f98;font-size:11\">"
+                                + SwingHelper.htmlEscape(status) + "</span></html>";
+                    }
+                }
+                Component c = super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
+                if (index >= 0) {
+                    // у відкритому списку шрифт менший, ніж у самому полі (18), щоб влазив стан версії
+                    c.setFont(c.getFont().deriveFont(Font.BOLD, 14f));
+                    ((JComponent) c).setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+                }
+                return c;
+            }
+        });
+        versionBox.addActionListener(e -> {
+            if (updatingVersionBox) return;
+            Instance chosen = (Instance) versionBox.getSelectedItem();
+            Instance shown = getSelectedInstance();
+            if (chosen == null || chosen == shown) return;
+            instancesModel.chooseInGroup(chosen);
+            launcher.getConfig().setLastInstance(chosen.getName());
+            com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+            instancesTable.clearSelection(); // щоб вибір рядка спрацював заново (фон, кнопки збірки)
+            instancesModel.update();         // tableChanged -> selectRememberedInstance -> рядок групи з новою версією
+        });
+        instancesTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                refreshVersionBox();
+                refreshStatusRow();
+            }
+        });
+    }
+
+    /** Показати вибір версії, якщо вибраний рядок це група з кількох версій. */
+    private void refreshVersionBox() {
+        Instance shown = getSelectedInstance();
+        java.util.List<Instance> members = instancesModel.getGroupMembers(shown);
+        updatingVersionBox = true;
+        try {
+            versionBox.removeAllItems();
+            if (members.size() >= 2) {
+                for (Instance m : members) {
+                    versionBox.addItem(m);
+                }
+                versionBox.setSelectedItem(shown);
+            }
+            versionPanel.setVisible(members.size() >= 2);
+            if (members.size() >= 2) {
+                String key = shown.isVanilla() ? "launcher.versionLabelVanilla"
+                        : "main".equals(shown.getGroup()) ? "launcher.versionLabelGummerCraft" : "launcher.versionLabel";
+                versionLabel.setText(tr(key));
+                versionLabel.setToolTipText(tr(key + "Tooltip"));
+                versionPanel.setToolTipText(tr(key + "Tooltip"));
+            }
+        } finally {
+            updatingVersionBox = false;
         }
-        instancesTable.setRowSelectionInterval(row, row);
+        if (versionPanel.getParent() != null) {
+            versionPanel.getParent().revalidate();
+            versionPanel.getParent().repaint();
+        }
+    }
+
+    /** Вибрати пак у списку (для групи: цю версію в групі). */
+    private void selectPack(Instance target) {
+        instancesModel.chooseInGroup(target);
+        launcher.getConfig().setLastInstance(target.getName());
+        com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+        instancesTable.clearSelection();
+        instancesModel.update(); // tableChanged -> selectRememberedInstance
+    }
+
+    /** Текст для ванільної версії («версія»), якщо є, інакше звичайний («модпак»). */
+    private static String trFor(Instance instance, String key, Object... args) {
+        String k = instance != null && instance.isVanilla() ? key + ".vanilla" : key;
+        return args.length == 0 ? tr(k) : tr(k, args);
+    }
+
+    // ------------------------------------------------------------------ 1.32: онлайн і «одразу на сервер»
+
+    private JPanel createStatusRow() {
+        JPanel row = new JPanel(new MigLayout("insets 0 14 0 14, gap 14", "push[][]", "[]"));
+        row.setOpaque(false);
+        onlineLabel.setFont(onlineLabel.getFont().deriveFont(Font.BOLD, 13f));
+        onlineLabel.setForeground(new Color(0x8C, 0xE0, 0x7A));
+        quickJoinBox.setOpaque(false);
+        quickJoinBox.setFocusable(false);
+        quickJoinBox.setForeground(new Color(235, 235, 235));
+        quickJoinBox.setFont(quickJoinBox.getFont().deriveFont(Font.BOLD, 13f));
+        quickJoinBox.setToolTipText(tr("launcher.quickJoinTooltip"));
+        quickJoinBox.setSelected(com.gummer.launcher.prefs.LauncherPrefs.getBoolean(com.gummer.launcher.prefs.LauncherPrefs.QUICK_JOIN, true));
+        quickJoinBox.addActionListener(e -> com.gummer.launcher.prefs.LauncherPrefs.set(
+                com.gummer.launcher.prefs.LauncherPrefs.QUICK_JOIN, quickJoinBox.isSelected()));
+        // темна підкладка, щоб читалось на будь-якому фоні
+        JPanel pill = new JPanel(new MigLayout("insets 4 12 4 12, gap 14", "[][]", "[]")) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(0, 0, 0, 150));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        pill.setOpaque(false);
+        pill.add(onlineLabel, "hidemode 3");
+        pill.add(quickJoinBox, "hidemode 3");
+        row.add(pill, "hidemode 3");
+        pillPanel = pill;
+        return row;
+    }
+
+    private JPanel pillPanel;
+
+    /** Онлайн і «Одразу на сервер» для вибраного паку (лише вкладка GummerCraft і паки з адресою сервера). */
+    private void refreshStatusRow() {
+        Instance sel = getSelectedInstance();
+        String address = sel != null && !sel.isVanilla() ? sel.getServerAddress() : null;
+        boolean show = address != null;
+        launchButton.setToolTipText(trFor(sel, "tooltip.launch"));
+        quickJoinBox.setVisible(show);
+        com.gummer.launcher.server.ServerPing.Status st = show ? online.get(address) : null;
+        if (st != null) {
+            onlineLabel.setText("● " + tr("launcher.onlineStatus", st.online, st.max));
+            onlineLabel.setForeground(new Color(0x8C, 0xE0, 0x7A));
+            onlineLabel.setVisible(true);
+        } else if (show && offlineServers.contains(address)) {
+            onlineLabel.setText("● " + tr("launcher.onlineUnavailable"));
+            onlineLabel.setForeground(new Color(0xB0, 0xB0, 0xB0));
+            onlineLabel.setVisible(true);
+        } else {
+            onlineLabel.setVisible(false);
+        }
+        if (pillPanel != null) {
+            pillPanel.setVisible(show);
+            pillPanel.revalidate();
+            pillPanel.repaint();
+        }
+    }
+
+    /** Пінг серверів паків і карток раз на хвилину, у фоні. */
+    private void startOnlinePolling() {
+        if (onlineTimer == null) {
+            onlineTimer = new javax.swing.Timer(60_000, e -> pollOnline());
+            onlineTimer.start();
+        }
+        pollOnline();
+    }
+
+    private javax.swing.Timer onlineTimer;
+
+    private void pollOnline() {
+        final java.util.Set<String> addresses = new java.util.LinkedHashSet<>();
+        synchronized (launcher.getInstances()) {
+            for (Instance i : launcher.getInstances().getInstances()) {
+                if (!i.isVanilla() && i.getServerAddress() != null) addresses.add(i.getServerAddress());
+            }
+        }
+        for (com.gummer.launcher.news.NewsFeed.Item n : news) {
+            if (n.online != null) addresses.add(n.online);
+        }
+        if (addresses.isEmpty()) return;
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                for (String a : addresses) {
+                    com.gummer.launcher.server.ServerPing.Status s = com.gummer.launcher.server.ServerPing.query(a);
+                    if (s != null) {
+                        online.put(a, s);
+                        offlineServers.remove(a);
+                    } else {
+                        online.remove(a);
+                        offlineServers.add(a);
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                synchronized (launcher.getInstances()) {
+                    for (Instance i : launcher.getInstances().getInstances()) {
+                        com.gummer.launcher.server.ServerPing.Status s = i.getServerAddress() != null ? online.get(i.getServerAddress()) : null;
+                        instancesModel.setOnlineLine(i.getName(), s != null ? tr("launcher.onlineLine", s.online) : null);
+                    }
+                }
+                if (instancesModel.getRowCount() > 0) {
+                    instancesModel.fireTableRowsUpdated(0, instancesModel.getRowCount() - 1);
+                }
+                refreshStatusRow();
+                rebuildNews();
+            }
+        }.execute();
+    }
+
+    // ------------------------------------------------------------------ 1.32: картки новин і реклами
+
+    private void loadNews() {
+        new SwingWorker<java.util.List<com.gummer.launcher.news.NewsFeed.Item>, Void>() {
+            @Override
+            protected java.util.List<com.gummer.launcher.news.NewsFeed.Item> doInBackground() {
+                return com.gummer.launcher.news.NewsFeed.load(launcher);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    news = get();
+                } catch (Exception e) {
+                    news = java.util.Collections.emptyList();
+                }
+                rebuildNews();
+                pollOnline(); // онлайн для карток з полем online
+            }
+        }.execute();
+    }
+
+    /** Картки для поточної вкладки: не більше трьох, без реклами паку, який уже встановлено (hideIfInstalled). */
+    private void rebuildNews() {
+        newsRow.removeAll();
+        int shown = 0;
+        for (com.gummer.launcher.news.NewsFeed.Item n : news) {
+            if (shown >= 3) break;
+            if (n.hideIfInstalled != null && isInstalled(n.hideIfInstalled)) continue;
+            newsRow.add(createNewsCard(n), "w 296!, h 128!");
+            shown++;
+        }
+        newsRow.revalidate();
+        newsRow.repaint();
+    }
+
+    private boolean isInstalled(String packName) {
+        synchronized (launcher.getInstances()) {
+            for (Instance i : launcher.getInstances().getInstances()) {
+                if (i.getName().equalsIgnoreCase(packName) && i.isLocal() && i.isInstalled()) return true;
+            }
+        }
+        return false;
+    }
+
+    private JComponent createNewsCard(final com.gummer.launcher.news.NewsFeed.Item n) {
+        final JPanel card = new JPanel(new MigLayout("insets 0, gap 0", "[110!][grow,fill]", "[grow,fill]")) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(12, 12, 14, 205));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        card.setOpaque(false);
+
+        final CoverImage picture = new CoverImage();
+        card.add(picture, "grow");
+        if (n.image != null) {
+            new SwingWorker<java.awt.image.BufferedImage, Void>() {
+                @Override
+                protected java.awt.image.BufferedImage doInBackground() {
+                    return com.gummer.launcher.news.NewsFeed.image(n.image);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        java.awt.image.BufferedImage i = get();
+                        if (i != null) picture.setImage(i);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }.execute();
+        }
+
+        JPanel body = new JPanel(new MigLayout("insets 10 12 10 12, wrap 1, gap 0 4, fillx", "[0:0:,grow,fill]", "[][0:0:,grow,top][]"));
+        body.setOpaque(false);
+        JLabel title = new JLabel(n.title);
+        title.setToolTipText(n.title);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        title.setForeground(Color.WHITE);
+        body.add(title);
+        JTextArea text = new JTextArea(n.text);
+        text.setLineWrap(true);
+        text.setWrapStyleWord(true);
+        text.setEditable(false);
+        text.setFocusable(false);
+        text.setOpaque(false);
+        text.setBorder(null);
+        text.setForeground(new Color(215, 215, 215));
+        text.setFont(text.getFont().deriveFont(12f));
+        body.add(text, "growy, hmin 0"); // довгий текст обрізається, кнопка лишається видимою
+        JPanel bottomRow = new JPanel(new MigLayout("insets 0, gap 8", "[]push[]", "[]"));
+        bottomRow.setOpaque(false);
+        com.gummer.launcher.server.ServerPing.Status st = n.online != null ? online.get(n.online) : null;
+        JLabel onlineText = new JLabel(st != null ? "● " + tr("launcher.onlineLine", st.online) : "");
+        onlineText.setForeground(new Color(0x8C, 0xE0, 0x7A));
+        onlineText.setFont(onlineText.getFont().deriveFont(Font.BOLD, 12f));
+        bottomRow.add(onlineText);
+        if (n.button != null && n.action != null) {
+            JButton go = new JButton(n.button);
+            go.setFocusable(false);
+            go.putClientProperty("FlatLaf.style", "background: #3f8f2f; foreground: #ffffff; font: bold; arc: 8; borderWidth: 0; focusWidth: 0");
+            go.addActionListener(e -> runNewsAction(n.action));
+            bottomRow.add(go);
+        }
+        body.add(bottomRow);
+        card.add(body, "grow");
+        if (n.action != null) {
+            card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            card.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    runNewsAction(n.action);
+                }
+            });
+        }
+        return card;
+    }
+
+    /** Дія картки: pack:&lt;назва&gt; (вибрати пак), tab:vanilla (група Vanilla), url:&lt;адреса&gt;. */
+    private void runNewsAction(String action) {
+        if (action == null) return;
+        if (action.startsWith("url:")) {
+            SwingHelper.openURL(action.substring(4), this);
+        } else if (action.startsWith("tab:")) {
+            // вкладок немає з 1.32 (три розділи в одному списку): tab:vanilla веде до групи Vanilla
+            if ("vanilla".equals(action.substring(4))) {
+                synchronized (launcher.getInstances()) {
+                    for (Instance i : launcher.getInstances().getInstances()) {
+                        if (i.isVanilla()) {
+                            selectPack(i);
+                            break;
+                        }
+                    }
+                }
+            }
+        } else if (action.startsWith("pack:")) {
+            String name = action.substring(5);
+            Instance target = null;
+            synchronized (launcher.getInstances()) {
+                for (Instance i : launcher.getInstances().getInstances()) {
+                    if (i.getName().equalsIgnoreCase(name)) target = i;
+                }
+            }
+            if (target != null) {
+                selectPack(target);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ 1.32: дії для вікон помилок і вильотів
+
+    private void registerUiHooks() {
+        com.gummer.launcher.ui.UiHooks.support = supportService == null ? null
+                : (owner, topic, text) -> com.gummer.launcher.dialog.SupportDialog.showPrefilled(
+                        owner != null ? owner : LauncherFrameFlat.this, supportService, this::getSelectedInstance, topic, text);
+        com.gummer.launcher.ui.UiHooks.instanceSettings = (owner, instance) -> InstanceSettingsDialogFlat.open(LauncherFrameFlat.this, instance);
+        com.gummer.launcher.ui.UiHooks.reinstall = (owner, instance) -> confirmHardUpdate(instance);
+        com.gummer.launcher.crash.CrashDialog.driversHelpUrl = launcher.getProperties().getProperty("driversHelpUrl");
+    }
+
+    /** Картинка картки новин: обрізка «cover» по центру, закруглений лівий край. */
+    private static final class CoverImage extends JComponent {
+        private java.awt.image.BufferedImage img;
+
+        void setImage(java.awt.image.BufferedImage i) {
+            img = i;
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setClip(new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth() + 16, getHeight(), 16, 16));
+            if (img == null) {
+                g2.setColor(new Color(40, 90, 35, 200));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+            } else {
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                double sc = Math.max(getWidth() / (double) img.getWidth(), getHeight() / (double) img.getHeight());
+                int w = (int) Math.ceil(img.getWidth() * sc), h = (int) Math.ceil(img.getHeight() * sc);
+                g2.drawImage(img, (getWidth() - w) / 2, (getHeight() - h) / 2, w, h, null);
+            }
+            g2.dispose();
+        }
     }
 
     /** Куди веде кнопка Discord (за замовчуванням - з налаштувань лаунчера; FlatLauncherFrame підставляє адресу вибраної збірки). */
@@ -431,7 +1036,7 @@ public class LauncherFrameFlat extends JFrame {
 
 
         if (selected != null) {
-            menuItem = new JMenuItem(!selected.isLocal() ? tr("instance.install") : tr("instance.launch"), !selected.isLocal() ? downloadIcon : gamepadIcon);
+            menuItem = new JMenuItem(!selected.isLocal() ? trFor(selected, "instance.install") : trFor(selected, "instance.launch"), !selected.isLocal() ? downloadIcon : gamepadIcon);
             menuItem.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
@@ -492,7 +1097,7 @@ public class LauncherFrameFlat extends JFrame {
 
                 popup.addSeparator();
 
-                menuItem = new JMenuItem(SharedLocale.tr("instance.hardForceUpdate"), reinstallIcon);
+                menuItem = new JMenuItem(trFor(selected, "instance.hardForceUpdate"), reinstallIcon);
                 menuItem.addActionListener(new ActionListener() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
@@ -501,7 +1106,7 @@ public class LauncherFrameFlat extends JFrame {
                 });
                 popup.add(menuItem);
 
-                menuItem = new JMenuItem(SharedLocale.tr("instance.deleteFiles"), trashIcon);
+                menuItem = new JMenuItem(trFor(selected, "instance.deleteFiles"), trashIcon);
                 menuItem.addActionListener(new ActionListener() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
@@ -518,7 +1123,7 @@ public class LauncherFrameFlat extends JFrame {
 
     private void confirmDelete(Instance instance) {
         if (!SwingHelper.confirmDialog(this,
-                tr("instance.confirmDelete", instance.getTitle()), SharedLocale.tr("confirmTitle"))) {
+                trFor(instance, "instance.confirmDelete", instance.getTitle()), SharedLocale.tr("confirmTitle"))) {
             return;
         }
 
@@ -540,7 +1145,7 @@ public class LauncherFrameFlat extends JFrame {
     }
 
     private void confirmHardUpdate(Instance instance) {
-        if (!SwingHelper.confirmDialog(this, SharedLocale.tr("instance.confirmHardUpdate"), SharedLocale.tr("confirmTitle"))) {
+        if (!SwingHelper.confirmDialog(this, trFor(instance, "instance.confirmHardUpdate"), SharedLocale.tr("confirmTitle"))) {
             return;
         }
 
@@ -567,6 +1172,8 @@ public class LauncherFrameFlat extends JFrame {
                     selectRememberedInstance();
                 }
                 requestFocus();
+                startOnlinePolling();
+                loadNews();
             }
         }, SwingExecutor.INSTANCE);
 
@@ -581,7 +1188,8 @@ public class LauncherFrameFlat extends JFrame {
 
     private void launch() {
         boolean permitUpdate = updateCheck.isSelected();
-        Instance instance = launcher.getInstances().get(instancesTable.getSelectedRow());
+        Instance instance = getSelectedInstance();
+        if (instance == null) return;
 
         LaunchOptions options = new LaunchOptions.Builder()
                 .setInstance(instance)
@@ -600,7 +1208,7 @@ public class LauncherFrameFlat extends JFrame {
         private LaunchListenerImpl(LauncherFrameFlat frame) {
             this.frameRef = new WeakReference<LauncherFrameFlat>(frame);
             this.launcher = frame.launcher;
-            this.instance = frame.launcher.getInstances().get(frame.instancesTable.getSelectedRow()); //status callback
+            this.instance = frame.getSelectedInstance(); //status callback
         }
 
         @Override

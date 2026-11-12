@@ -17,4 +17,13 @@ public class BundledJava {
         return new File(l.getBaseDir(), "runtime/" + component + "/" + Environment.getInstance().getMojangOs());
     }
 
+    /** Чи є в теці runtime виконуваний файл Java (Windows: bin/javaw.exe або bin/java.exe, інакше bin/java). */
+    public static boolean hasJavaBinary(File jvmDir) {
+        if (jvmDir == null) {
+            return false;
+        }
+        File bin = new File(jvmDir, "bin");
+        return new File(bin, "javaw.exe").isFile() || new File(bin, "java.exe").isFile() || new File(bin, "java").isFile();
+    }
+
 }

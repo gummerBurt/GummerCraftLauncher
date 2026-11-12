@@ -54,7 +54,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
     private ProgressObservable progress = new DefaultProgress(0, SharedLocale.tr("runner.preparing"));
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = com.gummer.launcher.util.Json.newMapper();
     private final Launcher launcher;
     private final Instance instance;
     private final Session session;
@@ -147,6 +147,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
         builder.setMainClass(versionManifest.getMainClass());
 
         addWindowArgs();
+        addQuickJoin();
         addLibraries();
         addJvmArgs();
         addJarArgs();
@@ -161,7 +162,11 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
         ProcessBuilder processBuilder = new ProcessBuilder(builder.buildCommand());
         processBuilder.directory(instance.getContentDir());
-        Runner.log.info("Launching: " + builder);
+        // 1.32: токен входу не в лог (лог йде у «Завантажити лог» і у звернення в підтримку)
+        String launching = builder.toString();
+        String token = session.getAccessToken();
+        if (token != null && token.length() > 3) launching = launching.replace(token, "<hidden>");
+        Runner.log.info("Launching: " + launching);
         checkInterrupted();
 
         progress = new DefaultProgress(1, SharedLocale.tr("runner.startingJava"));
@@ -257,6 +262,19 @@ public class Runner implements Callable<Process>, ProgressObservable {
         int maxMemory = memorySettings
                 .map(MemorySettings::getMaxMemory)
                 .orElse(config.getMaxMemory());
+
+        // 1.32: у паку немає своїх налаштувань пам'яті, а список v2 рекомендує більше, ніж загальне налаштування:
+        // піднімаємо до рекомендованого, але лишаємо системі щонайменше 2 ГБ. Менше за загальне налаштування не ставимо.
+        Integer recommended = instance.getRecommendedMemory();
+        if (!memorySettings.isPresent() && recommended != null && recommended > maxMemory) {
+            long totalMb = com.skcraft.launcher.util.Environment.getTotalSystemMemory() / (1024L * 1024L);
+            int cap = totalMb > 0 ? (int) Math.max(0, totalMb - 2048) : recommended;
+            int raised = Math.min(recommended, cap);
+            if (raised > maxMemory) {
+                log.info("Max memory raised from " + maxMemory + " to " + raised + " MB (recommended by the modpack list)");
+                maxMemory = raised;
+            }
+        }
 
         int permGen = config.getPermGen();
 
@@ -493,6 +511,46 @@ public class Runner implements Callable<Process>, ProgressObservable {
         }
     }
 
+    /** Адреса для «Запуск одразу на сервер» (1.32): null, якщо цього разу не треба. */
+    private String quickJoinAddress;
+
+    /**
+     * 1.32: «Запуск одразу на сервер» для паків вкладки GummerCraft з адресою сервера (список v2, serverAddress).
+     * Нові версії (1.20+) мають у JSON версії аргумент --quickPlayMultiplayer (вмикається ознакою
+     * is_quick_play_multiplayer); старіші розуміють --server і --port. Ручне налаштування сервера в config
+     * (addServerArgs) має перевагу.
+     */
+    private void addQuickJoin() {
+        String address = instance.getServerAddress();
+        if (address == null || address.trim().isEmpty() || instance.isVanilla() || config.isServerEnabled()
+                || !com.gummer.launcher.prefs.LauncherPrefs.getBoolean(com.gummer.launcher.prefs.LauncherPrefs.QUICK_JOIN, true)) {
+            return;
+        }
+        address = address.trim();
+        boolean quickPlay = false;
+        if (versionManifest.getArguments() != null && versionManifest.getArguments().getGameArguments() != null) {
+            for (GameArgument arg : versionManifest.getArguments().getGameArguments()) {
+                for (String v : arg.getValues()) {
+                    if (v.contains("quickPlayMultiplayer")) quickPlay = true;
+                }
+            }
+        }
+        if (quickPlay) {
+            quickJoinAddress = address;
+            featureList.addFeature("is_quick_play_multiplayer", true);
+            log.info("Quick join via --quickPlayMultiplayer " + address);
+        } else {
+            int colon = address.lastIndexOf(':');
+            String host = colon > 0 ? address.substring(0, colon) : address;
+            String port = colon > 0 ? address.substring(colon + 1) : "25565";
+            builder.getArgs().add("--server");
+            builder.getArgs().add(host);
+            builder.getArgs().add("--port");
+            builder.getArgs().add(port);
+            log.info("Quick join via --server " + host + " --port " + port);
+        }
+    }
+
     /**
      * Add server arguments.
      */
@@ -580,6 +638,10 @@ public class Runner implements Callable<Process>, ProgressObservable {
         map.put("game_assets", virtualAssetsDir.getAbsolutePath());
         map.put("assets_root", launcher.getAssets().getDir().getAbsolutePath());
         map.put("assets_index_name", versionManifest.getAssetId());
+
+        if (quickJoinAddress != null) {
+            map.put("quickPlayMultiplayer", quickJoinAddress);
+        }
 
         map.put("resolution_width", String.valueOf(config.getWindowWidth()));
         map.put("resolution_height", String.valueOf(config.getWindowHeight()));

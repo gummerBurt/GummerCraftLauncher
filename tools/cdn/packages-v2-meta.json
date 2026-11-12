@@ -1,0 +1,16 @@
+{
+  "groups": {
+    "main": { "title": "GummerCraft" }
+  },
+  "packages": {
+    "staldayz": { "priority": 100, "server": true, "serverAddress": "play.staldayz.com" },
+    "main-26.2": { "group": "main", "serverAddress": "play.gummercraft.fun" },
+    "main-1.21": { "group": "main", "serverAddress": "play.gummercraft.fun" },
+    "main-1.20": { "group": "main", "serverAddress": "play.gummercraft.fun" },
+    "main-1.19.3": { "group": "main", "serverAddress": "play.gummercraft.fun" },
+    "main-1.19": { "group": "main", "serverAddress": "play.gummercraft.fun" },
+    "main-1.18": { "group": "main", "serverAddress": "play.gummercraft.fun" },
+    "main-1.17": { "group": "main", "serverAddress": "play.gummercraft.fun" },
+    "main-1.16": { "group": "main", "serverAddress": "play.gummercraft.fun" }
+  }
+}

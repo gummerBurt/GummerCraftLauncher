@@ -47,7 +47,7 @@ import static com.skcraft.launcher.util.HttpRequest.url;
 @Log
 public class Updater extends BaseUpdater implements Callable<Instance>, ProgressObservable {
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = com.gummer.launcher.util.Json.newMapper();
     private final Installer installer;
     private final Launcher launcher;
     private final Instance instance;
@@ -245,32 +245,48 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
 
 
         JavaManifest javaManifest = null;
+        Map<String, JavaManifest[]> javaVersions = launcher.getInstances().getJavaVersions();
 
-        //log.info("DEBUG: launcher.getInstances().getJavaVersions().entrySet():\n" + launcher.getInstances().getJavaVersions().entrySet() + "\n");
-        for (Map.Entry<String, JavaManifest[]> entry : launcher.getInstances().getJavaVersions().entrySet()) {
+        for (Map.Entry<String, JavaManifest[]> entry : javaVersions.entrySet()) {
             if (entry.getKey().equalsIgnoreCase(instance.getJavaRuntime())) {
-                if (entry.getValue().length == 0) {
-                    throw new Exception("No valid candidate for Java runtime \"" + instance.getJavaRuntime() + "\"");
+                if (entry.getValue() != null && entry.getValue().length > 0) {
+                    javaManifest = entry.getValue()[0];
                 }
-
-                javaManifest = entry.getValue()[0];
                 break;
             }
         }
-        JavaFile[] files = readJavaManifest(javaManifest);
 
         File jvmDir = BundledJava.getJavaDir(launcher, instance.getJavaRuntime());
-        if (!jvmDir.exists()) {
-            jvmDir.mkdirs();
+
+        if (javaManifest == null) {
+            // Немає запису про потрібну Java: або маніфест Java не завантажився (javaVersions порожній), або для цієї
+            // платформи такої версії немає. До 1.32 тут був NullPointerException. Якщо ця Java вже встановлена,
+            // оновлюємо модпак на ній; якщо ні, зрозуміла помилка замість стектрейсу.
+            if (BundledJava.hasJavaBinary(jvmDir)) {
+                log.warning("No Java manifest entry for runtime \"" + instance.getJavaRuntime()
+                        + "\", keeping the installed one at " + jvmDir.getAbsolutePath());
+            } else if (javaVersions.isEmpty()) {
+                throw new LauncherException("Java manifest unavailable for runtime \"" + instance.getJavaRuntime() + "\"",
+                        SharedLocale.tr("errors.javaManifestUnavailable"));
+            } else {
+                throw new LauncherException("No Java runtime \"" + instance.getJavaRuntime() + "\" for this platform",
+                        SharedLocale.tr("errors.javaRuntimeUnavailable", instance.getJavaRuntime()));
+            }
+        } else {
+            JavaFile[] files = readJavaManifest(javaManifest);
+
+            if (!jvmDir.exists()) {
+                jvmDir.mkdirs();
+            }
+
+            log.info("Cleanup unwanted runtime files...");
+            progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.cleaningJavaFiles"));
+            cleanJvmFiles(files, jvmDir);
+
+            // Validating / downloading the JVM
+            log.info("Installing correct runtime");
+            installJvm(installer, jvmDir, files);
         }
-
-        log.info("Cleanup unwanted runtime files...");
-        progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.cleaningJavaFiles"));
-        cleanJvmFiles(files, jvmDir);
-
-        // Validating / downloading the JVM
-        log.info("Installing correct runtime");
-        installJvm(installer, jvmDir, files);
 
         // Install the .jar
         File jarPath = launcher.getJarPath(version);

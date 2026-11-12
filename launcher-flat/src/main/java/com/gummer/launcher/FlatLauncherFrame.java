@@ -36,8 +36,9 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
         // одразу вигляд останньої вибраної збірки (ще до завантаження списку збірок) - без "стандартний, а потім перемикання"
         String last = launcher.getConfig().getLastInstance();
         if (backgroundPanel != null && last != null) {
-            backgroundPanel.showPack(last, false);
-            showPackButtons(last.toLowerCase(java.util.Locale.ROOT));
+            String look = last.startsWith(com.gummer.launcher.vanilla.VanillaVersions.GROUP + "-") ? com.gummer.launcher.vanilla.VanillaVersions.GROUP : last;
+            backgroundPanel.showPack(look, false);
+            showPackButtons(look.toLowerCase(java.util.Locale.ROOT));
         }
 
         // фон міняється разом із вибраною збіркою (FlatBackgroundPanel.showPack); перший вибір після старту - без переходу
@@ -51,15 +52,19 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
 
     private void updatePackBackground() {
         if (backgroundPanel == null) return;
-        int row = getInstancesTable().getSelectedRow();
-        if (row < 0 || row >= launcher.getInstances().size()) return; // нічого не вибрано (список ще вантажиться) - лишаємо поточний вигляд
-        String name = launcher.getInstances().get(row).getName();
-        backgroundPanel.showPack(name, !firstSelection);
-        showPackButtons(name != null ? name.toLowerCase(java.util.Locale.ROOT) : null);
+        com.skcraft.launcher.Instance selected = getSelectedInstance();
+        if (selected == null) return; // нічого не вибрано (список ще вантажиться) - лишаємо поточний вигляд
+        String name = selected.getName();
+        // усі ванільні версії (vanilla-1.21.1, vanilla-26.3, ...) мають одне оформлення: bg_vanilla.jpg і logo_vanilla.png
+        String look = com.gummer.launcher.vanilla.VanillaVersions.GROUP.equals(selected.getGroup())
+                ? com.gummer.launcher.vanilla.VanillaVersions.GROUP : name;
+        backgroundPanel.showPack(look, !firstSelection);
+        showPackButtons(look != null ? look.toLowerCase(java.util.Locale.ROOT) : null);
         firstSelection = false;
 
-        // запам'ятати вибір (config.json) - наступного разу лаунчер одразу відкриється з цією збіркою
-        if (name != null && !name.equals(launcher.getConfig().getLastInstance())) {
+        // запам'ятати вибір гравця (config.json) - наступного разу лаунчер одразу відкриється з цією збіркою;
+        // вибір, який лаунчер відновлює сам (restoringSelection), не запам'ятовуємо
+        if (!restoringSelection && name != null && !name.equals(launcher.getConfig().getLastInstance())) {
             launcher.getConfig().setLastInstance(name);
             com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
         }
