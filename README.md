@@ -8,7 +8,7 @@
 
 Лаунчер Minecraft для серверів [GummerCraft](https://gummercraft.fun): встановлює та оновлює збірки модів і запускає гру з акаунтом Microsoft.
 
-**[Завантажити лаунчер для Windows](https://launch.gummercraft.fun/install/exe)** · [jar для Linux і macOS](https://launch.gummercraft.fun/install/jar) · [сайт GummerCraft](https://gummercraft.fun)
+**[Завантажити лаунчер для Windows](https://launch.gummercraft.fun/install/GummerCraft.exe)** (один файл, Java вже всередині) · [без вбудованої Java](https://launch.gummercraft.fun/install/exe) · [jar для Linux і macOS](https://launch.gummercraft.fun/install/jar) · [сайт GummerCraft](https://gummercraft.fun)
 
 *Minecraft launcher for the GummerCraft servers. A fork of [SKCraft Launcher](https://github.com/SKCraft/Launcher), licensed under LGPL v3. English summary at the bottom.*
 
@@ -22,7 +22,40 @@
 
 **[StalDayZ](https://staldayz.gummercraft.fun/)** - наш сервер за мотивами S.T.A.L.K.E.R. і DayZ у Minecraft: Зона відчуження, лутінг, аномалії й артефакти, викиди, радіація, мутанти, квести, торгівля та бази гравців.
 
-Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку збірку **StalDayZ**, натискаєш «Грати», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки Main для різних версій Minecraft.
+Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
+
+## Що нового в 1.32
+
+**Java більше не потрібна**
+- Новим гравцям один файл `GummerCraft.exe`, у якому вже є Java (Eclipse Temurin: 17 на Windows 10 і 11, 8 на Windows 7 і 8.1). Перший запуск кілька секунд розпаковує його в `%LOCALAPPDATA%\GummerCraft\app` (лише смужка «Перший запуск», без питань і прав адміністратора), далі exe одразу відкриває лаунчер. Ярликів і запису в «Програми та компоненти» немає, щоб прибрати, досить видалити папку.
+- Для Windows 10 і 11 є ще портативний zip.
+- Старий exe працює як і раніше і сам оновлюється до 1.32.
+
+**Список збірок**
+- Три розділи: StalDayZ, GummerCraft (збірки для різних версій Minecraft) і Vanilla (чистий Minecraft від Mojang, усі релізи від 1.8, нові з'являються самі).
+- Версія Minecraft вибирається великим списком біля кнопки «Запуск». У ньому видно стан кожної версії: зелена крапка означає встановлено, жовта означає є оновлення, порожнє коло означає не встановлено, найновіша позначена окремо.
+- Онлайн сервера біля назви збірки і біля кнопки «Запуск». Галочка «Одразу на сервер» запускає гру з входом на сервер збірки.
+- Оформлення вікна для Vanilla: свій фон і логотип Minecraft.
+- Лаунчер пам'ятає останню вибрану збірку і більше не забуває її, коли список ще вантажиться.
+
+**Гра без інтернету**
+- Встановлені збірки запускаються без інтернету: лаунчер бере збережену копію списку збірок, а замість входу в Microsoft пропонує грати зі збереженим профілем (той самий нік і ті самі світи; одиночна гра і сервери без перевірки акаунта).
+- Якщо оновлення збірки не вдалося через мережу, лаунчер пропонує запустити встановлену версію.
+- Без інтернету немає вікон з помилками про перевірку оновлень.
+
+**Коли щось пішло не так**
+- Зрозумілі вікна помилок: що сталося людською мовою, що зробити, технічні деталі окремо і кнопка «Написати в підтримку».
+- Розбір вильотів гри: брак пам'яті, не та версія Java, драйвер відеокарти, конфлікт або дубль модів, пошкоджені файли, мало місця на диску. Лаунчер підказує, що робити.
+- Підтримка прямо з лаунчера: звернення стає чатом з командою GummerCraft, лог і дані системи додаються самі.
+- У вікні завантаження видно розмір, швидкість і скільки лишилось.
+
+**Інше**
+- Вікно лаунчера підлаштовується під розмір екрана.
+- Якщо у збірки є рекомендована пам'ять, лаунчер піднімає ліміт до неї, лишаючи системі щонайменше 2 ГБ.
+- Нова адреса CDN `cdn.gummercraft.fun`.
+- Linux: вимкнено нативний транспорт Netty (epoll), через який гра вилітала з `DecoderException`; розбір вильотів упізнає проблеми libGL і GLX.
+- Анонімний випадковий ID установки, щоб рахувати гравців, а не IP-адреси. Він ні з чого не виводиться і вимикається словом `off` у `stats-id.txt` (подробиці в [SECURITY.md](SECURITY.md)).
+- Непримітне посилання «Код лаунчера на GitHub» у вікні.
 
 ## Що нового в 1.31
 
@@ -138,6 +171,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.32:** a single `GummerCraft.exe` with bundled Java for new players (silent first-run unpack, no questions, shortcuts or uninstall entry), three sections (StalDayZ, GummerCraft, Vanilla with all Mojang releases since 1.8), a version picker with install-state markers, server online count and "join the server right away", offline play for installed modpacks, friendly error dialogs and crash analysis with in-launcher support chat, download size and speed, Linux fixes (Netty epoll off, libGL/GLX crash hints), an anonymous install ID. Old exes keep working and update themselves.
 
 **1.29 (open-source release):** full HTTPS certificate validation (it used to be disabled as a workaround for outdated Java/Windows root stores, which made the launcher's connections interceptable on untrusted networks; outdated JREs now get a few official root CAs added on top of the system store), launcher downloads over HTTPS only and verified against the SHA-256 published in `release.json`, the exe starts the newest published version right away, log upload over HTTPS, FlatLaf's native DLL no longer extracted to `%TEMP%`, unused telemetry code and the `uuid` setting removed, official Microsoft app id moved out of the source.
 
