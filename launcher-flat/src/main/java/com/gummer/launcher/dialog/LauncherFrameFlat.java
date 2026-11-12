@@ -764,7 +764,7 @@ public class LauncherFrameFlat extends JFrame {
                 synchronized (launcher.getInstances()) {
                     for (Instance i : launcher.getInstances().getInstances()) {
                         com.gummer.launcher.server.ServerPing.Status s = i.getServerAddress() != null ? online.get(i.getServerAddress()) : null;
-                        instancesModel.setOnlineLine(i.getName(), s != null ? tr("launcher.onlineLine", s.online) : null);
+                        instancesModel.setOnlineLine(i.getName(), s != null ? String.valueOf(s.online) : null);
                     }
                 }
                 if (instancesModel.getRowCount() > 0) {

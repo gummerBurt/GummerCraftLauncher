@@ -203,15 +203,19 @@ public class InstanceTableModel extends AbstractTableModel {
         return sb.length() == 0 ? "" : "<br /> &nbsp;&nbsp;&nbsp;<span style=\"font-size:11;\">" + sb + "</span>";
     }
 
-    /** Онлайн сервера паку зеленим, або null. */
-    private String onlinePart(Instance instance) {
+    /**
+     * Онлайн сервера паку: зелене «● 3» у першому рядку поруч з назвою, однаково для всіх рядків. У другому рядку
+     * (версія, стан) на Java 8 зі старих exe «· ● 3 онлайн» не влазило і переносилось. Повне «3 з 20 гравців онлайн»
+     * видно біля кнопки «Запуск».
+     */
+    private String onlineBadge(Instance instance) {
         String online = onlineLines.get(instance.getName());
-        return online != null ? span(GREEN, "● " + online) : null;
+        return online != null ? "&nbsp;&nbsp;<span style=\"color:" + GREEN + ";font-size:11;\">● " + SwingHelper.htmlEscape(online) + "</span>" : "";
     }
 
-    /** Другий рядок групи: «Minecraft 1.21 · ● 3 онлайн». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */
+    /** Другий рядок групи: «Minecraft 1.21». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */
     private String groupLine(Instance instance) {
-        return line(span(GREY, "Minecraft " + versionLabelOf(instance)), onlinePart(instance));
+        return line(span(GREY, "Minecraft " + versionLabelOf(instance)));
     }
 
     /** Підпис версії під назвою групи: «Main 1.21» у групі «Main» -> «1.21». */
@@ -315,17 +319,17 @@ public class InstanceTableModel extends AbstractTableModel {
                 String groupTitle = groupTitleFor(instance);
                 if (groupTitle != null) {
                     // рядок групи: назва групи, під нею вибрана версія і її стан
-                    return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(groupTitle) + "</span>"
+                    return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(groupTitle) + "</span>" + onlineBadge(instance)
                             + groupLine(instance)
                             + "</html>"; // стан версії (встановлено, оновлення) видно у виборі версії: у вузькому списку не влазить
                 }
-                return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(instance.getTitle()) + "</span>" + getAddendum(instance) + "</html>";
+                return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(instance.getTitle()) + "</span>" + onlineBadge(instance) + getAddendum(instance) + "</html>";
             default:
                 return null;
         }
     }
 
-    /** Другий рядок паку без групи: стан (сірий, оновлення жовтим) і онлайн зеленим, як у рядках груп. */
+    /** Другий рядок паку без групи: стан (сірий, оновлення жовтим); онлайн у першому рядку, як у групах. */
     private String getAddendum(Instance instance) {
         String state;
         if (instance.isOrphaned()) {
@@ -339,7 +343,7 @@ public class InstanceTableModel extends AbstractTableModel {
         } else {
             state = null;
         }
-        return line(state, onlinePart(instance));
+        return line(state);
     }
 
 }
