@@ -183,10 +183,35 @@ public class InstanceTableModel extends AbstractTableModel {
         return versionLabel(groupTitle != null ? groupTitle : "", instance);
     }
 
-    /** Другий рядок групи: «Minecraft 1.21». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */
-    private String groupLine(Instance instance) {
+    /** Кольори другого рядка (1.32): сірий - текст і стан, жовтий - є оновлення, зелений - онлайн (однаково в усіх рядках). */
+    private static final String GREY = "#969896";
+    private static final String AMBER = "#e0b050";
+    private static final String GREEN = "#7ccf6a";
+
+    private static String span(String color, String text) {
+        return "<span style=\"color:" + color + ";\">" + SwingHelper.htmlEscape(text) + "</span>";
+    }
+
+    /** Другий рядок: частини через сіру крапку, шрифт 11. */
+    private static String line(String... parts) {
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) {
+            if (p == null) continue;
+            if (sb.length() > 0) sb.append(span(GREY, " · "));
+            sb.append(p);
+        }
+        return sb.length() == 0 ? "" : "<br /> &nbsp;&nbsp;&nbsp;<span style=\"font-size:11;\">" + sb + "</span>";
+    }
+
+    /** Онлайн сервера паку зеленим, або null. */
+    private String onlinePart(Instance instance) {
         String online = onlineLines.get(instance.getName());
-        return "Minecraft " + versionLabelOf(instance) + (online != null ? " · " + online : "");
+        return online != null ? span(GREEN, "● " + online) : null;
+    }
+
+    /** Другий рядок групи: «Minecraft 1.21 · ● 3 онлайн». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */
+    private String groupLine(Instance instance) {
+        return line(span(GREY, "Minecraft " + versionLabelOf(instance)), onlinePart(instance));
     }
 
     /** Підпис версії під назвою групи: «Main 1.21» у групі «Main» -> «1.21». */
@@ -291,7 +316,7 @@ public class InstanceTableModel extends AbstractTableModel {
                 if (groupTitle != null) {
                     // рядок групи: назва групи, під нею вибрана версія і її стан
                     return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(groupTitle) + "</span>"
-                            + "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SwingHelper.htmlEscape(groupLine(instance)) + "</span>"
+                            + groupLine(instance)
                             + "</html>"; // стан версії (встановлено, оновлення) видно у виборі версії: у вузькому списку не влазить
                 }
                 return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(instance.getTitle()) + "</span>" + getAddendum(instance) + "</html>";
@@ -300,20 +325,21 @@ public class InstanceTableModel extends AbstractTableModel {
         }
     }
 
+    /** Другий рядок паку без групи: стан (сірий, оновлення жовтим) і онлайн зеленим, як у рядках груп. */
     private String getAddendum(Instance instance) {
+        String state;
         if (instance.isOrphaned()) {
-            return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.orphanedHint") + "</span>";
+            state = span(GREY, SharedLocale.tr("launcher.orphanedHint"));
         } else if (!instance.isLocal()) {
-            return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.notInstalledHint") + "</span>";
+            state = span(GREY, SharedLocale.tr("launcher.notInstalledHint"));
         } else if (!instance.isInstalled()) {
-            return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.requiresUpdateHint") + "</span>";
+            state = span(AMBER, SharedLocale.tr("launcher.requiresUpdateHint"));
         } else if (instance.isUpdatePending()) {
-            return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#969896;font-size:11;\">" + SharedLocale.tr("launcher.updatePendingHint") + "</span>";
-        } else if (onlineLines.containsKey(instance.getName())) {
-            return "<br /> &nbsp;&nbsp;&nbsp;<span style=\"color:#7ccf6a;font-size:11;\">" + SwingHelper.htmlEscape(onlineLines.get(instance.getName())) + "</span>";
+            state = span(AMBER, SharedLocale.tr("launcher.updatePendingHint"));
         } else {
-            return "";
+            state = null;
         }
+        return line(state, onlinePart(instance));
     }
 
 }

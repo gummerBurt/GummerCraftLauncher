@@ -566,17 +566,23 @@ public class LauncherFrameFlat extends JFrame {
                 if (value instanceof Instance) {
                     Instance i = (Instance) value;
                     String version = instancesModel.versionLabelOf(i);
+                    // 1.32: стан видно не лише текстом. Встановлено - зелена крапка і білий текст, є оновлення - жовта,
+                    // не встановлено - порожнє коло і приглушений текст; найновіша - синя позначка
+                    boolean installed = i.isLocal() && i.isInstalled();
+                    String dotColor = !installed ? "#6b7079" : i.isUpdatePending() ? "#e0b050" : "#7ccf6a";
+                    String dot = "<span style=\"color:" + dotColor + "\">" + (installed ? "●" : "○") + "</span>&nbsp;";
                     if (index < 0) {
-                        text = "Minecraft " + version; // закритий список: лише версія
+                        // закритий список: позначка і версія
+                        text = "<html>" + dot + "Minecraft " + SwingHelper.htmlEscape(version) + "</html>";
                     } else {
-                        // відкритий список: версія і її стан, найновіша позначена
-                        String status = !i.isLocal() || !i.isInstalled() ? tr("launcher.versionNotInstalled")
+                        String status = !installed ? tr("launcher.versionNotInstalled")
                                 : i.isUpdatePending() ? tr("launcher.versionUpdate") : tr("launcher.versionInstalled");
-                        if (index == 0) {
-                            status = tr("launcher.versionNewest") + " · " + status;
-                        }
-                        text = "<html><b>Minecraft " + SwingHelper.htmlEscape(version) + "</b>&nbsp;&nbsp;<span style=\"color:#8a8f98;font-size:11\">"
-                                + SwingHelper.htmlEscape(status) + "</span></html>";
+                        String statusColor = !installed ? "#8a8f98" : dotColor;
+                        String newest = index == 0 ? "&nbsp;&nbsp;<span style=\"color:#5aa9ff;font-size:11\">"
+                                + SwingHelper.htmlEscape(tr("launcher.versionNewest")) + "</span>" : "";
+                        text = "<html>" + dot + "<b" + (installed ? "" : " style=\"color:#b4b8bf\"") + ">Minecraft "
+                                + SwingHelper.htmlEscape(version) + "</b>&nbsp;&nbsp;<span style=\"color:" + statusColor + ";font-size:11\">"
+                                + SwingHelper.htmlEscape(status) + "</span>" + newest + "</html>";
                     }
                 }
                 Component c = super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
