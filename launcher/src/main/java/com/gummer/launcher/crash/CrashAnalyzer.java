@@ -102,6 +102,9 @@ public final class CrashAnalyzer {
         if (t.contains("Pixel format not accelerated") || t.contains("WGL: The driver does not appear to support OpenGL")
                 || t.contains("GLFW error 65542") || t.contains("GLFW error 65543") || t.contains("No OpenGL context found")
                 || t.contains("OpenGL 3.2 is required") || t.contains("Couldn't set pixel format")
+                // Linux (1.32): Mesa/GLX без потрібного OpenGL або без драйвера
+                || t.contains("libGL error") || t.contains("GLXBadFBConfig") || t.contains("GLX: No GLXFBConfigs")
+                || t.contains("GLX: Failed to load GLX") || t.contains("Failed to load libGL")
                 || DRIVER_DLL.matcher(t).find()) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
         }

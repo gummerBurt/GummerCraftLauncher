@@ -53,6 +53,20 @@ public class InstanceList {
     @Getter
     private Map<String, String> groupSubtitles = new LinkedHashMap<String, String>();
 
+    /** 1.32: список модпаків не завантажився, показано збережену копію (немає інтернету чи CDN недоступний). */
+    @Getter
+    private volatile boolean offline;
+
+    private static final String PACKAGE_CACHE = "packages_cache.json";
+
+    /** Файл packages_cache.json. */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PackageCache {
+        public String url;
+        public String savedAt;
+        public PackageList list;
+    }
+
     /**
      * Create a new instance list.
      *
@@ -162,6 +176,7 @@ public class InstanceList {
             }
 
             progress = new DefaultProgress(0.3, SharedLocale.tr("instanceLoader.checkingRemote"));
+            InstanceList.this.offline = false;
 
             // 1.32: вкладка Vanilla, релізи з маніфесту Mojang. Окремо від списку модпаків: його помилка не ховає ванілу
             // і навпаки. Без інтернету: збережений список (vanilla_versions.json) або лише встановлені версії.
@@ -249,8 +264,24 @@ public class InstanceList {
                     }
                 }
                 if (packages == null) {
-                    packagesURL = launcher.getPackagesURL();
-                    packages = fetchPackageList(packagesURL);
+                    try {
+                        packagesURL = launcher.getPackagesURL();
+                        packages = fetchPackageList(packagesURL);
+                    } catch (InterruptedException e) {
+                        throw e;
+                    } catch (Exception e) {
+                        // 1.32: без інтернету - останній успішний список (packages_cache.json), щоб встановлені збірки
+                        // лишились у своїх розділах і запускались. Кешу немає: помилка, як раніше
+                        PackageCache cached = readPackageCache();
+                        if (cached == null) throw e;
+                        log.log(java.util.logging.Level.WARNING, "The modpack list is unavailable, using the saved copy from " + cached.savedAt, e);
+                        packagesURL = new URL(cached.url);
+                        packages = cached.list;
+                        InstanceList.this.offline = true;
+                    }
+                }
+                if (!InstanceList.this.offline) {
+                    writePackageCache(packagesURL, packages);
                 }
 
                 Map<String, String> titles = new LinkedHashMap<String, String>();
@@ -355,6 +386,31 @@ public class InstanceList {
             }
 
             return InstanceList.this;
+        }
+
+        /** Копія останнього успішного списку модпаків для гри без інтернету. Адреса без параметрів (ключ бети, ID) не зберігається. */
+        private void writePackageCache(URL url, PackageList list) {
+            try {
+                PackageCache cache = new PackageCache();
+                cache.url = new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getPath()).toExternalForm();
+                cache.savedAt = new Date().toString();
+                cache.list = list;
+                com.gummer.launcher.util.Json.newMapper().writeValue(new File(launcher.getBaseDir(), PACKAGE_CACHE), cache);
+            } catch (Exception e) {
+                log.log(java.util.logging.Level.INFO, "Could not save the modpack list copy", e);
+            }
+        }
+
+        private PackageCache readPackageCache() {
+            File file = new File(launcher.getBaseDir(), PACKAGE_CACHE);
+            if (!file.isFile()) return null;
+            try {
+                PackageCache cache = com.gummer.launcher.util.Json.newMapper().readValue(file, PackageCache.class);
+                return cache != null && cache.url != null && cache.list != null && cache.list.getPackages() != null ? cache : null;
+            } catch (Exception e) {
+                log.log(java.util.logging.Level.WARNING, "The saved modpack list copy is unreadable", e);
+                return null;
+            }
         }
 
         private PackageList fetchPackageList(URL url) throws IOException, InterruptedException {

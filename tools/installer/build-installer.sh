@@ -1,5 +1,5 @@
 #!/bin/sh
-# Збирає установку лаунчера з вбудованою Java (1.32+): GummerCraft-Setup-<версія>.exe і портативний GummerCraft-<версія>-portable.zip.
+# Збирає лаунчер з вбудованою Java (1.32+): один файл GummerCraft-<версія>.exe (тихо розпаковується при першому запуску) і портативний GummerCraft-<версія>-portable.zip.
 #
 #   sh tools/installer/build-installer.sh [версія] [шлях до exe Launch4j]
 #
@@ -61,7 +61,7 @@ OUT_WIN=$(cygpath -w "$OUT" 2>/dev/null || echo "$OUT")
 ISS_WIN=$(cygpath -w "$HERE/GummerCraft.iss" 2>/dev/null || echo "$HERE/GummerCraft.iss")
 "$ISCC" //Q "//DAppVersion=$VERSION" "//DStage=$STAGE_WIN" "//O$OUT_WIN" "$ISS_WIN"
 
-# портативний zip: GummerCraft/ з exe і jre (Java 17, тобто Windows 10+; Windows 7/8.1 - лише Setup), без установки
+# портативний zip: GummerCraft/ з exe і jre (Java 17, тобто Windows 10+; Windows 7/8.1 - лише GummerCraft.exe), без установки
 python - "$STAGE" "$OUT/GummerCraft-$VERSION-portable.zip" <<'PY'
 import os, sys, zipfile
 stage, out = sys.argv[1], sys.argv[2]
@@ -74,5 +74,5 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
 PY
 
 echo "Готово:"
-ls -la "$OUT"/GummerCraft-Setup-"$VERSION".exe "$OUT"/GummerCraft-"$VERSION"-portable.zip
-sha256sum "$OUT"/GummerCraft-Setup-"$VERSION".exe "$OUT"/GummerCraft-"$VERSION"-portable.zip
+ls -la "$OUT"/GummerCraft-"$VERSION".exe "$OUT"/GummerCraft-"$VERSION"-portable.zip
+sha256sum "$OUT"/GummerCraft-"$VERSION".exe "$OUT"/GummerCraft-"$VERSION"-portable.zip

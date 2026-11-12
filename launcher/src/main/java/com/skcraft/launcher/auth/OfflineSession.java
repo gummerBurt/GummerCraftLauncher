@@ -32,13 +32,24 @@ public class OfflineSession implements Session {
      * @param name the player name
      */
     public OfflineSession(@NonNull String name) {
-        this.name = name;
+        this(name, null);
     }
+
+    /**
+     * 1.32: гра без інтернету зі збереженим акаунтом Microsoft: його нік і справжній UUID (той самий гравець у
+     * світах одиночної гри), але без токена.
+     */
+    public OfflineSession(@NonNull String name, String uuid) {
+        this.name = name;
+        this.uuid = uuid;
+    }
+
+    private final String uuid;
 
     @Override
     public String getUuid() {
         //return (new UUID(0, 0)).toString(); // try to fix accounts duplication
-        return UUID.nameUUIDFromBytes(name.getBytes()).toString();
+        return uuid != null ? uuid : UUID.nameUUIDFromBytes(name.getBytes()).toString();
     }
 
     @Override

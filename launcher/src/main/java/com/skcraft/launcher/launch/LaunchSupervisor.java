@@ -78,6 +78,10 @@ public class LaunchSupervisor {
             // If we have to update, we have to update
             if (!instance.isInstalled()) {
                 update = true;
+            } else if (update && launcher.getInstances().isOffline()) {
+                // 1.32: список модпаків не завантажився (немає інтернету) - оновлення точно не вийде, граємо встановлену
+                log.info("Offline: skipping the pending update of " + instance.getName());
+                update = false;
             }
 
             if (update) {
@@ -89,7 +93,11 @@ public class LaunchSupervisor {
 
                 // Show progress
                 ProgressDialog.showProgress(window, future, SharedLocale.tr("launcher.updatingTitle"), tr("launcher.updatingStatus", instance.getTitle()));
-                SwingHelper.addErrorDialogCallback(window, future);
+                // встановлена збірка + помилка мережі: замість помилки питання «грати встановлену?» (див. onFailure нижче)
+                final boolean installed = instance.isInstalled();
+                if (!installed) {
+                    SwingHelper.addErrorDialogCallback(window, future);
+                }
 
                 // Update the list of instances after updating
                 future.addListener(new Runnable() {
@@ -113,6 +121,23 @@ public class LaunchSupervisor {
 
                     @Override
                     public void onFailure(Throwable t) {
+                        if (!installed || t instanceof InterruptedException || t instanceof CancellationException) {
+                            return;
+                        }
+                        // 1.32: оновлення впало через мережу, а збірка вже встановлена - можна грати її (без інтернету)
+                        if (com.skcraft.launcher.dialog.AccountSelectDialog.isNetworkFailure(t)) {
+                            log.log(Level.WARNING, "Update failed, offering the installed version", t);
+                            if (SwingHelper.confirmDialog(window,
+                                    tr("launcher.updateOfflineFallback", instance.getTitle()),
+                                    tr("launcher.updateOfflineFallbackTitle"))) {
+                                launch(window, instance, session, listener);
+                            }
+                            return;
+                        }
+                        String message = t.getLocalizedMessage() != null ? t.getLocalizedMessage() : tr("errors.genericError");
+                        log.log(Level.WARNING, "Task failed", t);
+                        SwingHelper.showErrorDialog(window, message, tr("errorTitle"),
+                                t instanceof com.skcraft.launcher.LauncherException && t.getCause() != null ? t.getCause() : t);
                     }
                 }, SwingExecutor.INSTANCE);
             } else {

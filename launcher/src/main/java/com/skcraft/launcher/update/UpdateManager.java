@@ -71,11 +71,21 @@ public class UpdateManager {
 
             @Override
             public void onFailure(Throwable t) {
-                // Error handler attached below.
+                if (t instanceof InterruptedException || t instanceof java.util.concurrent.CancellationException) {
+                    return;
+                }
+                // 1.32: без інтернету перевірка оновлення лаунчера мовчить (гра без інтернету), лише запис у лог
+                if (com.skcraft.launcher.dialog.AccountSelectDialog.isNetworkFailure(t)) {
+                    java.util.logging.Logger.getLogger(UpdateManager.class.getName()).log(java.util.logging.Level.INFO, "Launcher update check skipped: no connection", t);
+                    return;
+                }
+                String message = t.getLocalizedMessage() != null ? t.getLocalizedMessage()
+                        : com.skcraft.launcher.util.SharedLocale.tr("errors.genericError");
+                java.util.logging.Logger.getLogger(UpdateManager.class.getName()).log(java.util.logging.Level.WARNING, "Task failed", t);
+                SwingHelper.showErrorDialog(window, message, com.skcraft.launcher.util.SharedLocale.tr("errorTitle"),
+                        t instanceof com.skcraft.launcher.LauncherException && t.getCause() != null ? t.getCause() : t);
             }
         }, SwingExecutor.INSTANCE);
-
-        SwingHelper.addErrorDialogCallback(window, future);
     }
 
     public void performUpdate(final Window window) {

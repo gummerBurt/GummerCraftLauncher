@@ -211,6 +211,13 @@ public class Runner implements Callable<Process>, ProgressObservable {
                 builder.getFlags().add("-Xdock:name=Minecraft");
             }
         }
+
+        // 1.32, Linux: без нативного транспорту Netty (epoll). З ним клієнт на Linux вилітав з DecoderException /
+        // «larger than I expected»; опція гри useNativeTransport:false допомагала, але модпак перезаписує options.txt.
+        // Прапорець JVM вимикає epoll незалежно від options.txt; звичайний NIO працює так само.
+        if (getEnvironment().getPlatform() == Platform.LINUX) {
+            builder.getFlags().add("-Dio.netty.transport.noNative=true");
+        }
     }
 
     /**

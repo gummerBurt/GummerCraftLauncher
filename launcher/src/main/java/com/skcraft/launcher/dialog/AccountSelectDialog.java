@@ -301,6 +301,13 @@ public class AccountSelectDialog extends JDialog {
 				if (t instanceof AuthenticationException && ((AuthenticationException) t).isInvalidatedSession()) {
 					// Just need to log in again
 					relogin(session, t.getLocalizedMessage());
+				} else if (isNetworkFailure(t) && session.getUsername() != null && session.getUuid() != null
+						&& SwingHelper.confirmDialog(AccountSelectDialog.this,
+							SharedLocale.tr("login.offlineFallback", session.getUsername()),
+							SharedLocale.tr("login.offlineFallbackTitle"))) {
+					// 1.32: гра без інтернету. Нік і UUID зі збереженого акаунта (ті самі світи одиночної гри), без токена:
+					// одиночна гра і сервери без перевірки акаунта. Збережений акаунт не чіпаємо (isOnline=false).
+					setResult(new OfflineSession(session.getUsername(), session.getUuid()));
 				} else {
 					SwingHelper.showErrorDialog(AccountSelectDialog.this, t.getLocalizedMessage(), SharedLocale.tr("errorTitle"), t);
 				}
@@ -325,6 +332,15 @@ public class AccountSelectDialog extends JDialog {
 			launcher.getAccounts().update(newSession.toSavedSession());
 			setResult(newSession);
 		}
+	}
+
+	/** Помилка мережі (немає інтернету, DNS, таймаут), а не відмова Microsoft: тоді можна грати без інтернету. */
+	public static boolean isNetworkFailure(Throwable t) {
+		for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
+			if (c instanceof AuthenticationException) return false;
+			if (c instanceof java.io.IOException) return true;
+		}
+		return false;
 	}
 
 	@RequiredArgsConstructor

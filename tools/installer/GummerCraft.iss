@@ -1,10 +1,12 @@
-; GummerCraft Launcher: тиха установка без майстра (1.32+), стиль Discord.
+; GummerCraft Launcher: один файл GummerCraft.exe з вбудованою Java (1.32+). Не «установка», а лаунчер, що при першому
+; запуску тихо розпаковує себе і Java (2-5 с смужки «Перший запуск»), а далі одразу відкриває лаунчер. Вирішено 13.11.2026
+; (власник: «установщики setup.exe людей відлякають»): без ярликів, без запису в «Програми та компоненти», без майстра,
+; без прав адміністратора. Файли: %LOCALAPPDATA%\GummerCraft\app (exe лаунчера і jre). Гравець просто тримає скачаний
+; GummerCraft.exe де завгодно і запускає його. Дані гравця (Документи\GummerCraft) цей файл не чіпає.
 ; Збирає tools/installer/build-installer.sh (передає AppVersion і Stage). Вручну:
-;   ISCC.exe /DAppVersion=1.32 /DStage=<тека з GummerCraft.exe, jre\ (17) і jre8\> /O<вихід> GummerCraft.iss
-; Що робить: без жодної сторінки (лише смужка прогресу), без прав адміністратора, у %LOCALAPPDATA%\Programs\GummerCraft,
-; ярлики в меню Пуск і на робочому столі, запис у «Програми та компоненти», після установки відкриває лаунчер.
-; Повторний запуск того самого інсталятора, коли ця версія вже стоїть: просто відкриває лаунчер.
-; Дані гравця (Документи\GummerCraft: модпаки, акаунти, налаштування) установка і видалення не чіпають.
+;   ISCC.exe /DAppVersion=1.32 /DStage=<тека з GummerCraft.exe, jre\ і jre8\> /O<вихід> GummerCraft.iss
+; Логіка запуску (InitializeSetup): розпакована версія не старша за цей файл - просто відкрити лаунчер; інакше розпакувати
+; (стару jre прибрати повністю) і відкрити.
 
 #ifndef AppVersion
   #define AppVersion "0.0"
@@ -22,8 +24,7 @@ AppVerName=GummerCraft {#AppVersion}
 AppPublisher=GummerCraft
 AppPublisherURL=https://gummercraft.fun/
 AppSupportURL=https://gummercraft.fun/contact
-DefaultDirName={localappdata}\Programs\GummerCraft
-DefaultGroupName=GummerCraft
+DefaultDirName={localappdata}\GummerCraft\app
 PrivilegesRequired=lowest
 DisableWelcomePage=yes
 DisableDirPage=yes
@@ -31,9 +32,10 @@ DisableProgramGroupPage=yes
 DisableReadyPage=yes
 DisableFinishedPage=yes
 DisableStartupPrompt=yes
-AllowNoIcons=yes
-UninstallDisplayIcon={app}\GummerCraft.exe
-UninstallDisplayName=GummerCraft
+ShowLanguageDialog=no
+Uninstallable=no
+CreateUninstallRegKey=no
+UsePreviousAppDir=no
 SetupIconFile={#Stage}\app.ico
 WizardStyle=modern
 WizardSizePercent=100
@@ -43,13 +45,25 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
-OutputBaseFilename=GummerCraft-Setup-{#AppVersion}
+OutputBaseFilename=GummerCraft-{#AppVersion}
 VersionInfoVersion={#AppVersion}
 VersionInfoProductName=GummerCraft Launcher
 
 [Languages]
 Name: "uk"; MessagesFile: "compiler:Languages\Ukrainian.isl"
 Name: "en"; MessagesFile: "compiler:Default.isl"
+
+[Messages]
+uk.SetupWindowTitle=GummerCraft
+uk.WizardInstalling=Перший запуск
+uk.InstallingLabel=Готуємо GummerCraft до першого запуску, кілька секунд...
+uk.StatusExtractFiles=Розпаковуємо файли...
+uk.WizardPreparing=Перший запуск
+en.SetupWindowTitle=GummerCraft
+en.WizardInstalling=First start
+en.InstallingLabel=Getting GummerCraft ready for the first start, a few seconds...
+en.StatusExtractFiles=Unpacking files...
+en.WizardPreparing=First start
 
 [Files]
 Source: "{#Stage}\GummerCraft.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -62,12 +76,8 @@ Source: "{#Stage}\jre8\*"; DestDir: "{app}\jre"; Check: not IsWin10OrNewer; Flag
 ; стара вбудована Java при оновленні замінюється повністю (а не змішується з новою)
 Type: filesandordirs; Name: "{app}\jre"
 
-[Icons]
-Name: "{userprograms}\GummerCraft"; Filename: "{app}\GummerCraft.exe"
-Name: "{userdesktop}\GummerCraft"; Filename: "{app}\GummerCraft.exe"
-
 [Run]
-Filename: "{app}\GummerCraft.exe"; Flags: nowait skipifsilent
+Filename: "{app}\GummerCraft.exe"; Flags: nowait
 
 [Code]
 function IsWin10OrNewer: Boolean;
@@ -76,20 +86,59 @@ begin
   Result := (GetWindowsVersion shr 24) >= 10;
 end;
 
+// "1.32" -> порівняння з "1.4" покомпонентно (1.32 новіша за 1.4)
+function CompareVer(A, B: String): Integer;
+var
+  X, Y, P: Integer;
+begin
+  Result := 0;
+  while (Result = 0) and ((A <> '') or (B <> '')) do
+  begin
+    P := Pos('.', A); if P = 0 then P := Length(A) + 1;
+    X := StrToIntDef(Copy(A, 1, P - 1), 0); Delete(A, 1, P);
+    P := Pos('.', B); if P = 0 then P := Length(B) + 1;
+    Y := StrToIntDef(Copy(B, 1, P - 1), 0); Delete(B, 1, P);
+    if X > Y then Result := 1 else if X < Y then Result := -1;
+  end;
+end;
+
 function InitializeSetup(): Boolean;
 var
-  Installed: String;
-  ExePath: String;
+  Installed: AnsiString;
+  AppDir: String;
   Code: Integer;
 begin
   Result := True;
-  ExePath := ExpandConstant('{localappdata}\Programs\GummerCraft\GummerCraft.exe');
-  if (not WizardSilent) and FileExists(ExePath) and
-     RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{{#AppId}}_is1', 'DisplayVersion', Installed) and
-     (Installed = '{#AppVersion}') then
+  AppDir := ExpandConstant('{localappdata}\GummerCraft\app');
+  if FileExists(AppDir + '\GummerCraft.exe') and FileExists(AppDir + '\jre\bin\javaw.exe') and
+     LoadStringFromFile(AppDir + '\version.txt', Installed) and
+     (CompareVer(Trim(String(Installed)), '{#AppVersion}') >= 0) then
   begin
-    // ця версія вже стоїть: не ставимо заново, просто відкриваємо лаунчер
-    Exec(ExePath, '', '', SW_SHOWNORMAL, ewNoWait, Code);
+    // вже розпаковано (ця чи новіша версія): нічого не ставимо, просто відкриваємо лаунчер
+    Exec(AppDir + '\GummerCraft.exe', '', AppDir, SW_SHOWNORMAL, ewNoWait, Code);
     Result := False;
+    Exit;
   end;
+end;
+
+// без технічного шляху файлу під смужкою: гравцю досить «Розпаковуємо файли...»
+procedure InitializeWizard;
+begin
+  WizardForm.FilenameLabel.Visible := False;
+end;
+
+// Жодних питань: Inno примусово показує сторінку «Готово до встановлення», коли всі інші сторінки вимкнені
+// (DisableReadyPage тоді ігнорується, ShouldSkipPage її не пропускає, а перезапустити себе з /SILENT Inno не дає:
+// «Access is denied»). Тому тиснемо «Встановити» самі одразу, як сторінка з'явилась: лишається лише смужка прогресу.
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpReady then
+    PostMessage(WizardForm.NextButton.Handle, $00F5 {BM_CLICK}, 0, 0);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  // позначка розпакованої версії: наступний запуск цього (чи старшого) файлу одразу відкриє лаунчер
+  if CurStep = ssPostInstall then
+    SaveStringToFile(ExpandConstant('{app}\version.txt'), '{#AppVersion}', False);
 end;
