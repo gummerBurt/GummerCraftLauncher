@@ -70,6 +70,8 @@ public abstract class BaseUpdater {
     private final Launcher launcher;
     private final Environment environment = Environment.getInstance();
     private final List<Runnable> executeOnCompletion = new ArrayList<Runnable>();
+    /** 1.33: бібліотеки спершу з їхньої власної адреси (Vanilla, Fabric, Forge, NeoForge; не наші модпаки). */
+    protected boolean preferOwnLibraryUrl;
 
     protected BaseUpdater(@NonNull Launcher launcher) {
         this.launcher = launcher;
@@ -100,6 +102,17 @@ public abstract class BaseUpdater {
         if (instance.isVanilla()) {
             // 1.32, вкладка Vanilla: маніфест збирається з JSON версії від Mojang (без модів і файлів паку)
             manifest = com.gummer.launcher.vanilla.VanillaVersions.buildManifest(instance);
+        } else if (instance.isFabric()) {
+            // 1.33, розділ Fabric: JSON версії Mojang плюс профіль Fabric Loader
+            manifest = com.gummer.launcher.fabric.FabricVersions.buildManifest(launcher, instance);
+        } else if (instance.isQuilt()) {
+            manifest = com.gummer.launcher.quilt.QuiltVersions.buildManifest(launcher, instance);
+        } else if (instance.isMrpack()) {
+            // 1.33: збірка з Modrinth: гра і завантажувач з mrpack.json, моди вже в теці (скачані при імпорті)
+            manifest = com.gummer.launcher.modrinth.MrpackPacks.buildManifest(launcher, instance);
+        } else if (instance.isForgeLike()) {
+            // 1.33, розділи Forge і NeoForge: JSON версії Mojang плюс установник (version.json, processors)
+            manifest = com.gummer.launcher.forge.ForgeVersions.buildManifest(launcher, instance);
         } else {
             manifest = HttpRequest
                     .get(instance.getManifestURL())
@@ -154,7 +167,10 @@ public abstract class BaseUpdater {
             for (DownloadableFile file : entry.getValue().getDownloadableFiles()) {
                 if (file.getSide() != Side.CLIENT) continue;
 
-                DownloadableFile.LocalFile localFile = file.download(installer, manifest);
+                // 1.33: Forge і NeoForge беруть дані processors з уже скачаного установника (file:), не з CDN
+                DownloadableFile.LocalFile localFile = file.getLocation() != null && file.getLocation().startsWith("file:")
+                        ? new DownloadableFile.LocalFile(new File(new java.net.URI(file.getLocation())), file.getName())
+                        : file.download(installer, manifest);
                 localFilesMap.put(localFile.getName(), localFile);
             }
 
@@ -333,6 +349,22 @@ public abstract class BaseUpdater {
                             urls.add(concat(sourceUrl, path));
                         } catch (MalformedURLException e) {
                             log.log(Level.WARNING, "Bad source URL for library: " + sourceUrl);
+                        }
+                    }
+                    // 1.33: адреса з самої бібліотеки (Forge і NeoForge мають бібліотеки з різних maven). Для паків,
+                    // які лаунчер збирає сам (preferOwnLibraryUrl), першою, щоб не було зайвих 404; для наших модпаків
+                    // останньою, як запасна (CDN лишається першим)
+                    if (artifact.getUrl() != null && artifact.getUrl().startsWith("https://")) {
+                        try {
+                            // старий формат бібліотек (Fabric, Quilt, старий Forge): url це база maven, шлях окремо
+                            URL own = artifact.getUrl().endsWith("/")
+                                    ? concat(new URL(artifact.getUrl()), path)
+                                    : new URL(artifact.getUrl());
+                            urls.remove(own);
+                            if (preferOwnLibraryUrl) urls.add(0, own);
+                            else urls.add(own);
+                        } catch (MalformedURLException e) {
+                            log.log(Level.FINE, "Bad library URL: " + artifact.getUrl());
                         }
                     }
 

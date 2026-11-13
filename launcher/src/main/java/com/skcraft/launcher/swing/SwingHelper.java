@@ -157,8 +157,8 @@ public final class SwingHelper {
         try {
             return newLauncherDownloadUrl != null
                     && Environment.getInstance().getPlatform() == Platform.WINDOWS
-                    && !"bundled".equals(com.gummer.launcher.shared.Toolbox.javaKind());
-        } catch (RuntimeException e) {
+                    && !"bundled".equals(com.gummer.launcher.util.JavaKind.get());
+        } catch (RuntimeException | LinkageError e) { // вікно помилки не має падати через підказку
             return false;
         }
     }

@@ -36,7 +36,11 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
         // одразу вигляд останньої вибраної збірки (ще до завантаження списку збірок) - без "стандартний, а потім перемикання"
         String last = launcher.getConfig().getLastInstance();
         if (backgroundPanel != null && last != null) {
-            String look = last.startsWith(com.gummer.launcher.vanilla.VanillaVersions.GROUP + "-") ? com.gummer.launcher.vanilla.VanillaVersions.GROUP : last;
+            String look = last.startsWith(com.gummer.launcher.vanilla.VanillaVersions.GROUP + "-") ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
+                    : last.startsWith(com.gummer.launcher.fabric.FabricVersions.PREFIX) ? com.gummer.launcher.fabric.FabricVersions.GROUP
+                    : last.startsWith(com.gummer.launcher.quilt.QuiltVersions.PREFIX) ? com.gummer.launcher.quilt.QuiltVersions.GROUP
+                    : last.startsWith(com.gummer.launcher.modrinth.MrpackPacks.PREFIX) ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
+                    : com.gummer.launcher.forge.ForgeVersions.kindOfName(last) != null ? com.gummer.launcher.forge.ForgeVersions.kindOfName(last).group : last;
             backgroundPanel.showPack(look, false);
             showPackButtons(look.toLowerCase(java.util.Locale.ROOT));
         }
@@ -56,8 +60,13 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
         if (selected == null) return; // нічого не вибрано (список ще вантажиться) - лишаємо поточний вигляд
         String name = selected.getName();
         // усі ванільні версії (vanilla-1.21.1, vanilla-26.3, ...) мають одне оформлення: bg_vanilla.jpg і logo_vanilla.png
-        String look = com.gummer.launcher.vanilla.VanillaVersions.GROUP.equals(selected.getGroup())
-                ? com.gummer.launcher.vanilla.VanillaVersions.GROUP : name;
+        // 1.33: Fabric має своє оформлення (bg_fabric.jpg, logo_fabric.png, власник 13.11)
+        // Forge і NeoForge мають своє оформлення (bg_forge.jpg, logo_forge.png, logo_neoforge.png, власник 13.11)
+        String look = selected.isVanilla() ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
+                : selected.isFabric() ? com.gummer.launcher.fabric.FabricVersions.GROUP
+                : selected.isQuilt() ? com.gummer.launcher.quilt.QuiltVersions.GROUP
+                : selected.isMrpack() ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
+                : selected.isForgeLike() ? com.gummer.launcher.forge.ForgeVersions.kindOf(selected).group : name;
         backgroundPanel.showPack(look, !firstSelection);
         showPackButtons(look != null ? look.toLowerCase(java.util.Locale.ROOT) : null);
         firstSelection = false;

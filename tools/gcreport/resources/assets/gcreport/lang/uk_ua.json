@@ -1,0 +1,7 @@
+{
+  "gui.gcreport.button": "Надіслати звіт у техпідтримку",
+  "gui.gcreport.waiting": "Відкриваю форму в лаунчері...",
+  "gui.gcreport.opened": "Форму відкрито в лаунчері",
+  "gui.gcreport.bot": "Відкрито Telegram-бот підтримки",
+  "gui.gcreport.failed": "Не вдалося, натисни ще раз"
+}

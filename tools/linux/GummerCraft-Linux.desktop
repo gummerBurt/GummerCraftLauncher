@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Встановити GummerCraft
+Name[en]=Install GummerCraft
+Comment=Установка лаунчера GummerCraft разом з Java (Linux, Steam Deck)
+Exec=bash -c "curl -fsSL https://launch.gummercraft.fun/install/linux/install.sh | bash"
+Icon=applications-games
+Terminal=false
+Categories=Game;

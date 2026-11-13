@@ -134,12 +134,14 @@ public class SupportService {
         }
         if (sourceId == null) {
             sourceId = client.createContact(contactBody);
+            rememberContact(sourceId, nick, contact); // далі щось впаде: повторна спроба не створить ще один контакт
         } else {
             try {
                 client.updateContact(sourceId, contactBody);
             } catch (SupportClient.SupportException e) {
                 if (e.code == 404) {
                     sourceId = client.createContact(contactBody); // контакт видалили в Chatwoot: новий
+                    rememberContact(sourceId, nick, contact);
                 } else {
                     // наприклад, пошта вже в іншого контакту (422): нік і так піде в атрибутах розмови
                     log.log(Level.INFO, "Support: contact update failed, continuing", e);
@@ -289,7 +291,7 @@ public class SupportService {
 
     private static String javaLine() {
         return System.getProperty("java.version") + " " + System.getProperty("java.vendor") + " "
-                + System.getProperty("os.arch") + " " + com.gummer.launcher.shared.Toolbox.javaKind();
+                + System.getProperty("os.arch") + " " + com.gummer.launcher.util.JavaKind.get();
     }
 
     private static Map<String, Object> contactBody(String nick, String contact) {
@@ -317,6 +319,18 @@ public class SupportService {
             log.log(Level.WARNING, "Support: could not read " + stateFile, e);
         }
         return new SupportState();
+    }
+
+    /**
+     * Контакт створено, розмови ще немає: зберегти source_id одразу. 13.11.2026 у гравця зі старим exe все падало після створення
+     * контакту, і кожна повторна спроба плодила новий порожній контакт у Chatwoot (чотири за хвилину).
+     */
+    private synchronized void rememberContact(String sourceId, String nick, String contact) {
+        state.sourceId = sourceId;
+        state.nick = nick;
+        state.contact = contact;
+        state.conversationId = 0;
+        save();
     }
 
     private void save() {

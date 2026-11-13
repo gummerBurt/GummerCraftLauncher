@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "gcreport",
+  "version": "1.0.0",
+  "name": "GummerCraft Report",
+  "description": "Кнопка «Надіслати звіт у техпідтримку» на екрані відключення від сервера. Звіт відкривається у формі підтримки лаунчера GummerCraft.",
+  "authors": ["GummerCraft"],
+  "contact": {"homepage": "https://gummercraft.fun"},
+  "license": "LGPL-3.0",
+  "icon": "assets/gcreport/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["fun.gummercraft.gcreport.GcReport"]
+  },
+  "depends": {
+    "fabricloader": ">=0.11.0",
+    "fabric-screen-api-v1": "*"
+  }
+}

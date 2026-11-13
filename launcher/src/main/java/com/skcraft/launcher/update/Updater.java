@@ -68,6 +68,35 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         this.instance = instance;
 
         librarySources.add(launcher.propUrl("librariesSource"));
+        if (instance.isQuilt() || instance.isMrpack()) {
+            try {
+                librarySources.add(new java.net.URL(com.gummer.launcher.quilt.QuiltVersions.MAVEN));
+            } catch (java.net.MalformedURLException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        if (instance.isMrpack()) {
+            try {
+                for (com.gummer.launcher.forge.ForgeVersions.Kind k : com.gummer.launcher.forge.ForgeVersions.Kind.values()) librarySources.add(new java.net.URL(k.maven));
+            } catch (java.net.MalformedURLException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        if (instance.isFabric() || instance.isQuilt() || instance.isMrpack()) {
+            try {
+                librarySources.add(new java.net.URL(com.gummer.launcher.fabric.FabricVersions.MAVEN));
+            } catch (java.net.MalformedURLException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        preferOwnLibraryUrl = instance.isBuiltIn();
+        if (instance.isForgeLike()) {
+            try {
+                librarySources.add(new java.net.URL(com.gummer.launcher.forge.ForgeVersions.kindOf(instance).maven));
+            } catch (java.net.MalformedURLException e) {
+                throw new IllegalStateException(e);
+            }
+        }
         assetsSources.add(launcher.propUrl("assetsSource"));
     }
 

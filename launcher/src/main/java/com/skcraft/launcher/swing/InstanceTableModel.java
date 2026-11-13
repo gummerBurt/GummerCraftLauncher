@@ -31,6 +31,15 @@ public class InstanceTableModel extends AbstractTableModel {
     private final Icon instanceIcon;
     private final Icon customInstanceIcon;
     private final Icon downloadIcon;
+    /** 1.33: свої іконки трьох розділів, однакові незалежно від того, встановлено пак чи ні (власник 13.11). */
+    private final Icon staldayzIcon;
+    private final Icon gummercraftIcon;
+    private final Icon vanillaIcon;
+    private final Icon fabricIcon;
+    private final Icon forgeIcon;
+    private final Icon quiltIcon;
+    private final Icon modrinthIcon;
+    private final Icon neoforgeIcon;
 
     /**
      * 1.32: групи паків зі списку v2 (поле group, наприклад "main") показуються одним рядком, версія вибирається окремо
@@ -67,6 +76,24 @@ public class InstanceTableModel extends AbstractTableModel {
         instanceIcon = SwingHelper.createIcon(Launcher.class, "instance_icon.png", 32, 32);
         customInstanceIcon = instanceIcon;
         downloadIcon = SwingHelper.createIcon(Launcher.class, "download_icon.png", 32, 32);
+        staldayzIcon = SwingHelper.createIcon(Launcher.class, "icon_staldayz.png", 32, 32);
+        gummercraftIcon = SwingHelper.createIcon(Launcher.class, "icon_gummercraft.png", 32, 32);
+        vanillaIcon = SwingHelper.createIcon(Launcher.class, "icon_vanilla.png", 32, 32);
+        // icon_fabric.png: офіційна іконка FabricMC/fabric-loader (src/main/resources/assets/fabricloader/icon.png, Apache 2.0)
+        fabricIcon = SwingHelper.createIcon(Launcher.class, "icon_fabric.png", 32, 32);
+        // icon_forge.png: ковадло з логотипа Forge (установник Forge, big_logo_dark_mode.png), 64x64
+        forgeIcon = SwingHelper.createIcon(Launcher.class, "icon_forge.png", 32, 32);
+        // icon_quilt.png: офіційна іконка Quilt (quilt-loader, ui/icon/quilt_x128.png, Apache 2.0), 64x64
+        quiltIcon = SwingHelper.createIcon(Launcher.class, "icon_quilt.png", 32, 32);
+        // icon_modrinth.png: іконка застосунку Modrinth (github.com/modrinth/code, apps/app/icons/128x128.png), 64x64
+        modrinthIcon = SwingHelper.createIcon(Launcher.class, "icon_modrinth.png", 32, 32);
+        // icon_neoforge.png: логотип NeoForged (установник NeoForge, icons/neoforged_background_128x128.png), 64x64
+        neoforgeIcon = SwingHelper.createIcon(Launcher.class, "icon_neoforge.png", 32, 32);
+    }
+
+    private static boolean isStalDayZ(Instance instance) {
+        String n = instance.getName();
+        return n != null && (n.equals("staldayz") || n.startsWith("staldayz-") || n.startsWith("sdayz"));
     }
 
     public void update() {
@@ -235,6 +262,15 @@ public class InstanceTableModel extends AbstractTableModel {
         if (title == null && com.gummer.launcher.vanilla.VanillaVersions.GROUP.equals(instance.getGroup())) {
             title = "Vanilla";
         }
+        if (title == null && com.gummer.launcher.fabric.FabricVersions.GROUP.equals(instance.getGroup())) {
+            title = "Fabric";
+        }
+        if (title == null && instance.isQuilt()) {
+            title = "Quilt";
+        }
+        if (title == null && instance.isForgeLike()) {
+            title = com.gummer.launcher.forge.ForgeVersions.kindOf(instance).title;
+        }
         return title != null ? title : instance.getGroup();
     }
 
@@ -303,16 +339,39 @@ public class InstanceTableModel extends AbstractTableModel {
         switch (columnIndex) {
             case 0:
                 instance = getInstanceAt(rowIndex);
-                if (!instance.isLocal()) {
-                    return downloadIcon;
-                } else {
+                // 1.33 (власник 13.11): у трьох розділів завжди своя іконка, без іконки «не встановлено»:
+                // Vanilla - логотип Minecraft (MinecraftIcon.webp власника), GummerCraft і StalDayZ - іконки їхніх паків
+                if (instance.isVanilla()) {
+                    return vanillaIcon;
+                }
+                if (instance.isFabric()) {
+                    return fabricIcon;
+                }
+                if (instance.isForgeLike()) {
+                    return com.gummer.launcher.forge.ForgeVersions.kindOf(instance) == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE ? forgeIcon : neoforgeIcon;
+                }
+                if (instance.isQuilt()) {
+                    return quiltIcon;
+                }
+                if (instance.isMrpack()) {
+                    File own = new File(instance.getContentDir(), "icon.png");
+                    return own.isFile() ? new javax.swing.ImageIcon(new javax.swing.ImageIcon(own.getAbsolutePath()).getImage()
+                            .getScaledInstance(32, 32, java.awt.Image.SCALE_SMOOTH)) : modrinthIcon;
+                }
+                if ("main".equals(instance.getGroup())) {
+                    return gummercraftIcon;
+                }
+                if (isStalDayZ(instance)) {
+                    return staldayzIcon;
+                }
+                if (instance.isLocal()) {
                     File icon = new File(instance.getContentDir(), "instance_icon.png");
                     if (icon.exists()) {
                         return new ImageIcon(SwingExtras.readIconImage(icon)
                                 .getScaledInstance(32, 32, Image.SCALE_SMOOTH));
                     }
-                    return instanceIcon;
                 }
+                return instanceIcon;
             case 1:
                 instance = getInstanceAt(rowIndex);
                 //return instance.getTitle();

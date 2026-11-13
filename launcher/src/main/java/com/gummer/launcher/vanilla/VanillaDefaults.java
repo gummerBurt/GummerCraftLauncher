@@ -44,10 +44,14 @@ public final class VanillaDefaults {
     }
 
     public static void apply(Instance instance) {
-        if (!VanillaVersions.isVanilla(instance)) return;
+        if (!instance.isBuiltIn()) return; // 1.33: Fabric теж (та сама чиста гра)
         File dir = instance.getContentDir();
         try {
-            applyLanguage(dir, VanillaVersions.versionIdOf(instance));
+            applyLanguage(dir, instance.isFabric() ? com.gummer.launcher.fabric.FabricVersions.versionIdOf(instance)
+                    : instance.isQuilt() ? com.gummer.launcher.quilt.QuiltVersions.versionIdOf(instance)
+                    : instance.isMrpack() ? com.gummer.launcher.modrinth.MrpackPacks.mcOf(instance)
+                    : instance.isForgeLike() ? com.gummer.launcher.forge.ForgeVersions.versionIdOf(instance)
+                    : VanillaVersions.versionIdOf(instance));
         } catch (Exception e) {
             log.log(Level.WARNING, "Vanilla: could not write options.txt", e);
         }

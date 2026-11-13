@@ -85,6 +85,15 @@ public class SupportDialog extends JDialog {
         }
         open.setVisible(true);
         open.toFront();
+        // 1.33: звіт про відключення приходить, поки гра на весь екран, а головне вікно сховане. Ненадовго «поверх усіх»,
+        // щоб форма не загубилась за грою; далі звичайне вікно, яке можна сховати за інші.
+        if (owner == null || !owner.isShowing()) {
+            final SupportDialog d = open;
+            d.setAlwaysOnTop(true);
+            Timer off = new Timer(3000, e -> d.setAlwaysOnTop(false));
+            off.setRepeats(false);
+            off.start();
+        }
     }
 
     private SupportDialog(Window owner, SupportService service, Supplier<Instance> selectedInstance) {
@@ -214,10 +223,25 @@ public class SupportDialog extends JDialog {
                     showChat();
                 } catch (InterruptedException | ExecutionException e) {
                     log.log(Level.WARNING, "Support: submit failed", e);
-                    formError.setText(tr("support.sendFailed"));
+                    formError.setText(failText(e));
                 }
             }
         }.execute();
+    }
+
+    /**
+     * Текст помилки надсилання за причиною. До 13.11.2026 будь-яка помилка була «Перевір інтернет», навіть коли інтернет є, а впав
+     * сам лаунчер (старий exe, NoSuchMethodError) або сервер відповів кодом помилки: гравцю і нам це нічого не казало.
+     */
+    static String failText(Exception e) {
+        Throwable c = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
+        if (c instanceof com.gummer.launcher.support.SupportClient.SupportException) {
+            return tr("support.sendFailedServer", ((com.gummer.launcher.support.SupportClient.SupportException) c).code);
+        }
+        if (c instanceof java.io.IOException || c instanceof InterruptedException) {
+            return tr("support.sendFailed");
+        }
+        return tr("support.sendFailedBug", c.getClass().getSimpleName());
     }
 
     // ------------------------------------------------------------------ чат
@@ -345,7 +369,7 @@ public class SupportDialog extends JDialog {
                     refreshChat();
                 } catch (InterruptedException | ExecutionException e) {
                     log.log(Level.WARNING, "Support: reply failed", e);
-                    chatStatus.setText(tr("support.sendFailed"));
+                    chatStatus.setText(failText(e));
                 }
             }
         }.execute();

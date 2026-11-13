@@ -24,7 +24,7 @@ import java.util.Properties;
  * {@code ui/frame/bg_<назва збірки>.jpg} і {@code ui/frame/logo_<назва збірки>.png} (назва з маніфесту, малими літерами, наприклад bg_staldayz.jpg).
  * Усі ванільні версії (група vanilla) беруть bg_vanilla.jpg і logo_vanilla.png (FlatLauncherFrame, з 1.32).
  * Немає файлу - малюється стандартний (bg.jpg / logo.png). Налаштування збірки - {@code ui/frame/frame_<назва збірки>.properties}:
- * зсуви background.x/y і logo.x/y у пікселях, wiki.url - куди веде кнопка "Вікі та FAQ" (дивись frame_staldayz.properties).
+ * зсуви background.x/y і logo.x/y у пікселях, background.from (фон іншого оформлення), wiki.url - куди веде кнопка "Вікі та FAQ" (дивись frame_staldayz.properties).
  * Зміна збірки - плавний перехід (старі фон і логотип розчиняються в нові за {@link #FADE_MS}).
  */
 public class FlatBackgroundPanel extends JPanel {
@@ -117,6 +117,11 @@ public class FlatBackgroundPanel extends JPanel {
                 background = cached("ui/frame/bg_" + key + ".jpg");
                 logo = cached("ui/frame/logo_" + key + ".png");
                 layout = layout(key);
+                // 1.33: background.from=<інший пак> - фон іншого оформлення (NeoForge поки бере фон Vanilla)
+                String from = layout.getProperty("background.from");
+                if (background == null && from != null && from.matches("[a-z0-9_.-]+")) {
+                    background = cached("ui/frame/bg_" + from + ".jpg");
+                }
             }
         }
         currentLayout = layout;

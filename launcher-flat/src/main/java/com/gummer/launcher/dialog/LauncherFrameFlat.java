@@ -106,7 +106,8 @@ public class LauncherFrameFlat extends JFrame {
     private final JLabel onlineLabel = new JLabel(" ");
     private final JCheckBox quickJoinBox = new JCheckBox(tr("launcher.quickJoin"));
     //private final JButton refreshButton;  // disable for now refreshBurron
-    //private JButton accountButton; // disable for now accountButton
+    /** 1.33: плашка необов'язкового акаунта сервера вгорі справа; null, якщо serverAccount=false у launcher.properties. */
+    private AccountChip accountChip;
 
     // load popup icons
     private final static ImageIcon downloadIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/download.png")));
@@ -168,7 +169,7 @@ public class LauncherFrameFlat extends JFrame {
         );
 
         // bottom buttons
-        // disable for now accountButton
+        // disable for now accountButton (1.33: акаунт сервера не тут, а плашкою вгорі справа, AccountChip)
         //accountButton = new CustomImageButton(
         //    ImageIO.read(Objects.requireNonNull(
         //        Launcher.class.getResourceAsStream("ui/button/account_" + langCode + ".png")
@@ -262,6 +263,25 @@ public class LauncherFrameFlat extends JFrame {
         sidebarButtonsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         sidebarButtonsPanel.setOpaque(false); // transparent
         //sidebarButtonsPanel.add(Box.createVerticalStrut(5)); // add spacing before buttons
+        // 1.33: «Змінити скін» і аккаунт на ГаммерКрафті (необов'язковий) у вільному місці бокової панелі, у ряд з
+        // кнопками 200x45. Не внизу справа (виштовхували «Запуск») і не вгорі справа (налазили на лого збірки).
+        if (!"false".equalsIgnoreCase(launcher.getProperties().getProperty("serverAccount", "true").trim())) {
+            accountChip = new AccountChip(launcher, () -> ServerAccountDialog.showFor(this, launcher, supportService,
+                    this::getSelectedInstance, () -> accountChip.refresh()));
+            SkinChip skinChip = new SkinChip(() -> ServerAccountDialog.showFor(this, launcher, supportService,
+                    this::getSelectedInstance, () -> accountChip.refresh(), true));
+            for (JComponent c : new JComponent[]{skinChip, accountChip}) {
+                Dimension d = new Dimension(200, 45);
+                c.setPreferredSize(d);
+                c.setMinimumSize(d);
+                c.setMaximumSize(d);
+                c.setAlignmentX(Component.LEFT_ALIGNMENT);
+            }
+            sidebarButtonsPanel.add(skinChip);
+            sidebarButtonsPanel.add(Box.createVerticalStrut(5));
+            sidebarButtonsPanel.add(accountChip);
+            sidebarButtonsPanel.add(Box.createVerticalStrut(12));
+        }
         sidebarButtonsPanel.add(telegramButton);
         sidebarButtonsPanel.add(Box.createVerticalStrut(5));
         sidebarButtonsPanel.add(discordButton);
@@ -496,7 +516,7 @@ public class LauncherFrameFlat extends JFrame {
     private JPanel createOldExeBanner() {
         final String url = launcher.getProperties().getProperty("newLauncherUrl");
         if (url == null || url.trim().isEmpty() || !SystemInfo.isWindows
-                || "bundled".equals(com.gummer.launcher.shared.Toolbox.javaKind())) {
+                || "bundled".equals(com.gummer.launcher.util.JavaKind.get())) {
             return null;
         }
         final JPanel banner = new JPanel(new MigLayout("insets 8 14 8 8, gap 10", "[grow][][]", "[]")) {
@@ -683,6 +703,10 @@ public class LauncherFrameFlat extends JFrame {
             versionPanel.setVisible(members.size() >= 2);
             if (members.size() >= 2) {
                 String key = shown.isVanilla() ? "launcher.versionLabelVanilla"
+                        : shown.isFabric() ? "launcher.versionLabelFabric"
+                        : shown.isQuilt() ? "launcher.versionLabelQuilt"
+                        : shown.isForgeLike() ? (com.gummer.launcher.forge.ForgeVersions.kindOf(shown) == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE
+                                ? "launcher.versionLabelForge" : "launcher.versionLabelNeoForge")
                         : "main".equals(shown.getGroup()) ? "launcher.versionLabelGummerCraft" : "launcher.versionLabel";
                 versionLabel.setText(tr(key));
                 versionLabel.setToolTipText(tr(key + "Tooltip"));
@@ -697,6 +721,78 @@ public class LauncherFrameFlat extends JFrame {
         }
     }
 
+    /**
+     * 1.33: вибір версії завантажувача (Fabric Loader, Forge, NeoForge) для версії Minecraft; діє з наступного запуску
+     * (пак оновиться). Список від новішої, перша позначена «найновіша», рекомендована Forge «рекомендована».
+     */
+    private void chooseLoader(Instance instance) {
+        final boolean fabric = instance.isFabric();
+        final boolean quilt = instance.isQuilt();
+        final com.gummer.launcher.forge.ForgeVersions.Kind kind = com.gummer.launcher.forge.ForgeVersions.kindOf(instance);
+        final String title = fabric ? "Fabric Loader" : quilt ? "Quilt Loader" : kind.title;
+        final String mc = fabric ? com.gummer.launcher.fabric.FabricVersions.versionIdOf(instance)
+                : quilt ? com.gummer.launcher.quilt.QuiltVersions.versionIdOf(instance) : com.gummer.launcher.forge.ForgeVersions.versionIdOf(instance);
+        new SwingWorker<java.util.List<String>, Void>() {
+            private String recommended;
+
+            @Override
+            protected java.util.List<String> doInBackground() {
+                if (fabric) return com.gummer.launcher.fabric.FabricVersions.loaders(launcher);
+                if (quilt) return com.gummer.launcher.quilt.QuiltVersions.loaders(launcher);
+                java.util.List<String> all = com.gummer.launcher.forge.ForgeVersions.versions(launcher, kind).get(mc);
+                if (all == null) return java.util.Collections.emptyList();
+                recommended = com.gummer.launcher.forge.ForgeVersions.recommended(launcher, kind, mc, all);
+                return all;
+            }
+
+            @Override
+            protected void done() {
+                java.util.List<String> all;
+                try {
+                    all = get();
+                } catch (Exception e) {
+                    all = java.util.Collections.emptyList();
+                }
+                if (all.isEmpty()) {
+                    SwingHelper.showErrorDialog(LauncherFrameFlat.this, tr("loader.unavailable", title), title);
+                    return;
+                }
+                String current = fabric ? com.gummer.launcher.fabric.FabricVersions.pinnedLoader(instance)
+                        : quilt ? com.gummer.launcher.quilt.QuiltVersions.pinnedLoader(instance) : com.gummer.launcher.forge.ForgeVersions.pinnedLoader(instance);
+                java.util.List<String> items = new java.util.ArrayList<>();
+                for (int i = 0; i < all.size(); i++) {
+                    String v = all.get(i);
+                    items.add(v.equals(recommended) && i > 0 ? tr("loader.recommended", v)
+                            : i == 0 ? tr("loader.latest", v) : v);
+                }
+                JComboBox<String> box = new JComboBox<>(items.toArray(new String[0]));
+                box.setMaximumRowCount(15);
+                int idx = current != null ? all.indexOf(current) : (recommended != null ? all.indexOf(recommended) : 0);
+                box.setSelectedIndex(Math.max(0, idx));
+                JPanel panel = new JPanel(new MigLayout("insets 0, wrap 1", "[grow,fill]"));
+                panel.add(new JLabel(tr("loader.text", mc, current != null ? current : tr("loader.notInstalled"))));
+                panel.add(box);
+                int r = JOptionPane.showConfirmDialog(LauncherFrameFlat.this, panel, title,
+                        JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+                if (r != JOptionPane.OK_OPTION) return;
+                String chosen = all.get(box.getSelectedIndex());
+                if (chosen.equals(current)) return;
+                try {
+                    if (fabric) com.gummer.launcher.fabric.FabricVersions.pinLoader(instance, chosen);
+                    else if (quilt) com.gummer.launcher.quilt.QuiltVersions.pinLoader(instance, chosen);
+                    else com.gummer.launcher.forge.ForgeVersions.pinLoader(instance, chosen);
+                    if (instance.isLocal()) {
+                        instance.setUpdatePending(true);
+                        com.skcraft.launcher.persistence.Persistence.commitAndForget(instance);
+                    }
+                    instancesModel.update();
+                } catch (Exception e) {
+                    SwingHelper.showErrorDialog(LauncherFrameFlat.this, e.toString(), title);
+                }
+            }
+        }.execute();
+    }
+
     /** Вибрати пак у списку (для групи: цю версію в групі). */
     private void selectPack(Instance target) {
         instancesModel.chooseInGroup(target);
@@ -706,9 +802,9 @@ public class LauncherFrameFlat extends JFrame {
         instancesModel.update(); // tableChanged -> selectRememberedInstance
     }
 
-    /** Текст для ванільної версії («версія»), якщо є, інакше звичайний («модпак»). */
+    /** Текст для Vanilla і Fabric («версія»), якщо є, інакше звичайний («модпак»). */
     private static String trFor(Instance instance, String key, Object... args) {
-        String k = instance != null && instance.isVanilla() ? key + ".vanilla" : key;
+        String k = instance != null && instance.isBuiltIn() ? key + ".vanilla" : key;
         return args.length == 0 ? tr(k) : tr(k, args);
     }
 
@@ -752,7 +848,7 @@ public class LauncherFrameFlat extends JFrame {
     /** Онлайн і «Одразу на сервер» для вибраного паку (лише вкладка GummerCraft і паки з адресою сервера). */
     private void refreshStatusRow() {
         Instance sel = getSelectedInstance();
-        String address = sel != null && !sel.isVanilla() ? sel.getServerAddress() : null;
+        String address = sel != null && !sel.isBuiltIn() ? sel.getServerAddress() : null;
         boolean show = address != null;
         launchButton.setToolTipText(trFor(sel, "tooltip.launch"));
         quickJoinBox.setVisible(show);
@@ -790,7 +886,7 @@ public class LauncherFrameFlat extends JFrame {
         final java.util.Set<String> addresses = new java.util.LinkedHashSet<>();
         synchronized (launcher.getInstances()) {
             for (Instance i : launcher.getInstances().getInstances()) {
-                if (!i.isVanilla() && i.getServerAddress() != null) addresses.add(i.getServerAddress());
+                if (!i.isBuiltIn() && i.getServerAddress() != null) addresses.add(i.getServerAddress());
             }
         }
         for (com.gummer.launcher.news.NewsFeed.Item n : news) {
@@ -1105,6 +1201,23 @@ public class LauncherFrameFlat extends JFrame {
             });
             popup.add(menuItem);
 
+            if (selected.isLoaderPack()) {
+                // 1.33: версія завантажувача (закріплена в fabric-loader.txt, forge-loader.txt, neoforge-loader.txt)
+                // і тека модів гравця
+                menuItem = new JMenuItem(tr("loader.menu", selected.isFabric() ? "Fabric Loader"
+                        : selected.isQuilt() ? "Quilt Loader" : com.gummer.launcher.forge.ForgeVersions.kindOf(selected).title), javaIcon);
+                menuItem.addActionListener(e -> chooseLoader(selected));
+                popup.add(menuItem);
+            }
+            if (selected.isLoaderPack() || selected.isMrpack()) {
+                if (selected.isLocal()) {
+                    menuItem = new JMenuItem(tr("fabric.openMods"), folderIcon);
+                    menuItem.addActionListener(ActionListeners.browseDir(
+                            LauncherFrameFlat.this, new File(selected.getContentDir(), "mods"), true));
+                    popup.add(menuItem);
+                }
+            }
+
             if (selected.isLocal()) {
                 if (!selected.isUpdatePending()) {
                     // hide 'soft-force-update' option
@@ -1157,14 +1270,16 @@ public class LauncherFrameFlat extends JFrame {
 
                 popup.addSeparator();
 
-                menuItem = new JMenuItem(trFor(selected, "instance.hardForceUpdate"), reinstallIcon);
-                menuItem.addActionListener(new ActionListener() {
-                    @Override
-                    public void actionPerformed(ActionEvent e) {
-                        confirmHardUpdate(selected);
-                    }
-                });
-                popup.add(menuItem);
+                if (!selected.isMrpack()) { // збірка з Modrinth: перевстановлення стерло б моди, скачані при імпорті
+                    menuItem = new JMenuItem(trFor(selected, "instance.hardForceUpdate"), reinstallIcon);
+                    menuItem.addActionListener(new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                            confirmHardUpdate(selected);
+                        }
+                    });
+                    popup.add(menuItem);
+                }
 
                 menuItem = new JMenuItem(trFor(selected, "instance.deleteFiles"), trashIcon);
                 menuItem.addActionListener(new ActionListener() {
@@ -1178,7 +1293,39 @@ public class LauncherFrameFlat extends JFrame {
 
         }
 
+        // 1.33: імпорт збірки з Modrinth (.mrpack)
+        if (com.gummer.launcher.modrinth.MrpackPacks.ENABLED) {
+            popup.addSeparator();
+            menuItem = new JMenuItem(tr("mrpack.importMenu"), downloadIcon);
+            menuItem.addActionListener(e -> importMrpack());
+            popup.add(menuItem);
+        }
+
         popup.show(component, x, y);
+    }
+
+    /** 1.33: вибрати .mrpack, імпортувати (моди качаються одразу), оновити список і вибрати нову збірку. */
+    private void importMrpack() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(tr("mrpack.chooseTitle"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth (.mrpack)", "mrpack"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        final File file = chooser.getSelectedFile();
+        final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
+        com.google.common.util.concurrent.ListenableFuture<String> task = launcher.getExecutor().submit(
+                () -> importer.importFile(launcher, file));
+        ObservableFuture<String> future = new ObservableFuture<>(task, importer);
+        ProgressDialog.showProgress(this, future, tr("mrpack.progressTitle"), tr("mrpack.progressText", file.getName()));
+        SwingHelper.addErrorDialogCallback(this, future);
+        future.addListener(() -> {
+            try {
+                String name = task.get();
+                launcher.getConfig().setLastInstance(name);
+                loadInstances();
+            } catch (Exception ignored) {
+                // помилку вже показав addErrorDialogCallback
+            }
+        }, SwingExecutor.INSTANCE);
     }
 
     private void confirmDelete(Instance instance) {

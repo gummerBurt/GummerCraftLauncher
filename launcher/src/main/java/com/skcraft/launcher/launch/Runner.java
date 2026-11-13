@@ -241,6 +241,10 @@ public class Runner implements Callable<Process>, ProgressObservable {
         if (getEnvironment().getPlatform() == Platform.LINUX) {
             builder.getFlags().add("-Dio.netty.transport.noNative=true");
         }
+
+        // 1.33: наші моди (GummerVibe, gcreport) бачать, що лаунчер слухає запити в теці гри (gummercraft-report.json, див.
+        // DisconnectReport). Без прапорця (гра запущена іншим лаунчером чи старим нашим) мод одразу веде в Telegram-бот підтримки.
+        builder.getFlags().add("-Dgummercraft.report=1");
     }
 
     /**
@@ -553,7 +557,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
      */
     private void addQuickJoin() {
         String address = instance.getServerAddress();
-        if (address == null || address.trim().isEmpty() || instance.isVanilla() || config.isServerEnabled()
+        if (address == null || address.trim().isEmpty() || instance.isBuiltIn() || config.isServerEnabled()
                 || !com.gummer.launcher.prefs.LauncherPrefs.getBoolean(com.gummer.launcher.prefs.LauncherPrefs.QUICK_JOIN, true)) {
             return;
         }

@@ -35,6 +35,8 @@ public final class VanillaVersions {
     public static final String GROUP = "vanilla";
     /** Найстаріший реліз у списку: 1.8 (вересень 2014). Старіші версії мають інший формат ресурсів і майже не потрібні. */
     private static final String OLDEST_RELEASE_TIME = "2014-09-02";
+    /** Найстаріший реліз для завантажувачів: 1.7.10 (у Mojang дата 14.05.2014; старий Forge). */
+    private static final String OLDEST_LOADER_TIME = "2014-05-01";
 
     private static final Logger log = Logger.getLogger(VanillaVersions.class.getName());
     private static final ObjectMapper MAPPER = Json.newMapper();
@@ -43,10 +45,13 @@ public final class VanillaVersions {
     public static final class Release {
         public final String id;
         public final String url;
+        /** Старіший за 1.8: у розділі Vanilla не показується, лише для старого Forge (1.7.10). */
+        public final boolean old;
 
-        Release(String id, String url) {
+        Release(String id, String url, boolean old) {
             this.id = id;
             this.url = url;
+            this.old = old;
         }
     }
 
@@ -112,9 +117,9 @@ public final class VanillaVersions {
             String type = v.path("type").asText("");
             String time = v.path("releaseTime").asText("");
             if (id == null || url == null || !"release".equals(type)) continue;
-            if (time.compareTo(OLDEST_RELEASE_TIME) < 0) continue;
+            if (time.compareTo(OLDEST_LOADER_TIME) < 0) continue;
             if (!id.matches("[0-9A-Za-z._-]+")) continue; // стає назвою теки
-            out.add(new Release(id, url));
+            out.add(new Release(id, url, time.compareTo(OLDEST_RELEASE_TIME) < 0));
         }
         return out;
     }

@@ -42,3 +42,7 @@ gradlew         text eol=lf
 
 # keep bundled certificates byte-identical on every checkout (reproducible jars)
 *.pem -text
+
+# Linux: скрипт установки та ярлик мусять мати LF навіть на Windows (core.autocrlf=true), інакше bash падає на символі CR
+*.sh            text eol=lf
+*.desktop       text eol=lf

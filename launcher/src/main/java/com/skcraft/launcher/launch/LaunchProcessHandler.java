@@ -72,6 +72,9 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
                 }
             });
 
+            // 1.33: звіт про відключення з кнопки на екрані відключення гри (наші моди пишуть файл у теку гри)
+            startDisconnectReportWatcher(process);
+
             // Wait for the process to end
             process.waitFor();
         } catch (InterruptedException e) {
@@ -83,6 +86,8 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         }
 
         log.info("Process ended, re-showing launcher...");
+        // 1.33: кнопку могли натиснути за мить до закриття гри
+        checkDisconnectReport();
 
         // 1.32: розбір вильоту (поза EDT: читає звіти про збій і логи)
         int exit = 0;
@@ -141,6 +146,52 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         });
 
         return consoleFrame;
+    }
+
+    /** Як часто, поки гра запущена, перевіряти файл звіту про відключення. */
+    private static final long REPORT_POLL_MS = 2000L;
+
+    /**
+     * 1.33 (13.11.2026): поки гра працює, раз на {@link #REPORT_POLL_MS} мс шукає в теці гри файл
+     * {@link com.gummer.launcher.support.DisconnectReport#FILE_NAME} (його пише кнопка «Надіслати звіт у техпідтримку» з GummerVibe
+     * чи міні-мода Fabric) і відкриває форму підтримки. Потік фоновий і сам завершується разом з грою.
+     */
+    private void startDisconnectReportWatcher(final Process process) {
+        if (instance == null) return;
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (process.isAlive()) {
+                    checkDisconnectReport();
+                    try {
+                        Thread.sleep(REPORT_POLL_MS);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }
+        }, "Disconnect report watcher");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void checkDisconnectReport() {
+        if (instance == null) return;
+        final com.gummer.launcher.support.DisconnectReport report =
+                com.gummer.launcher.support.DisconnectReport.take(instance.getContentDir());
+        if (report == null) return;
+        log.info("Disconnect report from the game: " + report);
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                com.gummer.launcher.ui.UiHooks.Support support = com.gummer.launcher.ui.UiHooks.support;
+                if (support != null) {
+                    support.open(null, report.topic(), report.text());
+                } else {
+                    log.warning("Support is not available, disconnect report dropped");
+                }
+            }
+        });
     }
 
 }

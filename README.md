@@ -24,6 +24,28 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
 
+## Що нового в 1.33
+
+**Завантажувачі модів**
+- Нові розділи під Vanilla: **Fabric**, **Quilt**, **Forge** і **NeoForge**. Чистий Minecraft з завантажувачем, моди кладеш сам (меню правою кнопкою, «Відкрити теку модів»). Версія Minecraft вибирається тим самим списком біля «Запуск».
+- Fabric для 1.14 і новіших, Quilt для тих самих версій, що підтримує Quilt, Forge від 1.7.10, NeoForge від 1.20.2. Нові версії з'являються самі.
+- Версія завантажувача ставиться найновіша стабільна (у Forge рекомендована) і далі сама не міняється. Змінити: меню правою кнопкою, «Версія ...».
+- Forge і NeoForge лаунчер готує сам, як офіційний установник (установник качається з maven Forge чи NeoForge з перевіркою sha1), тому перша установка версії може тривати до хвилини.
+- У кожного розділу свій фон, логотип та іконка.
+
+**Аккаунт на ГаммерКрафті (необов'язково)**
+- Вхід ніком і паролем з сервера, реєстрація ніку заздалегідь, «Забув пароль?» відкриває форму підтримки.
+- Скіни для StalDayZ і GummerCraft окремо, просто з лаунчера (PNG 64x64 або 64x32, класичні чи тонкі руки).
+- Особистий кабінет: коли створено акаунт, перший і останній вхід, скільки награно і на яких серверах, привілеї з датою кінця.
+- Пароль лаунчер не зберігає, лише токен на 30 днів. Без входу все працює як раніше: локальний акаунт з будь-яким ніком.
+
+**Підтримка**
+- Після відключення від сервера в грі є кнопка «Надіслати звіт у техпідтримку»: лаунчер відкриває форму з сервером, часом і причиною (потрібні нові версії модів GummerCraft).
+- Форма підтримки і вікна помилок працюють і в гравців зі старим exe.
+
+**Інше**
+- Linux: гра більше не вилітає через нативний транспорт Netty, розбір вильотів упізнає проблеми libGL і GLX.
+
 ## Що нового в 1.32
 
 **Java більше не потрібна**
@@ -95,7 +117,7 @@
 ## Що лаунчер робить на комп'ютері
 
 - Усі файли - **в одній папці**: `Документи\GummerCraft` (Windows) або `~/.gummercraft` / `$XDG_DATA_HOME/GummerCraft` (Linux, macOS). Шлях зберігається в `bootstrap.yml` і його можна змінити. Портативний режим - файл `portable.txt` поруч із лаунчером.
-- Вміст папки: `launcher/` (jar лаунчера), `runtime/` (портативна Java - збірки Eclipse Temurin), `assets/`, `libraries/`, `versions/` (файли Minecraft), `instances/` (збірки), `config.json` (налаштування), `accounts.dat` (збережені акаунти), з 1.32 `support.json` (звернення в підтримку з лаунчера), `launcher-ui.json` (вкладка, остання збірка, «Одразу на сервер»), `news-cache.json` і `vanilla_versions.json` (копії новин і списку версій Mojang), `stats-id.txt` (анонімний випадковий ID установки для підрахунку гравців, нічого про вас не містить; `off` у файлі вимикає, деталі в [SECURITY.md](SECURITY.md)). Ванільні версії з вкладки Vanilla ставляться в `instances/vanilla-<версія>`. З 1.32 може з'явитись `launcher/ui-scale.txt`: зменшений масштаб інтерфейсу, якщо вікно лаунчера з масштабом Windows не влазить в екран (видалення файлу нічого не ламає).
+- Вміст папки: `launcher/` (jar лаунчера), `runtime/` (портативна Java - збірки Eclipse Temurin), `assets/`, `libraries/`, `versions/` (файли Minecraft), `instances/` (збірки), `config.json` (налаштування), `accounts.dat` (збережені акаунти), з 1.32 `support.json` (звернення в підтримку з лаунчера), `launcher-ui.json` (вкладка, остання збірка, «Одразу на сервер»), `news-cache.json` і `vanilla_versions.json` (копії новин і списку версій Mojang), `stats-id.txt` (анонімний випадковий ID установки для підрахунку гравців, нічого про вас не містить; `off` у файлі вимикає, деталі в [SECURITY.md](SECURITY.md)). Ванільні версії з вкладки Vanilla ставляться в `instances/vanilla-<версія>`. З 1.33 розділи завантажувачів ставляться в `instances/fabric-<версія>`, `quilt-<версія>`, `forge-<версія>`, `neoforge-<версія>` (вибрана версія завантажувача у файлі `fabric-loader.txt` і подібних у теці паку), списки версій зберігаються в `fabric_games.json`, `fabric_loaders.json`, `quilt_games.json`, `quilt_loaders.json`, `forge_versions.xml`, `forge_promotions.json`, `neoforge_versions.xml`, офіційні установники Forge і NeoForge в `loaders/`. Токен і нік аккаунта на ГаммерКрафті (якщо гравець увійшов) у `launcher-ui.json`, пароль ніде. З 1.32 може з'явитись `launcher/ui-scale.txt`: зменшений масштаб інтерфейсу, якщо вікно лаунчера з масштабом Windows не влазить в екран (видалення файлу нічого не ламає).
 - З 1.32 для нових гравців є один файл `GummerCraft.exe` з вбудованою Java (Eclipse Temurin JRE 17 на Windows 10+, JRE 8 на Windows 7/8.1). При першому запуску він кілька секунд розпаковує лаунчер і Java в `%LOCALAPPDATA%\GummerCraft\app` (без прав адміністратора), далі одразу відкриває лаунчер. Ярликів, записів у «Програми та компоненти» і змін у реєстрі він не робить; щоб прибрати, досить видалити цю папку. Пункт нижче стосується самого лаунчера.
 - Лаунчер **не пише в реєстр** (лише читає ключі встановленої Java, щоб її знайти), **не додає себе в автозапуск**, не створює служб, задач планувальника чи ярликів і не змінює файли поза своєю папкою.
 - Єдиний процес, який він запускає, - сама гра.
@@ -171,6 +193,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.33:** Fabric, Quilt, Forge (1.7.10+) and NeoForge sections (clean Minecraft with a mod loader; Forge and NeoForge installers are fetched from their maven with a sha1 check and run inside the launcher), an optional GummerCraft server account (login, registration, StalDayZ and GummerCraft skins, player cabinet; only a 30-day token is stored, never the password), a "send report to support" button after a disconnect in game, Linux fixes.
 
 **1.32:** a single `GummerCraft.exe` with bundled Java for new players (silent first-run unpack, no questions, shortcuts or uninstall entry), three sections (StalDayZ, GummerCraft, Vanilla with all Mojang releases since 1.8), a version picker with install-state markers, server online count and "join the server right away", offline play for installed modpacks, friendly error dialogs and crash analysis with in-launcher support chat, download size and speed, Linux fixes (Netty epoll off, libGL/GLX crash hints), an anonymous install ID. Old exes keep working and update themselves.
 

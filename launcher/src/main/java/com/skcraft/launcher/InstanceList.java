@@ -167,6 +167,8 @@ public class InstanceList {
             File[] dirs = launcher.getInstancesDir().listFiles((FileFilter) DirectoryFileFilter.INSTANCE);
             if (dirs != null) {
                 for (File dir : dirs) {
+                    if (!com.gummer.launcher.modrinth.MrpackPacks.ENABLED
+                            && com.gummer.launcher.modrinth.MrpackPacks.isMrpackName(dir.getName())) continue; // до 1.34
                     File file = new File(dir, "instance.json");
                     Instance instance = Persistence.load(file, Instance.class);
                     instance.setDir(dir);
@@ -178,6 +180,25 @@ public class InstanceList {
                         instance.setGroup(com.gummer.launcher.vanilla.VanillaVersions.GROUP);
                         instance.setTitle(com.gummer.launcher.vanilla.VanillaVersions.titleOf(
                                 com.gummer.launcher.vanilla.VanillaVersions.versionIdOf(instance)));
+                    } else if (instance.isFabric()) {
+                        instance.setGroup(com.gummer.launcher.fabric.FabricVersions.GROUP);
+                        instance.setTitle(com.gummer.launcher.fabric.FabricVersions.titleOf(
+                                com.gummer.launcher.fabric.FabricVersions.versionIdOf(instance)));
+                        instance.setPriority(-1); // під Vanilla
+                    } else if (instance.isForgeLike()) {
+                        com.gummer.launcher.forge.ForgeVersions.Kind kind = com.gummer.launcher.forge.ForgeVersions.kindOf(instance);
+                        instance.setGroup(kind.group);
+                        instance.setTitle(com.gummer.launcher.forge.ForgeVersions.titleOf(kind, com.gummer.launcher.forge.ForgeVersions.versionIdOf(instance)));
+                        instance.setPriority(kind == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE ? -3 : -4); // під Fabric і Quilt
+                    } else if (instance.isQuilt()) {
+                        instance.setGroup(com.gummer.launcher.quilt.QuiltVersions.GROUP);
+                        instance.setTitle(com.gummer.launcher.quilt.QuiltVersions.titleOf(com.gummer.launcher.quilt.QuiltVersions.versionIdOf(instance)));
+                        instance.setPriority(-2); // під Fabric
+                    } else if (instance.isMrpack()) {
+                        // збірка з Modrinth: окремий рядок (група = назва паку), під усіма розділами
+                        instance.setGroup(instance.getName());
+                        instance.setTitle(com.gummer.launcher.modrinth.MrpackPacks.titleOf(instance));
+                        instance.setPriority(-10);
                     }
                     local.add(instance);
 
@@ -191,8 +212,11 @@ public class InstanceList {
             // 1.32: вкладка Vanilla, релізи з маніфесту Mojang. Окремо від списку модпаків: його помилка не ховає ванілу
             // і навпаки. Без інтернету: збережений список (vanilla_versions.json) або лише встановлені версії.
             Set<String> vanillaNames = new HashSet<String>();
+            List<com.gummer.launcher.vanilla.VanillaVersions.Release> releases = new ArrayList<com.gummer.launcher.vanilla.VanillaVersions.Release>();
             try {
-                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : com.gummer.launcher.vanilla.VanillaVersions.releases(launcher)) {
+                releases = com.gummer.launcher.vanilla.VanillaVersions.releases(launcher);
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : releases) {
+                    if (r.old) continue; // 1.7.10 лише для старого Forge
                     String vname = com.gummer.launcher.vanilla.VanillaVersions.nameOf(r.id);
                     vanillaNames.add(vname.toLowerCase(Locale.ROOT));
                     Instance found = null;
@@ -222,6 +246,131 @@ public class InstanceList {
                 log.info(vanillaNames.size() + " vanilla release(s) listed");
             } catch (Exception e) {
                 log.log(java.util.logging.Level.WARNING, "The vanilla version list is unavailable", e);
+            }
+
+            // 1.33: розділ Fabric, версії Minecraft, які є і в Mojang, і в Fabric (meta.fabricmc.net)
+            try {
+                List<String> games = com.gummer.launcher.fabric.FabricVersions.games(launcher);
+                int n = 0;
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : releases) {
+                    if (!games.contains(r.id)) continue;
+                    String fname = com.gummer.launcher.fabric.FabricVersions.nameOf(r.id);
+                    n++;
+                    Instance found = null;
+                    for (Instance instance : local) {
+                        if (instance.getName().equalsIgnoreCase(fname)) found = instance;
+                    }
+                    URL vurl = new URL(r.url);
+                    if (found != null) {
+                        found.setManifestURL(vurl);
+                    } else {
+                        File dir = new File(launcher.getInstancesDir(), fname);
+                        Instance instance = Persistence.load(new File(dir, "instance.json"), Instance.class);
+                        instance.setDir(dir);
+                        instance.setName(fname);
+                        instance.setTitle(com.gummer.launcher.fabric.FabricVersions.titleOf(r.id));
+                        instance.setVersion(r.id);
+                        instance.setGroup(com.gummer.launcher.fabric.FabricVersions.GROUP);
+                        instance.setPriority(-1);
+                        instance.setSelected(false);
+                        instance.setManifestURL(vurl);
+                        instance.setUpdatePending(true);
+                        instance.setLocal(false);
+                        remote.add(instance);
+                    }
+                }
+                log.info(n + " Fabric version(s) listed");
+            } catch (Exception e) {
+                log.log(java.util.logging.Level.WARNING, "The Fabric version list is unavailable", e);
+            }
+
+            // 1.33: розділ Quilt (як Fabric, meta.quiltmc.org)
+            try {
+                List<String> games = com.gummer.launcher.quilt.QuiltVersions.games(launcher);
+                int n = 0;
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : releases) {
+                    if (!games.contains(r.id)) continue;
+                    String qname = com.gummer.launcher.quilt.QuiltVersions.nameOf(r.id);
+                    n++;
+                    Instance found = null;
+                    for (Instance instance : local) {
+                        if (instance.getName().equalsIgnoreCase(qname)) found = instance;
+                    }
+                    URL vurl = new URL(r.url);
+                    if (found != null) {
+                        found.setManifestURL(vurl);
+                    } else {
+                        File dir = new File(launcher.getInstancesDir(), qname);
+                        Instance instance = Persistence.load(new File(dir, "instance.json"), Instance.class);
+                        instance.setDir(dir);
+                        instance.setName(qname);
+                        instance.setTitle(com.gummer.launcher.quilt.QuiltVersions.titleOf(r.id));
+                        instance.setVersion(r.id);
+                        instance.setGroup(com.gummer.launcher.quilt.QuiltVersions.GROUP);
+                        instance.setPriority(-2);
+                        instance.setSelected(false);
+                        instance.setManifestURL(vurl);
+                        instance.setUpdatePending(true);
+                        instance.setLocal(false);
+                        remote.add(instance);
+                    }
+                }
+                log.info(n + " Quilt version(s) listed");
+            } catch (Exception e) {
+                log.log(java.util.logging.Level.WARNING, "The Quilt version list is unavailable", e);
+            }
+
+            // 1.33: збірки .mrpack: адреса JSON версії Mojang за версією з mrpack.json
+            for (Instance instance : local) {
+                if (!instance.isMrpack()) continue;
+                String mc = com.gummer.launcher.modrinth.MrpackPacks.mcOf(instance);
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : releases) {
+                    if (r.id.equals(mc)) {
+                        try {
+                            instance.setManifestURL(new URL(r.url));
+                        } catch (java.net.MalformedURLException e) {
+                            log.log(java.util.logging.Level.WARNING, "Bad Mojang URL " + r.url, e);
+                        }
+                    }
+                }
+            }
+
+            // 1.33: розділи Forge (1.7.10 і новіші) і NeoForge, версії Minecraft, які є і в Mojang, і в maven завантажувача
+            for (com.gummer.launcher.forge.ForgeVersions.Kind kind : com.gummer.launcher.forge.ForgeVersions.Kind.values()) {
+                try {
+                    java.util.Map<String, List<String>> lv = com.gummer.launcher.forge.ForgeVersions.versions(launcher, kind);
+                    int n = 0;
+                    for (com.gummer.launcher.vanilla.VanillaVersions.Release r : releases) {
+                        if (!lv.containsKey(r.id)) continue;
+                        String fname = com.gummer.launcher.forge.ForgeVersions.nameOf(kind, r.id);
+                        n++;
+                        Instance found = null;
+                        for (Instance instance : local) {
+                            if (instance.getName().equalsIgnoreCase(fname)) found = instance;
+                        }
+                        URL vurl = new URL(r.url);
+                        if (found != null) {
+                            found.setManifestURL(vurl);
+                        } else {
+                            File dir = new File(launcher.getInstancesDir(), fname);
+                            Instance instance = Persistence.load(new File(dir, "instance.json"), Instance.class);
+                            instance.setDir(dir);
+                            instance.setName(fname);
+                            instance.setTitle(com.gummer.launcher.forge.ForgeVersions.titleOf(kind, r.id));
+                            instance.setVersion(r.id);
+                            instance.setGroup(kind.group);
+                            instance.setPriority(kind == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE ? -3 : -4);
+                            instance.setSelected(false);
+                            instance.setManifestURL(vurl);
+                            instance.setUpdatePending(true);
+                            instance.setLocal(false);
+                            remote.add(instance);
+                        }
+                    }
+                    log.info(n + " " + kind.title + " version(s) listed");
+                } catch (Exception e) {
+                    log.log(java.util.logging.Level.WARNING, "The " + kind.title + " version list is unavailable", e);
+                }
             }
 
             try {
@@ -297,6 +446,10 @@ public class InstanceList {
 
                 Map<String, String> titles = new LinkedHashMap<String, String>();
                 titles.put(com.gummer.launcher.vanilla.VanillaVersions.GROUP, "Vanilla");
+                titles.put(com.gummer.launcher.fabric.FabricVersions.GROUP, "Fabric");
+                titles.put(com.gummer.launcher.quilt.QuiltVersions.GROUP, "Quilt");
+                titles.put(com.gummer.launcher.forge.ForgeVersions.Kind.FORGE.group, "Forge");
+                titles.put(com.gummer.launcher.forge.ForgeVersions.Kind.NEOFORGE.group, "NeoForge");
                 if (packages.getGroups() != null) {
                     for (Map.Entry<String, PackageList.PackageGroup> g : packages.getGroups().entrySet()) {
                         if (g.getValue() != null && g.getValue().getTitle() != null) {
@@ -328,7 +481,7 @@ public class InstanceList {
                 // Пак на диску, якого вже немає в списку CDN (наприклад main-1.19.3): позначка «більше не підтримується»
                 // і місце в кінці списку. Лише коли список завантажився успішно: без інтернету нічого не позначаємо.
                 for (Instance instance : local) {
-                    if (instance.isVanilla()) continue; // ванільні версії не з нашого списку, вони не «покинуті»
+                    if (instance.isBuiltIn()) continue; // Vanilla і Fabric не з нашого списку, вони не «покинуті»
                     instance.setOrphaned(!listedNames.contains(instance.getName().toLowerCase(Locale.ROOT)));
                     if (instance.isOrphaned()) {
                         log.info(instance.getName() + " is not in the modpack list anymore (orphaned)");

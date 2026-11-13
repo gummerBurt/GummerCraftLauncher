@@ -1,0 +1,7 @@
+{
+  "gui.gcreport.button": "Send a report to support",
+  "gui.gcreport.waiting": "Opening the form in the launcher...",
+  "gui.gcreport.opened": "Form opened in the launcher",
+  "gui.gcreport.bot": "Support Telegram bot opened",
+  "gui.gcreport.failed": "Failed, press again"
+}

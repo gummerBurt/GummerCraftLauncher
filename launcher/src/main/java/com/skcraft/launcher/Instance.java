@@ -61,6 +61,42 @@ public class Instance implements Comparable<Instance> {
         return com.gummer.launcher.vanilla.VanillaVersions.isVanilla(this);
     }
 
+    /** 1.33, розділ Fabric: чистий Minecraft з Fabric Loader (назва fabric-&lt;версія&gt;). */
+    @JsonIgnore
+    public boolean isFabric() {
+        return com.gummer.launcher.fabric.FabricVersions.isFabric(this);
+    }
+
+    /** 1.33, розділи Forge і NeoForge: чистий Minecraft з Forge чи NeoForge (назва forge-, neoforge-&lt;версія&gt;). */
+    @JsonIgnore
+    public boolean isForgeLike() {
+        return com.gummer.launcher.forge.ForgeVersions.kindOf(this) != null;
+    }
+
+    /** 1.33, розділ Quilt: чистий Minecraft з Quilt Loader (назва quilt-&lt;версія&gt;). */
+    @JsonIgnore
+    public boolean isQuilt() {
+        return com.gummer.launcher.quilt.QuiltVersions.isQuilt(this);
+    }
+
+    /** 1.33: збірка, імпортована з файлу Modrinth .mrpack (назва mrpack-&lt;назва&gt;). */
+    @JsonIgnore
+    public boolean isMrpack() {
+        return com.gummer.launcher.modrinth.MrpackPacks.isMrpackName(getName());
+    }
+
+    /** Чистий Minecraft з завантажувачем модів (Fabric, Quilt, Forge, NeoForge): моди гравець кладе сам. */
+    @JsonIgnore
+    public boolean isLoaderPack() {
+        return isFabric() || isQuilt() || isForgeLike();
+    }
+
+    /** Версія, яку лаунчер збирає сам з Mojang (Vanilla, завантажувачі, збірки .mrpack), а не модпак з нашого CDN. */
+    @JsonIgnore
+    public boolean isBuiltIn() {
+        return isVanilla() || isLoaderPack() || isMrpack();
+    }
+
     /**
      * Get the tile of the instance, which might be the same as the
      * instance name if no title is set.
