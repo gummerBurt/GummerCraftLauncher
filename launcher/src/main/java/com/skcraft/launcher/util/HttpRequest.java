@@ -37,7 +37,10 @@ import static org.apache.commons.io.IOUtils.closeQuietly;
 @Log
 public class HttpRequest implements Closeable, ProgressObservable {
 
-    private static final int READ_TIMEOUT = 1000 * 60 * 10;
+    // 1.32.2: було 10 хв читання і без таймауту з'єднання: файл, на якому зв'язок завис, тримав потік завантаження
+    // до 10 хв на кожну спробу (у вікні «0,0 МБ/с»). Тепер зависле з'єднання рветься і файл качається заново.
+    private static final int CONNECT_TIMEOUT = 1000 * 20;
+    private static final int READ_TIMEOUT = 1000 * 60;
     private static final int READ_BUFFER_SIZE = 1024 * 8;
 
     private final ObjectMapper mapper = com.gummer.launcher.util.Json.newMapper();
@@ -164,6 +167,7 @@ public class HttpRequest implements Closeable, ProgressObservable {
         conn.setRequestMethod(method);
         conn.setUseCaches(false);
         conn.setDoOutput(true);
+        conn.setConnectTimeout(CONNECT_TIMEOUT);
         conn.setReadTimeout(READ_TIMEOUT);
 
         conn.connect();

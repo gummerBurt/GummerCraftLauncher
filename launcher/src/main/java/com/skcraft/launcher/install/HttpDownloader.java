@@ -43,6 +43,10 @@ public class HttpDownloader implements Downloader {
     @Getter @Setter private int threadCount = 6;
     @Getter @Setter private int retryDelay = 2000;
     @Getter @Setter private int tryCount = 3;
+    /** 1.32.2: скільки разів після основного проходу повторювати файли з помилкою (раніше 1). */
+    private static final int RETRY_ROUNDS = 4;
+    /** 1.32.2: поточне коло повторів (0 = основний прохід), для статусу у вікні. */
+    private int retryRound = 0;
 
     private List<HttpDownloadJob> queue = new ArrayList<HttpDownloadJob>();
     private final Set<String> usedKeys = new HashSet<String>();
@@ -141,23 +145,28 @@ public class HttpDownloader implements Downloader {
                 throw new IOException("Something went wrong", e);
             }
 
-            // retry failed downloads once
-            synchronized (this) {
-                List<HttpDownloadJob> retry = new ArrayList<HttpDownloadJob>(failed);
-                failed.clear();
+            // 1.32.2: файли з помилкою повторюються кількома колами з паузою, що росте (3, 6, 9, 12 с), а не одним
+            for (int round = 1; round <= RETRY_ROUNDS; round++) {
+                List<HttpDownloadJob> retry;
+                synchronized (this) {
+                    if (failed.isEmpty()) break;
+                    retry = new ArrayList<HttpDownloadJob>(failed);
+                    failed.clear();
+                    left += retry.size();
+                    retryRound = round;
+                }
+                log.info("Retrying " + retry.size() + " failed download(s), round " + round + " of " + RETRY_ROUNDS);
+                Thread.sleep(round * 3000L);
                 futures.clear();
-                if (retry.size() > 0) {
-                    for (HttpDownloadJob job : retry) {
-                        futures.add(executor.submit(job));
-                    }
+                for (HttpDownloadJob job : retry) {
+                    futures.add(executor.submit(job));
+                }
+                try {
+                    Futures.allAsList(futures).get();
+                } catch (ExecutionException e) {
+                    throw new IOException("Something went wrong", e);
                 }
             }
-
-            try {
-                Futures.allAsList(futures).get();
-            } catch (ExecutionException e) {
-                throw new IOException("Something went wrong", e);
-            }            
 
             synchronized (this) {
                 if (failed.size() > 0) {
@@ -224,9 +233,14 @@ public class HttpDownloader implements Downloader {
 
     @Override
     public synchronized String getStatus() {
-        String failMessage = tr("downloader.failedCount", failed.size());
+        // 1.32.2: у колі повтору показуємо, яке це коло і скільки файлів ще качається заново (left), і в паузі між колами теж
+        String failMessage = retryRound > 0 ? tr("downloader.retrying", retryRound, RETRY_ROUNDS, left)
+                : failed.isEmpty() ? "" : tr("downloader.failedCount", failed.size());
         if (!running.isEmpty()) {
             return summaryLine() + "\n" + getFilesStatus(failMessage);
+        }
+        if (retryRound > 0) {
+            return failMessage;
         }
         return SharedLocale.tr("downloader.noDownloads");
     }

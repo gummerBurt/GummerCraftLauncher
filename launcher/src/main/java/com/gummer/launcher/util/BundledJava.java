@@ -14,7 +14,12 @@ public class BundledJava {
     // JVM Path:
     // $rootPath/runtime/{component}/{osarch}/
     public static File getJavaDir(Launcher l, String component) throws Exception {
-        return new File(l.getBaseDir(), "runtime/" + component + "/" + Environment.getInstance().getMojangOs());
+        return getJavaDir(l, component, Environment.getInstance().getMojangOs());
+    }
+
+    /** 1.32.2: тека Java для заданої ОС (на Apple Silicon старі версії гри беруть Java для Intel, див. MacRosetta). */
+    public static File getJavaDir(Launcher l, String component, String os) {
+        return new File(l.getBaseDir(), "runtime/" + component + "/" + os);
     }
 
     /** Чи є в теці runtime виконуваний файл Java (Windows: bin/javaw.exe або bin/java.exe, інакше bin/java). */

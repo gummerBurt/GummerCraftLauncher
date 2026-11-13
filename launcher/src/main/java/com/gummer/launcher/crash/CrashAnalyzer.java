@@ -96,6 +96,10 @@ public final class CrashAnalyzer {
                 || t.contains("There is insufficient memory for the Java Runtime Environment")) {
             return new Diagnosis("memoryTooHigh", Action.MEMORY, null, source);
         }
+        // 1.32.2: Mac з Apple Silicon, нативна бібліотека під іншу архітектуру (старий лаунчер чи своя Java в налаштуваннях)
+        if (t.contains("incompatible architecture") && t.contains("UnsatisfiedLinkError")) {
+            return new Diagnosis("macArch", Action.REINSTALL, null, source);
+        }
         if (t.contains("UnsupportedClassVersionError") || t.contains("has been compiled by a more recent version of the Java Runtime")) {
             return new Diagnosis("javaVersion", Action.REINSTALL, null, source);
         }

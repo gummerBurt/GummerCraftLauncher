@@ -45,6 +45,9 @@ public class InstanceList {
     @Getter
     private HashMap<String, JavaManifest[]> javaVersions = new HashMap<>();
 
+    /** 1.32.2: маніфест Java для всіх ОС (Apple Silicon бере Java для Intel під старі версії гри, див. MacRosetta). */
+    private HashMap<String, HashMap<String, JavaManifest[]>> allJavaVersions = new HashMap<>();
+
     /** Назви груп паків зі списку v2 (id групи -> назва для картки), порожньо для списку v1. */
     @Getter
     private Map<String, String> groupTitles = new LinkedHashMap<String, String>();
@@ -56,6 +59,13 @@ public class InstanceList {
     /** 1.32: список модпаків не завантажився, показано збережену копію (немає інтернету чи CDN недоступний). */
     @Getter
     private volatile boolean offline;
+
+    /** 1.32.2: версії Java для заданої ОС (поточна ОС: те саме, що getJavaVersions). */
+    public Map<String, JavaManifest[]> getJavaVersionsFor(String os) throws Exception {
+        if (os.equals(Environment.getInstance().getMojangOs())) return javaVersions;
+        HashMap<String, JavaManifest[]> versions = allJavaVersions.get(os);
+        return versions != null ? versions : new HashMap<String, JavaManifest[]>();
+    }
 
     private static final String PACKAGE_CACHE = "packages_cache.json";
 
@@ -225,6 +235,7 @@ public class InstanceList {
                     });
                 SwingExtras.logDebugMessage(launcher, "javaManifests", String.valueOf(javaManifests));
 
+                InstanceList.this.allJavaVersions = javaManifests;
                 String currentOs = Environment.getInstance().getMojangOs();
                 //SwingExtras.logDebugMessage(launcher, "currentOs", String.valueOf(currentOs));
 

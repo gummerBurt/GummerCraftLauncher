@@ -245,7 +245,12 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
 
 
         JavaManifest javaManifest = null;
-        Map<String, JavaManifest[]> javaVersions = launcher.getInstances().getJavaVersions();
+        // 1.32.2: на Mac з Apple Silicon старі версії гри (LWJGL без arm64) беруть Java для Intel, див. MacRosetta
+        String runtimeOs = com.gummer.launcher.util.MacRosetta.runtimeOs(version);
+        if (com.gummer.launcher.util.MacRosetta.needsIntelJava(version)) {
+            log.info("Apple Silicon: this Minecraft has no arm64 natives (old LWJGL), using the Intel Java (" + runtimeOs + ") under Rosetta 2");
+        }
+        Map<String, JavaManifest[]> javaVersions = launcher.getInstances().getJavaVersionsFor(runtimeOs);
 
         for (Map.Entry<String, JavaManifest[]> entry : javaVersions.entrySet()) {
             if (entry.getKey().equalsIgnoreCase(instance.getJavaRuntime())) {
@@ -256,7 +261,7 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
             }
         }
 
-        File jvmDir = BundledJava.getJavaDir(launcher, instance.getJavaRuntime());
+        File jvmDir = BundledJava.getJavaDir(launcher, instance.getJavaRuntime(), runtimeOs);
 
         if (javaManifest == null) {
             // Немає запису про потрібну Java: або маніфест Java не завантажився (javaVersions порожній), або для цієї

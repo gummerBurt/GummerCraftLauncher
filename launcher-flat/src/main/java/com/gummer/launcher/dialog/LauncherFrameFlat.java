@@ -67,6 +67,8 @@ public class LauncherFrameFlat extends JFrame {
     // init sidebar buttons
     private final JButton telegramButton;
     private final JButton discordButton;
+    /** 1.32.2: жовта кнопка «Купи нам каву» (Buy Me a Coffee), null, якщо coffeeUrl порожній. */
+    private final JButton coffeeButton;
     private final JButton selfUpdateButton;
 
     // init bottom buttons
@@ -153,6 +155,10 @@ public class LauncherFrameFlat extends JFrame {
             200,45,
             SharedLocale.tr("tooltip.discord")
         );
+        String coffeeUrl = launcher.getProperties().getProperty("coffeeUrl", "").trim();
+        java.io.InputStream coffeeImage = coffeeUrl.isEmpty() ? null : Launcher.class.getResourceAsStream("ui/button/coffee_" + langCode + ".png");
+        if (coffeeImage == null && !coffeeUrl.isEmpty()) coffeeImage = Launcher.class.getResourceAsStream("ui/button/coffee_en_us.png");
+        coffeeButton = coffeeImage == null ? null : new CustomImageButton(ImageIO.read(coffeeImage), 200, 45, SharedLocale.tr("tooltip.coffee"));
         selfUpdateButton = new CustomImageButton(
             ImageIO.read(Objects.requireNonNull(
                 Launcher.class.getResourceAsStream("ui/button/update_" + langCode + ".png")
@@ -259,6 +265,10 @@ public class LauncherFrameFlat extends JFrame {
         sidebarButtonsPanel.add(telegramButton);
         sidebarButtonsPanel.add(Box.createVerticalStrut(5));
         sidebarButtonsPanel.add(discordButton);
+        if (coffeeButton != null) {
+            sidebarButtonsPanel.add(Box.createVerticalStrut(5));
+            sidebarButtonsPanel.add(coffeeButton);
+        }
         JComponent sourceLink = createSourceLink();
         if (sourceLink != null) {
             sidebarButtonsPanel.add(Box.createVerticalStrut(4));
@@ -346,6 +356,9 @@ public class LauncherFrameFlat extends JFrame {
         // адреси читаються в момент натискання: у збірки можуть бути власні (FlatLauncherFrame.discordUrl/telegramUrl/wikiUrl)
         discordButton.addActionListener(e -> SwingHelper.openURL(discordUrl(), this));
         telegramButton.addActionListener(e -> SwingHelper.openURL(telegramUrl(), this));
+        if (coffeeButton != null) {
+            coffeeButton.addActionListener(e -> SwingHelper.openURL(launcher.getProperties().getProperty("coffeeUrl").trim(), this));
+        }
         wikiButton.addActionListener(e -> SwingHelper.openURL(wikiUrl(), this));
 
         // instancesTable events

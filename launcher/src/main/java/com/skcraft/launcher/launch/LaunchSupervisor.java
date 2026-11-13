@@ -84,6 +84,14 @@ public class LaunchSupervisor {
                 update = false;
             }
 
+            // 1.32.2: Mac з Apple Silicon: старій версії гри потрібна Java для Intel (див. MacRosetta), а збірку встановлено
+            // старим лаунчером і цієї Java ще немає. Оновлення докачає лише її (решта файлів уже на місці).
+            if (!update && instance.isInstalled() && !launcher.getInstances().isOffline()
+                    && com.gummer.launcher.util.MacRosetta.intelJavaMissing(launcher, instance)) {
+                log.info("Apple Silicon: the Intel Java for " + instance.getName() + " is missing, updating to install it");
+                update = true;
+            }
+
             if (update) {
                 // Execute the updater
                 Updater updater = new Updater(launcher, instance);

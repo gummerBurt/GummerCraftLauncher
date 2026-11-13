@@ -174,7 +174,16 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
         progress = new DefaultProgress(1, SharedLocale.tr("runner.startingJava"));
 
-        return processBuilder.start();
+        try {
+            return processBuilder.start();
+        } catch (IOException e) {
+            // 1.32.2: Java для Intel на Mac з Apple Silicon без Rosetta 2: macOS не запускає її («Bad CPU type», error=86)
+            String m = String.valueOf(e.getMessage());
+            if (m.contains("Bad CPU type") || m.contains("error=86")) {
+                throw new LauncherException("Rosetta 2 is not installed: " + m, SharedLocale.tr("runner.rosettaRequired"));
+            }
+            throw e;
+        }
     }
 
     /**
@@ -340,7 +349,8 @@ public class Runner implements Callable<Process>, ProgressObservable {
             } else {
                 // by default use shared distributed runtime
                 JavaRuntime runtime = JavaRuntime.fromDir(
-                    (new File(launcher.getBaseDir(), "runtime/" + instance.getJavaRuntime() + "/" + Environment.getInstance().getMojangOs())).toString()
+                    (new File(launcher.getBaseDir(), "runtime/" + instance.getJavaRuntime() + "/"
+                            + com.gummer.launcher.util.MacRosetta.runtimeOs(versionManifest))).toString()
                 );
                 builder.setRuntime(runtime);
                 SwingExtras.logDebugMessage(launcher, "builder.setRuntime", "using default shared runtime\n" + String.valueOf(runtime));
