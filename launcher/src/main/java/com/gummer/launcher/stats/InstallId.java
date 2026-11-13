@@ -22,9 +22,9 @@ import java.util.logging.Logger;
  *       акаунта Microsoft, ні з заліза, ні з імені комп'ютера. Двох однакових установок він не пов'яже, якщо файл
  *       не скопіювали.</li>
  *   <li>Лежить у теці лаунчера у файлі {@code stats-id.txt}. Видалити файл - буде новий ID.</li>
- *   <li>Вписати в цей файл {@code off} - лаунчер нічого не надсилає.</li>
- *   <li>Надсилається лише разом із запитом списку модпаків v2 на наш CDN (параметр {@code i}), раз на старт лаунчера.
- *       Іншим сайтам (Mojang, Microsoft, GitHub) не надсилається.</li>
+ *   <li>Вписати в цей файл {@code off} - лаунчер не надсилає ні ID, ні події запуску гри ({@link LaunchStats}).</li>
+ *   <li>Надсилається лише на наш CDN (параметр {@code i}): разом із запитом списку модпаків v2 раз на старт лаунчера
+ *       і, з 1.33.1, разом з подією запуску гри. Іншим сайтам (Mojang, Microsoft, GitHub) не надсилається.</li>
  *   <li>Статистика Jarvis зберігає лише солоний хеш ID, як і для IP.</li>
  * </ul>
  */
@@ -34,6 +34,7 @@ public final class InstallId {
     private static final String FILE = "stats-id.txt";
     private static final String OFF = "off";
     private static String cached;
+    private static boolean off;
 
     private InstallId() {
     }
@@ -48,6 +49,7 @@ public final class InstallId {
             if (file.isFile()) {
                 String text = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8).trim();
                 if (text.equalsIgnoreCase(OFF)) {
+                    off = true;
                     cached = "";
                     return null;
                 }
@@ -75,5 +77,11 @@ public final class InstallId {
             cached = "";
             return null;
         }
+    }
+
+    /** Чи гравець вимкнув статистику словом {@code off} у {@code stats-id.txt}: тоді лаунчер не надсилає нічого. */
+    public static synchronized boolean isOff(File baseDir) {
+        get(baseDir);
+        return off;
     }
 }

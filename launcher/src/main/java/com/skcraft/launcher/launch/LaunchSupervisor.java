@@ -175,6 +175,8 @@ public class LaunchSupervisor {
         Futures.addCallback(processFuture, new FutureCallback<Process>() {
             @Override
             public void onSuccess(Process result) {
+                // 1.33.1: анонімна подія «гру запущено» (яка збірка), див. com.gummer.launcher.stats.LaunchStats
+                com.gummer.launcher.stats.LaunchStats.gameStarted(launcher, instance);
                 SwingUtilities.invokeLater(listener::gameStarted);
             }
 

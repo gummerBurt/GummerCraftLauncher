@@ -24,6 +24,12 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
 
+## Що нового в 1.33.1
+
+- Тексти лаунчера українською відредаговано: звертання на «ти», однакові терміни, виправлено описки.
+- У діалозі перевстановлення Vanilla і завантажувачів знову видно питання «Бажаєш продовжити?».
+- Анонімна подія «гру запущено» (яку збірку запущено, без ніка, акаунта і даних про комп'ютер), вимикається словом `off` у `stats-id.txt`. Подробиці в [SECURITY.md](SECURITY.md).
+
 ## Що нового в 1.33
 
 **Завантажувачі модів**
@@ -196,6 +202,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.33.1:** Ukrainian UI texts edited (informal address, consistent terms, typos), the reinstall prompt for Vanilla and mod loaders shows its question again, anonymous "game started" event (which pack, nothing about the player or computer; `off` in `stats-id.txt` disables it, see SECURITY.md).
 
 **1.33:** new Fabric, Quilt, Forge (1.7.10+, including legacy 1.7.10-1.12.2) and NeoForge (1.20.2+) sections with clean Minecraft and a mod loader; the loader version is pinned and can be changed from the context menu; Forge and NeoForge installers are fetched from their official maven with a sha1 check and their processors run inside the launcher. An optional GummerCraft server account: login, nickname registration, separate StalDayZ and GummerCraft skins, player cabinet (playtime, servers, ranks); only a 30-day token is stored, never the password, and local offline accounts work as before. A "send report to support" button on the disconnect screen opens a prefilled support form in the launcher (needs the updated GummerCraft mods); the support form and error dialogs also work for players on the old exe. Linux: Netty native transport (epoll) disabled to avoid `DecoderException` crashes, crash analysis recognises libGL and GLX problems.
 
