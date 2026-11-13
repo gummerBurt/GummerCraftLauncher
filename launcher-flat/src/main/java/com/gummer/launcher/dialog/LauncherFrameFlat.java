@@ -67,7 +67,7 @@ public class LauncherFrameFlat extends JFrame {
     // init sidebar buttons
     private final JButton telegramButton;
     private final JButton discordButton;
-    /** 1.32.2: жовта кнопка «Купи нам каву» (Buy Me a Coffee), null, якщо coffeeUrl порожній. */
+    /** 1.32.2: жовта кнопка кави (Buy Me a Coffee; з 1.32.5 напис «Підтримати»), null, якщо coffeeUrl порожній. */
     private final JButton coffeeButton;
     private final JButton selfUpdateButton;
 
@@ -607,22 +607,7 @@ public class LauncherFrameFlat extends JFrame {
                 return c;
             }
         });
-        // 1.32.1: FlatLaf міряє ширину списку за закритим полем (лише «Minecraft X»), тож рядки зі станом
-        // і «найновіша» обрізались («найнові»). Після відкриття розширюємо список під найширший рядок.
-        versionBox.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-            @Override
-            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-                SwingUtilities.invokeLater(LauncherFrameFlat.this::widenVersionPopup);
-            }
-
-            @Override
-            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-            }
-
-            @Override
-            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-            }
-        });
+        installVersionPopupUi();
         versionBox.addActionListener(e -> {
             if (updatingVersionBox) return;
             Instance chosen = (Instance) versionBox.getSelectedItem();
@@ -642,26 +627,44 @@ public class LauncherFrameFlat extends JFrame {
         });
     }
 
-    /** Розширити відкритий список версій, якщо найширший рядок не влазить у ширину поля. */
-    private void widenVersionPopup() {
-        Object child = versionBox.getAccessibleContext().getAccessibleChild(0);
-        if (!(child instanceof javax.swing.plaf.basic.ComboPopup) || !(child instanceof JPopupMenu)) return;
-        JPopupMenu popup = (JPopupMenu) child;
-        if (!popup.isVisible()) return;
-        JList<?> list = ((javax.swing.plaf.basic.ComboPopup) child).getList();
-        JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, list);
-        if (scroller == null) return;
-        int listWidth = list.getPreferredSize().width;
-        if (scroller.getVerticalScrollBar().isVisible()) listWidth += scroller.getVerticalScrollBar().getPreferredSize().width;
-        Insets si = scroller.getInsets();
-        Insets pi = popup.getInsets();
-        int scrollerWidth = listWidth + si.left + si.right + 2;
-        int popupWidth = scrollerWidth + pi.left + pi.right;
-        if (popupWidth <= popup.getWidth()) return;
-        Dimension sd = new Dimension(scrollerWidth, scroller.getHeight());
-        scroller.setPreferredSize(sd);
-        scroller.setMaximumSize(sd);
-        popup.setPopupSize(popupWidth, popup.getHeight());
+    /**
+     * 1.32.5: ширина відкритого списку версій під найширший рядок, і так одразу при відкритті. FlatLaf міряє ширину
+     * списку за закритим полем (лише «Minecraft X»), тож рядки зі станом і «найновіша» обрізались («найнові»).
+     * У 1.32.1 список розширювався вже після показу через {@code setPopupSize}, але той фіксував розмір вікна списку
+     * назавжди: наступний список (інша група, інша кількість версій) відкривався з розміром попереднього, порожнім
+     * місцем знизу і знову обрізаним текстом, бо сам вміст FlatLaf щоразу стискав до ширини поля, і ще й
+     * перевідкривався на очах. Тепер ширину задаємо там, де FlatLaf рахує розмір списку перед показом.
+     */
+    private void installVersionPopupUi() {
+        if (!(versionBox.getUI() instanceof com.formdev.flatlaf.ui.FlatComboBoxUI)) return; // інша тема: як є
+        versionBox.setUI(new com.formdev.flatlaf.ui.FlatComboBoxUI() {
+            @Override
+            protected javax.swing.plaf.basic.ComboPopup createPopup() {
+                return new FlatComboPopup(comboBox) {
+                    @Override
+                    protected Rectangle computePopupBounds(int px, int py, int pw, int ph) {
+                        // ширина рядків (рендерер з індексом >= 0: версія, стан, «найновіша») + рамки списку;
+                        // смугу прокрутки FlatLaf додає сам
+                        int need = list.getPreferredSize().width;
+                        for (javax.swing.border.Border b : new javax.swing.border.Border[]{scroller.getViewportBorder(), scroller.getBorder()}) {
+                            if (b != null) {
+                                Insets in = b.getBorderInsets(scroller);
+                                need += in.left + in.right;
+                            }
+                        }
+                        // Java 9+ на екрані з масштабуванням (125%, 150%): поки список не показано, Swing міряє текст
+                        // без масштабу, і на екрані рядки виходять ширшими (Java 17, 125%: 278 замість 270), тож запас
+                        GraphicsConfiguration gc = comboBox.getGraphicsConfiguration();
+                        double scale = gc != null ? gc.getDefaultTransform().getScaleX() : 1;
+                        if (Math.abs(scale - 1) > 0.01) need = (int) Math.ceil(need * 1.06) + 2;
+                        if (comboBox.getItemCount() > comboBox.getMaximumRowCount()) {
+                            need += scroller.getVerticalScrollBar().getPreferredSize().width;
+                        }
+                        return super.computePopupBounds(px, py, Math.max(pw, need), ph);
+                    }
+                };
+            }
+        });
     }
 
     /** Показати вибір версії, якщо вибраний рядок це група з кількох версій. */
