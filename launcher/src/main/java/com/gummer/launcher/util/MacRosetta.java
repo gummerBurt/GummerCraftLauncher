@@ -58,18 +58,24 @@ public final class MacRosetta {
         }
     }
 
-    // 1.32.3: GLFW з LWJGL 3.3.3 (бібліотеки Mojang, та сама адреса, що в 1.20.5+), збірка для Intel (x86_64)
-    private static final String GLFW_JAR = "org/lwjgl/lwjgl-glfw/3.3.3/lwjgl-glfw-3.3.3-natives-macos.jar";
-    private static final String GLFW_JAR_SHA1 = "a1bf400f6bc64e6195596cb1430dafda46090751";
-    private static final String GLFW_ENTRY = "macos/x64/org/lwjgl/glfw/libglfw.dylib";
-    private static final String GLFW_OUT = "org/lwjgl/lwjgl-glfw/3.3.3/gummer-macos-x64/libglfw.dylib";
+    // 1.32.4: офіційна збірка GLFW 3.3.10 для Intel (glfw-3.3.10.bin.MACOS.zip з GitHub GLFW, lib-x86_64/libglfw.3.dylib),
+    // викладена на наш CDN під незмінним ім'ям. У 1.32.3 був GLFW 3.4 з LWJGL 3.3.3, але 3.4 на Mac кидає помилку
+    // «Cocoa: Regular windows do not have icons on macOS» на glfwSetWindowIcon, і Minecraft 1.16.5 падав уже на створенні вікна.
+    private static final String GLFW_NAME = "glfw-3.3.10-macos-x86_64.dylib";
+    private static final String GLFW_SHA1 = "34b616ad06906bae049600002edd22aed3fd781c";
+    private static final String[] GLFW_URLS = {
+            "https://cdn.gummer.cc/launcher/install/libs/" + GLFW_NAME,
+            "https://cdn.gummercraft.fun/launcher/install/libs/" + GLFW_NAME,
+    };
+    private static final String GLFW_OUT = "org/glfw/glfw/3.3.10/macos-x86_64/libglfw.dylib";
 
     /**
-     * 1.32.3: чи треба цій версії гри новіший GLFW. Старий GLFW з LWJGL 3.2.x на Apple Silicon (і під Rosetta теж)
+     * 1.32.3: чи треба цій версії гри інший GLFW. Старий GLFW з LWJGL 3.2.x на Apple Silicon (і під Rosetta теж)
      * шукає в IOKit сервіс дисплея {@code IODisplayConnect}, якого там немає, і кидає помилку GLFW
      * «Cocoa: Failed to find service port for display». Раннє вікно Forge 1.16.5 лишає її непрочитаною, і Minecraft
-     * падає з {@code GLFW error before init}; після створення вікна та сама помилка з {@code glfwPollEvents} теж
-     * може валити гру. GLFW 3.3.8+ і 3.4 цієї помилки не кидають. Лише LWJGL 3 до 3.3.0 під Java для Intel (LWJGL 2 без GLFW).
+     * падає з {@code GLFW error before init}; поки вікно гри створюється, Minecraft 1.16.5 вважає фатальною будь-яку
+     * помилку GLFW (вікно «GLFW error ... up-to-date drivers»). Тому потрібен саме GLFW 3.3.8-3.3.x: у ньому немає ні
+     * цієї помилки (з 3.3.8), ні помилки про іконку вікна (вона з'явилась у 3.4). Лише LWJGL 3 до 3.3.0 під Java для Intel.
      */
     public static boolean needsNewGlfw(VersionManifest version) {
         if (!needsIntelJava(version)) return false;
@@ -83,44 +89,35 @@ public final class MacRosetta {
     }
 
     /**
-     * 1.32.3: {@code libglfw.dylib} (GLFW 3.4, x86_64) з {@code lwjgl-glfw-3.3.3-natives-macos.jar}: докачує jar з
-     * {@code librariesSource} (перевірка SHA-1, як у Mojang), розпаковує один раз. LWJGL 3.2.1 вантажить її за повним
-     * шляхом з {@code -Dorg.lwjgl.glfw.libname}; усі 112 функцій GLFW, які кличе LWJGL 3.2.1, у ній є (звірено за
-     * таблицями експорту Mach-O). Помилка: null, гра стартує зі старим GLFW.
+     * 1.32.4: {@code libglfw.dylib} (GLFW 3.3.10, x86_64) з нашого CDN (друга адреса про запас), перевірка SHA-1,
+     * кладеться в {@code libraries/org/glfw/glfw/3.3.10/macos-x86_64/} і далі береться з диска (SHA-1 звіряється щоразу,
+     * файл 230 КБ). LWJGL 3.2.1 вантажить її за повним шляхом з {@code -Dorg.lwjgl.glfw.libname}; усі 112 функцій GLFW,
+     * які кличе LWJGL 3.2.1, у ній є (звірено за таблицями експорту Mach-O). Помилка: null, гра стартує зі старим GLFW.
      */
     public static java.io.File ensureNewGlfw(com.skcraft.launcher.Launcher launcher) {
         java.io.File out = new java.io.File(launcher.getLibrariesDir(), GLFW_OUT);
         try {
-            if (out.isFile() && out.length() > 0) return out;
-            java.io.File jar = new java.io.File(launcher.getLibrariesDir(), GLFW_JAR);
-            if (!jar.isFile() || !GLFW_JAR_SHA1.equals(sha1(jar))) {
-                jar.getParentFile().mkdirs();
-                java.io.File tmp = new java.io.File(jar.getPath() + ".part");
-                java.net.URL url = new java.net.URL(launcher.propUrl("librariesSource"), GLFW_JAR);
-                com.skcraft.launcher.util.HttpRequest.get(url).execute().expectResponseCode(200).saveContent(tmp);
-                String got = sha1(tmp);
-                if (!GLFW_JAR_SHA1.equals(got)) {
-                    tmp.delete();
-                    throw new java.io.IOException("SHA-1 mismatch for " + GLFW_JAR + ": " + got);
-                }
-                if (jar.exists()) jar.delete();
-                if (!tmp.renameTo(jar)) throw new java.io.IOException("Can't move " + tmp + " to " + jar);
-            }
+            if (out.isFile() && GLFW_SHA1.equals(sha1(out))) return out;
             out.getParentFile().mkdirs();
             java.io.File tmp = new java.io.File(out.getPath() + ".part");
-            try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jar)) {
-                java.util.zip.ZipEntry entry = zip.getEntry(GLFW_ENTRY);
-                if (entry == null) throw new java.io.IOException(GLFW_ENTRY + " not found in " + jar);
-                try (java.io.InputStream in = zip.getInputStream(entry)) {
-                    java.nio.file.Files.copy(in, tmp.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Exception last = null;
+            for (String u : GLFW_URLS) {
+                try {
+                    com.skcraft.launcher.util.HttpRequest.get(new java.net.URL(u)).execute().expectResponseCode(200).saveContent(tmp);
+                    String got = sha1(tmp);
+                    if (!GLFW_SHA1.equals(got)) throw new java.io.IOException("SHA-1 mismatch for " + u + ": " + got);
+                    if (out.exists()) out.delete();
+                    if (!tmp.renameTo(out)) throw new java.io.IOException("Can't move " + tmp + " to " + out);
+                    return out;
+                } catch (Exception e) {
+                    last = e;
+                    tmp.delete();
                 }
             }
-            if (out.exists()) out.delete();
-            if (!tmp.renameTo(out)) throw new java.io.IOException("Can't move " + tmp + " to " + out);
-            return out;
+            throw last;
         } catch (Exception e) {
             java.util.logging.Logger.getLogger(MacRosetta.class.getName())
-                    .log(java.util.logging.Level.WARNING, "Can't prepare the newer GLFW for Apple Silicon", e);
+                    .log(java.util.logging.Level.WARNING, "Can't prepare GLFW 3.3.10 for Apple Silicon", e);
             return null;
         }
     }

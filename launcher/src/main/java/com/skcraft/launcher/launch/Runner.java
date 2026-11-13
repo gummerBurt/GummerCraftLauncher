@@ -223,7 +223,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
                 builder.getFlags().add("-Xdock:name=Minecraft");
             }
 
-            // 1.32.3, Apple Silicon + Java для Intel + LWJGL 3.2.x: новіший GLFW замість старого (див. MacRosetta.needsNewGlfw)
+            // 1.32.3 (1.32.4: GLFW 3.3.10), Apple Silicon + Java для Intel + LWJGL 3.2.x: інший GLFW замість старого (див. MacRosetta.needsNewGlfw)
             // і без раннього вікна Forge, яке лишало помилку GLFW непрочитаною («GLFW error before init»).
             if (com.gummer.launcher.util.MacRosetta.needsNewGlfw(versionManifest)) {
                 File glfw = com.gummer.launcher.util.MacRosetta.ensureNewGlfw(launcher);
