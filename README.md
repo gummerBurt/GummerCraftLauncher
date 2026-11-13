@@ -27,24 +27,26 @@
 ## Що нового в 1.33
 
 **Завантажувачі модів**
-- Нові розділи під Vanilla: **Fabric**, **Quilt**, **Forge** і **NeoForge**. Чистий Minecraft з завантажувачем, моди кладеш сам (меню правою кнопкою, «Відкрити теку модів»). Версія Minecraft вибирається тим самим списком біля «Запуск».
-- Fabric для 1.14 і новіших, Quilt для тих самих версій, що підтримує Quilt, Forge від 1.7.10, NeoForge від 1.20.2. Нові версії з'являються самі.
-- Версія завантажувача ставиться найновіша стабільна (у Forge рекомендована) і далі сама не міняється. Змінити: меню правою кнопкою, «Версія ...».
-- Forge і NeoForge лаунчер готує сам, як офіційний установник (установник качається з maven Forge чи NeoForge з перевіркою sha1), тому перша установка версії може тривати до хвилини.
-- У кожного розділу свій фон, логотип та іконка.
+- Нові розділи **Fabric**, **Quilt**, **Forge** та **NeoForge**. Це чистий Minecraft з завантажувачем, відповідні моди можна завантажити в теку mods (меню правою кнопкою миші, «Відкрити теку модів»). Версія Minecraft обирається тим самим списком біля «Запуск».
+- Fabric від 1.14, Quilt для тих самих версій, що підтримує Quilt, Forge від 1.7.10 (включно зі старими 1.7.10-1.12.2), NeoForge від 1.20.2. Нові версії з'являються автоматично.
+- Версія завантажувача ставиться найновіша стабільна (у Forge рекомендована) і далі сама не змінюється. Змінити можна в меню правою кнопкою, «Версія ...».
+- Forge та NeoForge лаунчер готує сам, так само як офіційний установник: установник завантажується з maven Forge чи NeoForge з перевіркою sha1, його кроки виконуються всередині лаунчера. Тому перша установка версії може тривати до хвилини.
 
 **Аккаунт на ГаммерКрафті (необов'язково)**
-- Вхід ніком і паролем з сервера, реєстрація ніку заздалегідь, «Забув пароль?» відкриває форму підтримки.
-- Скіни для StalDayZ і GummerCraft окремо, просто з лаунчера (PNG 64x64 або 64x32, класичні чи тонкі руки).
-- Особистий кабінет: коли створено акаунт, перший і останній вхід, скільки награно і на яких серверах, привілеї з датою кінця.
-- Пароль лаунчер не зберігає, лише токен на 30 днів. Без входу все працює як раніше: локальний акаунт з будь-яким ніком.
+- Вхід ніком та паролем від сервера, можлива реєстрація ніку заздалегідь. «Забув пароль?» відкриває форму підтримки з готовим текстом.
+- Скіни для StalDayZ та GummerCraft окремо, прямо з лаунчера (PNG 64x64 або 64x32, класичні чи тонкі руки, прев'ю).
+- Особистий кабінет зі статистикою гравця: коли створено акаунт, перший та останній вхід, скільки награно та на яких серверах, донат з датою закінчення.
+- Пароль лаунчер не зберігає, зберігається лише токен терміном на 30 днів. Зміна пароля робить токен недійсним.
+- Без входу все працює як раніше - локальний акаунт з будь-яким ніком.
 
 **Підтримка**
-- Після відключення від сервера в грі є кнопка «Надіслати звіт у техпідтримку»: лаунчер відкриває форму з сервером, часом і причиною (потрібні нові версії модів GummerCraft).
-- Форма підтримки і вікна помилок працюють і в гравців зі старим exe.
+- Після відключення від сервера в грі з'являється кнопка «Надіслати звіт у техпідтримку». Лаунчер відкриває форму з сервером, часом та причиною відключення (потрібні нові версії модів GummerCraft та StalDayZ).
+- Форма підтримки та вікна помилок працюють і в гравців зі старим exe.
+- Зрозуміліші підготовані наперед тексти, коли сервер підтримки відповів помилкою.
 
 **Інше**
-- Linux: гра більше не вилітає через нативний транспорт Netty, розбір вильотів упізнає проблеми libGL і GLX.
+- Linux: гра більше не вилітає через нативний транспорт Netty (epoll), розбір вильотів упізнає проблеми libGL та GLX.
+- Старий exe працює як і раніше та сам оновлюється до 1.33.
 
 ## Що нового в 1.32
 
@@ -194,7 +196,7 @@ python tools/verify-cdn.py
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
 
-**1.33:** Fabric, Quilt, Forge (1.7.10+) and NeoForge sections (clean Minecraft with a mod loader; Forge and NeoForge installers are fetched from their maven with a sha1 check and run inside the launcher), an optional GummerCraft server account (login, registration, StalDayZ and GummerCraft skins, player cabinet; only a 30-day token is stored, never the password), a "send report to support" button after a disconnect in game, Linux fixes.
+**1.33:** new Fabric, Quilt, Forge (1.7.10+, including legacy 1.7.10-1.12.2) and NeoForge (1.20.2+) sections with clean Minecraft and a mod loader; the loader version is pinned and can be changed from the context menu; Forge and NeoForge installers are fetched from their official maven with a sha1 check and their processors run inside the launcher. An optional GummerCraft server account: login, nickname registration, separate StalDayZ and GummerCraft skins, player cabinet (playtime, servers, ranks); only a 30-day token is stored, never the password, and local offline accounts work as before. A "send report to support" button on the disconnect screen opens a prefilled support form in the launcher (needs the updated GummerCraft mods); the support form and error dialogs also work for players on the old exe. Linux: Netty native transport (epoll) disabled to avoid `DecoderException` crashes, crash analysis recognises libGL and GLX problems.
 
 **1.32:** a single `GummerCraft.exe` with bundled Java for new players (silent first-run unpack, no questions, shortcuts or uninstall entry), three sections (StalDayZ, GummerCraft, Vanilla with all Mojang releases since 1.8), a version picker with install-state markers, server online count and "join the server right away", offline play for installed modpacks, friendly error dialogs and crash analysis with in-launcher support chat, download size and speed, Linux fixes (Netty epoll off, libGL/GLX crash hints), an anonymous install ID. Old exes keep working and update themselves.
 
