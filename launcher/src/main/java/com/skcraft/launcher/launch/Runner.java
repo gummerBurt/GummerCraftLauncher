@@ -222,6 +222,17 @@ public class Runner implements Callable<Process>, ProgressObservable {
                 builder.getFlags().add("-Xdock:icon=" + icnsPath.getAbsolutePath());
                 builder.getFlags().add("-Xdock:name=Minecraft");
             }
+
+            // 1.32.3, Apple Silicon + Java для Intel + LWJGL 3.2.x: новіший GLFW замість старого (див. MacRosetta.needsNewGlfw)
+            // і без раннього вікна Forge, яке лишало помилку GLFW непрочитаною («GLFW error before init»).
+            if (com.gummer.launcher.util.MacRosetta.needsNewGlfw(versionManifest)) {
+                File glfw = com.gummer.launcher.util.MacRosetta.ensureNewGlfw(launcher);
+                if (glfw != null) {
+                    builder.getFlags().add("-Dorg.lwjgl.glfw.libname=" + glfw.getAbsolutePath());
+                    log.info("Apple Silicon: using the newer GLFW " + glfw.getAbsolutePath());
+                }
+                builder.getFlags().add("-Dfml.earlyprogresswindow=false");
+            }
         }
 
         // 1.32, Linux: без нативного транспорту Netty (epoll). З ним клієнт на Linux вилітав з DecoderException /

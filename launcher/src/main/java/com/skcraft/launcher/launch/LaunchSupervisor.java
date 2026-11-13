@@ -90,6 +90,9 @@ public class LaunchSupervisor {
                     && com.gummer.launcher.util.MacRosetta.intelJavaMissing(launcher, instance)) {
                 log.info("Apple Silicon: the Intel Java for " + instance.getName() + " is missing, updating to install it");
                 update = true;
+                // 1.32.3: без цього Updater бачив «оновлень немає» і нічого не ставив (у 1.32.2 Java не докачувалась,
+                // гра стартувала на arm64 Java і падала, допомагало лише перевстановлення). Скидається в Updater після оновлення.
+                instance.setUpdatePending(true);
             }
 
             if (update) {
