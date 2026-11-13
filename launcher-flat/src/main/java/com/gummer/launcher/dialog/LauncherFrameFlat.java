@@ -594,6 +594,22 @@ public class LauncherFrameFlat extends JFrame {
                 return c;
             }
         });
+        // 1.32.1: FlatLaf міряє ширину списку за закритим полем (лише «Minecraft X»), тож рядки зі станом
+        // і «найновіша» обрізались («найнові»). Після відкриття розширюємо список під найширший рядок.
+        versionBox.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                SwingUtilities.invokeLater(LauncherFrameFlat.this::widenVersionPopup);
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+            }
+
+            @Override
+            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+            }
+        });
         versionBox.addActionListener(e -> {
             if (updatingVersionBox) return;
             Instance chosen = (Instance) versionBox.getSelectedItem();
@@ -611,6 +627,28 @@ public class LauncherFrameFlat extends JFrame {
                 refreshStatusRow();
             }
         });
+    }
+
+    /** Розширити відкритий список версій, якщо найширший рядок не влазить у ширину поля. */
+    private void widenVersionPopup() {
+        Object child = versionBox.getAccessibleContext().getAccessibleChild(0);
+        if (!(child instanceof javax.swing.plaf.basic.ComboPopup) || !(child instanceof JPopupMenu)) return;
+        JPopupMenu popup = (JPopupMenu) child;
+        if (!popup.isVisible()) return;
+        JList<?> list = ((javax.swing.plaf.basic.ComboPopup) child).getList();
+        JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, list);
+        if (scroller == null) return;
+        int listWidth = list.getPreferredSize().width;
+        if (scroller.getVerticalScrollBar().isVisible()) listWidth += scroller.getVerticalScrollBar().getPreferredSize().width;
+        Insets si = scroller.getInsets();
+        Insets pi = popup.getInsets();
+        int scrollerWidth = listWidth + si.left + si.right + 2;
+        int popupWidth = scrollerWidth + pi.left + pi.right;
+        if (popupWidth <= popup.getWidth()) return;
+        Dimension sd = new Dimension(scrollerWidth, scroller.getHeight());
+        scroller.setPreferredSize(sd);
+        scroller.setMaximumSize(sd);
+        popup.setPopupSize(popupWidth, popup.getHeight());
     }
 
     /** Показати вибір версії, якщо вибраний рядок це група з кількох версій. */

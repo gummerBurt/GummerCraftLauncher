@@ -108,6 +108,9 @@ public class Runner implements Callable<Process>, ProgressObservable {
             throw new LauncherException("Update required", SharedLocale.tr("runner.updateRequired"));
         }
 
+        // 1.32.1: Vanilla одразу українською і з сервером GummerCraft у списку (лише перший раз, див. VanillaDefaults)
+        com.gummer.launcher.vanilla.VanillaDefaults.apply(instance);
+
         config = launcher.getConfig();
         builder = new JavaProcessBuilder();
         assetsRoot = launcher.getAssets();
