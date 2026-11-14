@@ -70,6 +70,8 @@ public class ServerAccountDialog extends JDialog {
     /** Увійшов: дві сторінки, «cabinet» (особистий кабінет) і «skins» (два скіни). */
     private final CardLayout inner = new CardLayout();
     private final JPanel accountCard = new JPanel(inner);
+    /** Панелі скінів поточного входу: перед закриттям питаємо про вибраний, але не завантажений скін. */
+    private final List<SkinPanel> skinPanels = new ArrayList<SkinPanel>();
     private boolean openSkins;
     /** Закрито: відповіді, що прийшли пізніше, не чіпають вікно. Не isDisplayable(): швидка відповідь могла прийти
      *  ще до першого показу вікна і губилась (голова в кабінеті на пробі 13.11). */
@@ -120,7 +122,13 @@ public class ServerAccountDialog extends JDialog {
         this.api = new ServerAccount(launcher.getProperties());
         this.support = support;
         this.selectedInstance = selectedInstance;
-        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                closeAsked();
+            }
+        });
         root.add(buildSignedOut(), "out");
         root.add(accountCard, "in");
         setContentPane(root);
@@ -247,6 +255,7 @@ public class ServerAccountDialog extends JDialog {
 
     private void showAccount(Login login, boolean skinsFirst) {
         accountCard.removeAll();
+        skinPanels.clear();
         accountCard.add(buildCabinet(login), "cabinet");
         accountCard.add(buildSkins(login), "skins");
         accountCard.revalidate();
@@ -264,15 +273,20 @@ public class ServerAccountDialog extends JDialog {
         p.add(wrapText(tr("serverAccount.signedInHint", login.nick), false), "gapbottom 6");
 
         JPanel skins = new JPanel(new GridLayout(1, 2, 14, 0));
-        skins.add(new SkinPanel(Target.STALDAYZ, login));
-        skins.add(new SkinPanel(Target.GUMMERCRAFT, login));
+        for (Target t : new Target[]{Target.STALDAYZ, Target.GUMMERCRAFT}) {
+            SkinPanel sp = new SkinPanel(t, login);
+            skinPanels.add(sp);
+            skins.add(sp);
+        }
         p.add(skins, "grow, pushy, gaptop 8");
         p.add(wrapText(tr("serverAccount.skinHint"), true), "gaptop 8");
 
         JButton back = new JButton(tr("serverAccount.cabinetBack"));
-        back.addActionListener(e -> inner.show(accountCard, "cabinet"));
+        back.addActionListener(e -> {
+            if (skinsSettled()) inner.show(accountCard, "cabinet");
+        });
         JButton close = new JButton(tr("serverAccount.close"));
-        close.addActionListener(e -> dispose());
+        close.addActionListener(e -> closeAsked());
         p.add(back, "split 2, growx 0, gaptop 10");
         p.add(close, "growx 0, gapleft push, gaptop 10");
         return p;
@@ -317,14 +331,14 @@ public class ServerAccountDialog extends JDialog {
             changed();
         });
         JButton close = new JButton(tr("serverAccount.close"));
-        close.addActionListener(e -> dispose());
+        close.addActionListener(e -> closeAsked());
         p.add(skin, "split 4, growx 0, gaptop 10");
         p.add(forgot, "growx 0, gaptop 10");
         p.add(logout, "growx 0, gapleft push, gaptop 10");
         p.add(close, "growx 0, gaptop 10");
 
         background(() -> {
-            byte[] png = api.currentSkin(Target.STALDAYZ, login.uuid);
+            byte[] png = api.ownSkin(login);
             BufferedImage img = png == null ? null : ImageIO.read(new ByteArrayInputStream(png));
             return img == null ? null : SkinRender.face(img, 56);
         }, img -> {
@@ -411,7 +425,7 @@ public class ServerAccountDialog extends JDialog {
         String title;
         Matcher m = VIP.matcher(name);
         if (m.matches()) {
-            title = "VIP " + m.group(1);
+            title = "VIP" + m.group(1);
         } else if ("fly".equals(name)) {
             title = tr("serverAccount.cabinetFly");
         } else if (expires > 0) {
@@ -426,9 +440,11 @@ public class ServerAccountDialog extends JDialog {
 
     private static String serverName(String raw) {
         if (raw == null || raw.isEmpty()) return "?";
-        // назви серверів у Plan (13.11: Dayz, Main, Main--2, Anarchy, Creative2, Lobby)
+        // назви серверів у Plan (13.11: Dayz, Main, Main--2, Anarchy, Creative2, Lobby, RolePlay). З 14.11.2026 сервер
+        // (launcherApi.php) сам віддає Main-RP для РП: і для RolePlay, і для старого запису Main-2 (той самий сервер до РП)
         String low = raw.toLowerCase(java.util.Locale.ROOT);
         if (low.equals("dayz") || low.startsWith("staldayz")) return "StalDayZ";
+        if (low.equals("roleplay") || low.equals("rp")) return "Main-RP";
         raw = raw.replaceAll("-+", "-");
         return Character.toUpperCase(raw.charAt(0)) + raw.substring(1);
     }
@@ -495,6 +511,8 @@ public class ServerAccountDialog extends JDialog {
         private final JButton choose = new JButton(tr("serverAccount.choosePng"));
         private final JButton upload = new JButton(tr("serverAccount.upload"));
         private BufferedImage current;
+        /** Стандартний скін сервера, коли свого немає (лише для показу). */
+        private BufferedImage fallback;
         private BufferedImage chosen;
         private byte[] chosenBytes;
 
@@ -525,12 +543,16 @@ public class ServerAccountDialog extends JDialog {
             state.setText(tr("serverAccount.skinLoading"));
             background(() -> {
                 ServerAccount.Status st = api.status(target, login);
-                byte[] png = st.hasSkin ? api.currentSkin(target, st.uuid) : null;
-                return png == null ? null : ImageIO.read(new ByteArrayInputStream(png));
-            }, img -> {
-                current = img;
+                // без скіна сервер віддає стандартного Стіва: показуємо його замість «?» (14.11.2026)
+                byte[] png = api.currentSkin(target, st.uuid);
+                BufferedImage img = png == null ? null : ImageIO.read(new ByteArrayInputStream(png));
+                return new Object[]{st.hasSkin, img};
+            }, r -> {
+                boolean has = (Boolean) r[0];
+                current = has ? (BufferedImage) r[1] : null;
+                fallback = has ? null : (BufferedImage) r[1];
                 if (chosen == null) {
-                    state.setText(img != null ? tr("serverAccount.skinCurrent") : tr("serverAccount.skinNone"));
+                    state.setText(has && current != null ? tr("serverAccount.skinCurrent") : tr("serverAccount.skinNone"));
                     redraw();
                 }
             }, ex -> {
@@ -558,12 +580,26 @@ public class ServerAccountDialog extends JDialog {
                 chosenBytes = data;
                 slim.setSelected(SkinRender.looksSlim(img));
                 classic.setSelected(!slim.isSelected());
-                state.setText(tr("serverAccount.skinChosen", f.getName()));
+                String name = f.getName();
+                if (name.length() > 22) name = name.substring(0, 19) + "...";
+                state.setText(tr("serverAccount.skinChosen", name));
                 upload.setEnabled(true);
                 redraw();
             } catch (IOException e) {
                 state.setText(tr("serverAccount.error.skin_invalid"));
             }
+        }
+
+        boolean hasPending() {
+            return chosenBytes != null && upload.isEnabled();
+        }
+
+        void discard() {
+            chosen = null;
+            chosenBytes = null;
+            upload.setEnabled(false);
+            state.setText(current != null ? tr("serverAccount.skinCurrent") : tr("serverAccount.skinNone"));
+            redraw();
         }
 
         private void doUpload() {
@@ -596,7 +632,7 @@ public class ServerAccountDialog extends JDialog {
         }
 
         private void redraw() {
-            BufferedImage img = chosen != null ? chosen : current;
+            BufferedImage img = chosen != null ? chosen : current != null ? current : fallback;
             preview.setIcon(img == null ? null : new ImageIcon(SkinRender.front(img, slim.isSelected(), 6)));
             preview.setText(img == null ? "?" : "");
         }
@@ -727,6 +763,33 @@ public class ServerAccountDialog extends JDialog {
         } catch (RuntimeException e) {
             log.log(Level.INFO, "Account chip refresh failed", e);
         }
+    }
+
+    /** Закрити вікно, якщо немає вибраного, але не завантаженого скіна (або гравець відмовився від нього). */
+    private void closeAsked() {
+        if (skinsSettled()) dispose();
+    }
+
+    /**
+     * 14.11.2026 (shumer): скін вибрали, бачили його в прев'ю і закрили вікно, не натиснувши «Завантажити на сервер»;
+     * напис «ще не завантажено» обрізала довга назва файлу. Тепер перед виходом зі сторінки скінів питаємо.
+     * true: можна йти далі.
+     */
+    private boolean skinsSettled() {
+        for (SkinPanel sp : skinPanels) {
+            if (!sp.hasPending()) continue;
+            inner.show(accountCard, "skins");
+            Object[] options = {tr("serverAccount.pendingUpload"), tr("serverAccount.pendingDiscard"), tr("serverAccount.pendingStay")};
+            int r = JOptionPane.showOptionDialog(this, tr("serverAccount.pendingText", sp.target.title), getTitle(),
+                    JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+            if (r == JOptionPane.YES_OPTION) {
+                sp.doUpload();
+                return false;
+            }
+            if (r != JOptionPane.NO_OPTION) return false;
+            sp.discard();
+        }
+        return true;
     }
 
     @Override

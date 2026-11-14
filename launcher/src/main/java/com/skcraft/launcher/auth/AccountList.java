@@ -56,6 +56,20 @@ public class AccountList implements ListModel<SavedSession> {
 		}
 	}
 
+	/**
+	 * 14.11.2026 (власник): акаунт, яким щойно зайшли в гру, переноситься на початок списку, тож список іде
+	 * від останнього використаного. Окремої дати не зберігаємо: порядок у файлі і є історія використання.
+	 */
+	public synchronized void moveToTop(SavedSession session) {
+		// equals порівнює нік і тип; без ніка (гра без акаунта) шукати нічого
+		if (session == null || session.getUsername() == null || session.getType() == null) return;
+		int index = accounts.indexOf(session);
+		if (index <= 0) return;
+
+		accounts.add(0, accounts.remove(index));
+		listeners.contentsChanged(new ListDataEvent(this, ListDataEvent.CONTENTS_CHANGED, 0, index));
+	}
+
 	@Override
 	public int getSize() {
 		return accounts.size();

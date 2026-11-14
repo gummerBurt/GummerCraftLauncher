@@ -35,7 +35,9 @@ public final class ServerPing {
         }
     }
 
-    private static final long CACHE_MS = 60_000L;
+    // 14.11.2026: було 60 с, як і таймер опитування, тож кожен другий тік брав кеш і цифра жила ~2 хв.
+    // Кеш лише щоб не пінгувати ту саму адресу двічі за один прохід (пак і картка новини з тим самим сервером).
+    private static final long CACHE_MS = 15_000L;
     private static final Map<String, Object[]> cache = new ConcurrentHashMap<String, Object[]>();
 
     private ServerPing() {

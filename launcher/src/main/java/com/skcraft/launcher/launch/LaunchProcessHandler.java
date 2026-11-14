@@ -44,9 +44,17 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         this(launcher, null);
     }
 
+    /** 14.11.2026: вікно лаунчера, з якого запущено гру (власник вікна «Гра закрилась з помилкою»), або null. */
+    private final Window owner;
+
     public LaunchProcessHandler(@NonNull Launcher launcher, com.skcraft.launcher.Instance instance) {
+        this(launcher, instance, null);
+    }
+
+    public LaunchProcessHandler(@NonNull Launcher launcher, com.skcraft.launcher.Instance instance, Window owner) {
         this.launcher = launcher;
         this.instance = instance;
+        this.owner = owner;
     }
 
     @Override
@@ -119,7 +127,9 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
                     if (crash != null) {
                         // 1.32: замість голої консолі вікно з причиною і що робити; консоль за кнопкою
                         final ProcessConsoleFrame frame = consoleFrame;
-                        com.gummer.launcher.crash.CrashDialog.show(null, instance, crash, () -> {
+                        // 14.11.2026: власник = вікно лаунчера. Лаунчер з'являється після цього вікна (gameClosed іде
+                        // слідом), і без власника перекривав його; вікно з власником Windows тримає над ним
+                        com.gummer.launcher.crash.CrashDialog.show(owner, instance, crash, () -> {
                             frame.setVisible(true);
                             frame.setTitle(tr("splash.client.crashed"));
                             frame.setIconImage(getTrayErrorIcon());

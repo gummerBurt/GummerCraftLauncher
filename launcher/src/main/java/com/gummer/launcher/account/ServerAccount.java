@@ -188,6 +188,30 @@ public final class ServerAccount {
         part(out, boundary, "file", "skin.png", png);
         out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
         post(target, "skin", new Body(out.toByteArray(), "multipart/form-data; boundary=" + boundary), SKIN_TIMEOUT_MS);
+        // 14.11.2026: «готово» лише тоді, коли сервер справді прив'язав скін до гравця, а не лише відповів ok
+        if (!status(target, login).hasSkin) throw new AccountException("skin_not_saved", 0, null);
+    }
+
+    /**
+     * Скін для голови в кабінеті і на кнопці «Акаунт» (14.11.2026): спершу GummerCraft, потім StalDayZ, але лише там,
+     * де гравець справді має скін (status). Маршрут download для гравця без скіна віддає стандартного Стіва з кодом 200,
+     * тож раніше голова бралась лише зі StalDayZ, і в того, хто ставив скін тільки на GummerCraft, був Стів.
+     * Скіна ніде немає: стандартний з GummerCraft (як і раніше), або null без мережі.
+     */
+    public byte[] ownSkin(Login login) {
+        if (login == null) return null;
+        for (Target t : new Target[]{Target.GUMMERCRAFT, Target.STALDAYZ}) {
+            try {
+                Status st = status(t, login);
+                if (st.hasSkin) {
+                    byte[] png = currentSkin(t, st.uuid);
+                    if (png != null) return png;
+                }
+            } catch (IOException | RuntimeException e) {
+                // недійсний токен чи немає мережі: пробуємо далі, у кінці стандартний
+            }
+        }
+        return currentSkin(Target.GUMMERCRAFT, login.uuid);
     }
 
     /** Поточний скін гравця на сервері (PNG) або null. Той самий маршрут, що «Завантажити» на сайті скінів. */

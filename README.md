@@ -24,6 +24,20 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
 
+## Що нового в 1.34
+
+**Акаунт на ГаммерКрафті (кабінет)**
+- Голова в кабінеті та на кнопці акаунта показує твій скін з того сервера, де він є: спершу GummerCraft, потім StalDayZ. Раніше скін брався лише зі StalDayZ, тому в багатьох була голова Стіва.
+- Якщо скін ще не завантажено, видно стандартний скін з підказкою, а не «?».
+- Якщо ти вибрав скін, але не завантажив його на сервер, лаунчер спитає «Завантажити зараз?», коли закриваєш вікно або повертаєшся до кабінету. Напис «Ще не завантажено: <файл>» більше не ховається за довгою назвою файлу.
+- Після завантаження лаунчер перевіряє, що сервер справді зберіг скін, і повідомляє, якщо ні.
+- Привілеї пишуться як VIP1, VIP2, VIP3. Пояснено, чому в давніх гравців немає старої статистики.
+
+**Головне вікно**
+- Онлайн серверів оновлюється частіше: раз на 30 с, коли вікно активне, і раз на 90 с у фоні. Коли повертаєшся у вікно, цифра оновлюється одразу. Згорнутий лаунчер сервери не опитує. Картки новин більше не блимають при оновленні.
+- У вікні «Обери акаунт для гри» нагорі той акаунт, яким грав останнім, і він уже вибраний.
+- Вікно «Гра закрилась з помилкою» тепер з'являється над лаунчером, а не під ним.
+
 ## Що нового в 1.33.1
 
 - Тексти лаунчера українською відредаговано: звертання на «ти», однакові терміни, виправлено описки.
@@ -202,6 +216,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.34:** account cabinet shows your skin from whichever server has it (GummerCraft first, then StalDayZ) and the default skin instead of "?", asks before leaving with a chosen but not uploaded skin, checks that the server really saved an upload; server online refreshes every 30 s while the window is active (90 s in the background, none when minimized); the account list puts the last used account first; the crash window opens above the launcher.
 
 **1.33.1:** Ukrainian UI texts edited (informal address, consistent terms, typos), the reinstall prompt for Vanilla and mod loaders shows its question again, anonymous "game started" event (which pack, nothing about the player or computer; `off` in `stats-id.txt` disables it, see SECURITY.md).
 

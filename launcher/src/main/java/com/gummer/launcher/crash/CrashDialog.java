@@ -105,5 +105,15 @@ public final class CrashDialog {
         dialog.setLocationRelativeTo(owner);
         dialog.setVisible(true);
         dialog.toFront();
+        // лаунчер повертається на екран слідом за цим вікном (після гри він схований); якщо власника немає
+        // або лаунчер створив нове вікно, ще раз підняти це вікно, коли лаунчер уже показано
+        Timer raise = new Timer(700, e -> {
+            if (dialog.isShowing()) {
+                if (owner != null && owner.isShowing()) dialog.setLocationRelativeTo(owner);
+                dialog.toFront();
+            }
+        });
+        raise.setRepeats(false);
+        raise.start();
     }
 }

@@ -89,7 +89,8 @@ final class AccountChip extends JPanel {
             text.setText(login.nick);
             final String uuid = login.uuid;
             Thread t = new Thread(() -> {
-                byte[] png = new ServerAccount(launcher.getProperties()).currentSkin(ServerAccount.Target.STALDAYZ, uuid);
+                // 14.11.2026: скін з того сервера, де він справді є (раніше лише StalDayZ, тож у кого скін лише на GummerCraft, був Стів)
+                byte[] png = new ServerAccount(launcher.getProperties()).ownSkin(login);
                 BufferedImage head = null;
                 try {
                     if (png != null) head = head(ImageIO.read(new ByteArrayInputStream(png)));

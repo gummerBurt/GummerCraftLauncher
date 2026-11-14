@@ -871,16 +871,44 @@ public class LauncherFrameFlat extends JFrame {
         }
     }
 
-    /** Пінг серверів паків і карток раз на хвилину, у фоні. */
+    /**
+     * Онлайн серверів паків і карток, у фоні (14.11.2026): раз на 30 с, поки вікно лаунчера активне, раз на 90 с,
+     * поки воно відкрите, але не в фокусі; згорнуте чи сховане (гра запущена) не пінгує зовсім. Щойно вікно знову
+     * активне, онлайн оновлюється одразу (якщо минуло понад 10 с). Справжній рілтайм (сервер сам шле зміни) не
+     * потрібен: пінг серверного списку легкий, і 30 с для гравця виглядає як живе число.
+     */
     private void startOnlinePolling() {
         if (onlineTimer == null) {
-            onlineTimer = new javax.swing.Timer(60_000, e -> pollOnline());
+            onlineTimer = new javax.swing.Timer(10_000, e -> maybePollOnline(false));
             onlineTimer.start();
+            addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowActivated(java.awt.event.WindowEvent e) {
+                    maybePollOnline(true);
+                }
+
+                @Override
+                public void windowDeiconified(java.awt.event.WindowEvent e) {
+                    maybePollOnline(true);
+                }
+            });
         }
         pollOnline();
     }
 
+    private static final long ONLINE_ACTIVE_MS = 30_000L;
+    private static final long ONLINE_BACKGROUND_MS = 90_000L;
+    private static final long ONLINE_REFOCUS_MS = 10_000L;
+
     private javax.swing.Timer onlineTimer;
+    private long onlinePolledAt;
+    private boolean onlinePolling;
+
+    private void maybePollOnline(boolean refocus) {
+        if (onlinePolling || !isShowing() || (getExtendedState() & ICONIFIED) != 0) return;
+        long every = refocus ? ONLINE_REFOCUS_MS : isActive() ? ONLINE_ACTIVE_MS : ONLINE_BACKGROUND_MS;
+        if (System.currentTimeMillis() - onlinePolledAt >= every) pollOnline();
+    }
 
     private void pollOnline() {
         final java.util.Set<String> addresses = new java.util.LinkedHashSet<>();
@@ -892,7 +920,9 @@ public class LauncherFrameFlat extends JFrame {
         for (com.gummer.launcher.news.NewsFeed.Item n : news) {
             if (n.online != null) addresses.add(n.online);
         }
-        if (addresses.isEmpty()) return;
+        if (addresses.isEmpty() || onlinePolling) return;
+        onlinePolling = true;
+        onlinePolledAt = System.currentTimeMillis();
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() {
@@ -911,6 +941,7 @@ public class LauncherFrameFlat extends JFrame {
 
             @Override
             protected void done() {
+                onlinePolling = false;
                 synchronized (launcher.getInstances()) {
                     for (Instance i : launcher.getInstances().getInstances()) {
                         com.gummer.launcher.server.ServerPing.Status s = i.getServerAddress() != null ? online.get(i.getServerAddress()) : null;
@@ -921,9 +952,26 @@ public class LauncherFrameFlat extends JFrame {
                     instancesModel.fireTableRowsUpdated(0, instancesModel.getRowCount() - 1);
                 }
                 refreshStatusRow();
-                rebuildNews();
+                // набір карток міг змінитись (пак з hideIfInstalled встановили): тоді перебудувати, інакше лише цифри
+                if (!visibleNews().equals(shownNews)) rebuildNews(); else refreshNewsOnline();
             }
         }.execute();
+    }
+
+    /** Мітки онлайну на картках новин: оновлюються на місці, без перебудови карток (інакше блимала б картинка). */
+    private final java.util.List<Object[]> newsOnlineLabels = new java.util.ArrayList<>();
+
+    private void refreshNewsOnline() {
+        for (Object[] o : newsOnlineLabels) {
+            JLabel l = (JLabel) o[0];
+            com.gummer.launcher.server.ServerPing.Status st = online.get((String) o[1]);
+            String text = st != null ? "● " + tr("launcher.onlineLine", st.online) : "";
+            if (!text.equals(l.getText())) {
+                l.setText(text);
+                l.revalidate();
+                l.repaint();
+            }
+        }
     }
 
     // ------------------------------------------------------------------ 1.32: картки новин і реклами
@@ -949,14 +997,24 @@ public class LauncherFrameFlat extends JFrame {
     }
 
     /** Картки для поточної вкладки: не більше трьох, без реклами паку, який уже встановлено (hideIfInstalled). */
+    private java.util.List<com.gummer.launcher.news.NewsFeed.Item> shownNews = java.util.Collections.emptyList();
+
+    private java.util.List<com.gummer.launcher.news.NewsFeed.Item> visibleNews() {
+        java.util.List<com.gummer.launcher.news.NewsFeed.Item> out = new java.util.ArrayList<>();
+        for (com.gummer.launcher.news.NewsFeed.Item n : news) {
+            if (out.size() >= 3) break;
+            if (n.hideIfInstalled != null && isInstalled(n.hideIfInstalled)) continue;
+            out.add(n);
+        }
+        return out;
+    }
+
     private void rebuildNews() {
         newsRow.removeAll();
-        int shown = 0;
-        for (com.gummer.launcher.news.NewsFeed.Item n : news) {
-            if (shown >= 3) break;
-            if (n.hideIfInstalled != null && isInstalled(n.hideIfInstalled)) continue;
+        newsOnlineLabels.clear();
+        shownNews = visibleNews();
+        for (com.gummer.launcher.news.NewsFeed.Item n : shownNews) {
             newsRow.add(createNewsCard(n), "w 296!, h 128!");
-            shown++;
         }
         newsRow.revalidate();
         newsRow.repaint();
@@ -1029,6 +1087,7 @@ public class LauncherFrameFlat extends JFrame {
         onlineText.setForeground(new Color(0x8C, 0xE0, 0x7A));
         onlineText.setFont(onlineText.getFont().deriveFont(Font.BOLD, 12f));
         bottomRow.add(onlineText);
+        if (n.online != null) newsOnlineLabels.add(new Object[]{onlineText, n.online});
         if (n.button != null && n.action != null) {
             JButton go = new JButton(n.button);
             go.setFocusable(false);

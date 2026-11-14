@@ -244,6 +244,10 @@ public class AccountSelectDialog extends JDialog {
 		if (dialog.selected != null && dialog.selected.isOnline()) {
 			launcher.getAccounts().update(dialog.selected.toSavedSession());
 		}
+		// 14.11.2026: останній використаний акаунт нагорі (і вибраний наступного разу, бо вибір стоїть на першому)
+		if (dialog.selected != null) {
+			launcher.getAccounts().moveToTop(dialog.selected.toSavedSession());
+		}
 
 		Persistence.commitAndForget(launcher.getAccounts());
 
