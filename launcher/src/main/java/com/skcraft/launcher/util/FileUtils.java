@@ -14,7 +14,6 @@ import com.google.common.io.Files;
 import com.skcraft.launcher.model.modpack.DownloadableFile;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -45,13 +44,12 @@ public class FileUtils {
 		return entry;
 	}
 
+	/**
+	 * 14.11.2026: хеш рахується потоком (буфер на кілька КБ). Раніше весь файл читався в пам'ять, і лаунчер на
+	 * 32-бітній Java (247 МБ heap) падав з OutOfMemoryError на src.zip і lib/modules рантайму Java 25.
+	 */
 	public static String getShaHash(File file) throws IOException {
-		FileInputStream stream = new FileInputStream(file);
-		byte[] input = ByteStreams.toByteArray(stream);
-		String res = Hashing.sha1().hashBytes(input).toString();
-
-		stream.close();
-		return res;
+		return Files.hash(file, Hashing.sha1()).toString();
 	}
 
 	public static String getMD5Hash(String path) {

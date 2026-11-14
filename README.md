@@ -24,6 +24,10 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
 
+## Що нового в 1.34.1
+
+Виправлення: лаунчер перевіряє кожен завантажений файл і перекачує зіпсований, встановлення модпака на 32-бітній Java більше не падає з нестачею пам'яті.
+
 ## Що нового в 1.34
 
 **Акаунт на ГаммерКрафті (кабінет)**
@@ -216,6 +220,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.34.1:** fixes: every downloaded file is checked by hash and downloaded again if broken; modpack install no longer runs out of memory on 32-bit Java.
 
 **1.34:** account cabinet shows your skin from whichever server has it (GummerCraft first, then StalDayZ) and the default skin instead of "?", asks before leaving with a chosen but not uploaded skin, checks that the server really saved an upload; server online refreshes every 30 s while the window is active (90 s in the background, none when minimized); the account list puts the last used account first; the crash window opens above the launcher.
 

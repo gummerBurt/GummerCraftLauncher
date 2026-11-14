@@ -265,7 +265,7 @@ public abstract class BaseUpdater {
             long size = artifact.getSize();
             if (size <= 0) size = JAR_SIZE_ESTIMATE;
 
-            File tempFile = installer.getDownloader().download(url, "", size, jarFile.getName());
+            File tempFile = installer.getDownloader().download(url, "", size, jarFile.getName(), artifact.getHash());
             installer.queue(new FileMover(tempFile, jarFile));
             if (artifact.getHash() != null) {
                 installer.queue(new FileVerify(jarFile, jarFile.getName(), artifact.getHash()));
@@ -308,8 +308,9 @@ public abstract class BaseUpdater {
                     }
                 }
 
+                // 14.11.2026: ім'я ассета і є його sha1, завантажувач звіряє і перекачує зіпсований
                 File tempFile = installer.getDownloader().download(
-                        urls, "", entry.getValue().getSize(), entry.getKey());
+                        urls, "", entry.getValue().getSize(), entry.getKey(), hash);
                 installer.queue(new FileMover(tempFile, targetFile));
                 log.info("Fetching " + path + " from " + urls);
                 downloading.add(path);
@@ -368,8 +369,9 @@ public abstract class BaseUpdater {
                         }
                     }
 
+                    // 14.11.2026: sha1 і в завантажувач: зіпсований файл перекачується одразу, FileVerify лишається
                     File tempFile = installer.getDownloader().download(urls, "", size,
-                            library.getName().toString());
+                            library.getName().toString(), artifact.getSha1());
                     log.info("Fetching " + path + " from " + urls);
                     installer.queue(new FileMover(tempFile, targetFile));
                     if (artifact.getSha1() != null) {

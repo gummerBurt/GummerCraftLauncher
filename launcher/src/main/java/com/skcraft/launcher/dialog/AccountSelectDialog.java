@@ -342,6 +342,8 @@ public class AccountSelectDialog extends JDialog {
 	public static boolean isNetworkFailure(Throwable t) {
 		for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
 			if (c instanceof AuthenticationException) return false;
+			// 14.11.2026: файл пошкоджений навіть після повторних завантажень: не «немає інтернету», показати причину
+			if (c instanceof com.skcraft.launcher.install.CorruptDownloadException) return false;
 			if (c instanceof java.io.IOException) return true;
 		}
 		return false;

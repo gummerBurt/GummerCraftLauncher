@@ -410,7 +410,18 @@ public class HttpRequest implements Closeable, ProgressObservable {
         }
 
         if ("bytes".equals(conn.getHeaderField("Accept-Ranges"))) {
-            return Optional.of(new PartialDownloadInfo(contentLength, readBytes));
+            // 14.11.2026: при другому обриві (уже в докачці) зміщення рахується від початку файлу, а не від початку
+            // докачки. Раніше бралось лише readBytes поточного запиту: Range просив не той шматок, він дописувався
+            // в кінець, і файл виходив зіпсованим. Повна довжина теж з першого запиту (у відповіді 206 лише залишок).
+            boolean resumed;
+            try {
+                resumed = resumeInfo != null && conn.getResponseCode() == 206;
+            } catch (IOException e) {
+                return Optional.empty();
+            }
+            long offset = resumed ? resumeInfo.currentLength : 0;
+            long expected = resumed ? resumeInfo.expectedLength : contentLength;
+            return Optional.of(new PartialDownloadInfo(expected, offset + readBytes));
         }
 
         return Optional.empty();

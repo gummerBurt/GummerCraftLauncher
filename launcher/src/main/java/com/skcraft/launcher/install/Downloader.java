@@ -18,4 +18,12 @@ public interface Downloader extends ProgressObservable {
     File download(List<URL> urls, String key, long size, String name);
 
     File download(URL url, String key, long size, String name);
+
+    /**
+     * 14.11.2026: те саме, але з очікуваним sha1 файлу (null, якщо невідомий). Завантажувач звіряє хеш одразу після
+     * завантаження і при розбіжності качає файл заново з нуля, див. {@link HttpDownloader}.
+     */
+    File download(List<URL> urls, String key, long size, String name, String sha1);
+
+    File download(URL url, String key, long size, String name, String sha1);
 }

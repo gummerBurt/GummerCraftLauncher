@@ -63,7 +63,9 @@ public class FileInstall extends ManifestEntry {
                 size = 10 * 1024;
             }
 
-            File tempFile = installer.getDownloader().download(url, fileVersion, size, to);
+            // 14.11.2026: sha1 з маніфесту йде в завантажувач, той звіряє файл одразу і при розбіжності качає заново.
+            // Раніше файли модпака ставились без перевірки (обрив з докачкою дав зіпсований ams.jar і NoClassDefFoundError).
+            File tempFile = installer.getDownloader().download(url, fileVersion, size, to, hash);
             installer.queue(new InstallLogFileMover(log, tempFile, targetFile));
         } else {
             log.add(to, to);

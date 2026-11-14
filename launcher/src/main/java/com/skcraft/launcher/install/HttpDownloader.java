@@ -11,6 +11,7 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import com.google.common.io.Files;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
@@ -53,6 +54,13 @@ public class HttpDownloader implements Downloader {
 
     private final List<HttpDownloadJob> running = new ArrayList<HttpDownloadJob>();
     private final List<HttpDownloadJob> failed = new ArrayList<HttpDownloadJob>();
+    /** 14.11.2026: файли, чий sha1 не зійшовся і після повторних завантажень з нуля (кола повторів їх не беруть). */
+    private final List<HttpDownloadJob> corrupt = new ArrayList<HttpDownloadJob>();
+    /**
+     * 14.11.2026: скільки разів качати файл заново з нуля (без Range), якщо sha1 не зійшовся. Разом з першим
+     * завантаженням виходить 3 спроби.
+     */
+    private static final int HASH_RETRIES = 2;
     private long downloaded = 0;
     private long total = 0;
     private int left = 0;
@@ -89,7 +97,12 @@ public class HttpDownloader implements Downloader {
     }
 
     @Override
-    public synchronized File download(@NonNull List<URL> urls, @NonNull String key, long size, String name) {
+    public File download(@NonNull List<URL> urls, @NonNull String key, long size, String name) {
+        return download(urls, key, size, name, null);
+    }
+
+    @Override
+    public synchronized File download(@NonNull List<URL> urls, @NonNull String key, long size, String name, String sha1) {
         if (urls.isEmpty()) {
             throw new IllegalArgumentException("Can't download empty list of URLs");
         }
@@ -97,12 +110,22 @@ public class HttpDownloader implements Downloader {
         String hash = hf.hashString(Strings.nullToEmpty(key) + urls.get(0), Charsets.UTF_8).toString();
         hash = createUniqueKey(hash);
         File tempFile = new File(tempDir, hash.substring(0, 2) + "/" + hash);
+        String jobName = name != null ? name : tempFile.getName();
+        String expected = Strings.emptyToNull(sha1);
+
+        // 14.11.2026: тимчасова тека install не чиститься, тож файл з минулого (обірваного чи невдалого) встановлення
+        // береться повторно. Якщо відомий sha1, спершу звіряємо: зіпсований видаляємо і качаємо заново.
+        if (tempFile.exists() && expected != null && !hashMatches(tempFile, expected)) {
+            log.warning("Cached download " + tempFile + " (" + jobName + ") does not match sha1 " + expected
+                    + ", downloading it again");
+            tempFile.delete();
+        }
 
         // If the file is already downloaded (such as from before), then don't re-download
         if (!tempFile.exists()) {
             total += size;
             left++;
-            queue.add(new HttpDownloadJob(tempFile, urls, size, name != null ? name : tempFile.getName()));
+            queue.add(new HttpDownloadJob(tempFile, urls, size, jobName, expected));
         }
 
         return tempFile;
@@ -111,9 +134,23 @@ public class HttpDownloader implements Downloader {
 
     @Override
     public File download(URL url, String key, long size, String name) {
+        return download(url, key, size, name, null);
+    }
+
+    @Override
+    public File download(URL url, String key, long size, String name, String sha1) {
         List<URL> urls = new ArrayList<URL>();
         urls.add(url);
-        return download(urls, key, size, name);
+        return download(urls, key, size, name, sha1);
+    }
+
+    private boolean hashMatches(File file, String expected) {
+        try {
+            return Files.hash(file, hf).toString().equalsIgnoreCase(expected);
+        } catch (IOException e) {
+            log.log(Level.WARNING, "Failed to hash " + file, e);
+            return false;
+        }
     }
 
     /**
@@ -169,6 +206,14 @@ public class HttpDownloader implements Downloader {
             }
 
             synchronized (this) {
+                if (!corrupt.isEmpty()) {
+                    StringBuilder names = new StringBuilder();
+                    for (HttpDownloadJob job : corrupt) {
+                        if (names.length() > 0) names.append(", ");
+                        names.append(job.getName());
+                    }
+                    throw new CorruptDownloadException(names.toString(), HASH_RETRIES + 1, null);
+                }
                 if (failed.size() > 0) {
                     //throw new IOException(failed.size() + " file(s) could not be downloaded");
                     throw new IOException(failed.size() + " file(s) could not be downloaded. Please retry the failed downloads by relaunching the modpack and make sure that your internet connection is stable by disabling downloads, videos, streams.. In case it is still failing after a few trys please contact support");
@@ -270,12 +315,17 @@ public class HttpDownloader implements Downloader {
         private final long size;
         @Getter private String name;
         private HttpRequest request;
+        /** 14.11.2026: очікуваний sha1 (null, якщо невідомий). */
+        private final String sha1;
+        /** 14.11.2026: після розбіжності sha1 файл качається лише з нуля, без докачки через Range. */
+        private boolean noResume = false;
 
-        private HttpDownloadJob(File destFile, List<URL> urls, long size, String name) {
+        private HttpDownloadJob(File destFile, List<URL> urls, long size, String name, String sha1) {
             this.destFile = destFile;
             this.urls = urls;
             this.size = size;
             this.name = name;
+            this.sha1 = sha1;
         }
 
         @Override
@@ -290,6 +340,11 @@ public class HttpDownloader implements Downloader {
                 synchronized (HttpDownloader.this) {
                     downloaded += size;
                     doneBytes += size > 0 ? size : readBytes();
+                }
+            } catch (CorruptDownloadException e) {
+                log.log(Level.WARNING, "Giving up on " + name + ": " + e.getMessage());
+                synchronized (HttpDownloader.this) {
+                    corrupt.add(this);
                 }
             } catch (IOException e) {
                 synchronized (HttpDownloader.this) {
@@ -312,8 +367,30 @@ public class HttpDownloader implements Downloader {
             File tempFile = new File(destDir, destFile.getName() + ".tmp");
             destDir.mkdirs();
 
-            // Try to download
-            download(tempFile);
+            // Try to download. 14.11.2026: якщо sha1 відомий, звіряємо одразу (до встановлення): зіпсований файл
+            // (обрив з докачкою, антивірус, проксі мобільного оператора) видаляємо і качаємо заново з нуля без Range.
+            for (int attempt = 0; ; attempt++) {
+                download(tempFile);
+                if (sha1 == null) {
+                    break;
+                }
+                String actual = Files.hash(tempFile, hf).toString();
+                if (actual.equalsIgnoreCase(sha1)) {
+                    if (attempt > 0) {
+                        log.info("Downloaded " + name + " correctly on attempt " + (attempt + 1));
+                    }
+                    break;
+                }
+                String details = "expected sha1 " + sha1 + ", got " + actual + ", " + tempFile.length()
+                        + " bytes" + (size > 0 ? " of " + size : "");
+                log.warning("Downloaded file " + name + " from " + urls + " is corrupt: " + details
+                        + (attempt < HASH_RETRIES ? ", downloading it again from scratch" : ""));
+                tempFile.delete();
+                if (attempt >= HASH_RETRIES) {
+                    throw new CorruptDownloadException(name, attempt + 1, details);
+                }
+                noResume = true;
+            }
 
             destFile.delete();
             if (!tempFile.renameTo(destFile)) {
@@ -356,14 +433,28 @@ public class HttpDownloader implements Downloader {
 
                 // We only want to try to resume a partial download if the request succeeded before
                 // throwing an exception halfway through. If it didn't succeed, just throw the error.
-                if (tries >= tryCount || !request.isConnected() || !request.isSuccessCode()) {
+                if (noResume || tries >= tryCount || !request.isConnected() || !request.isSuccessCode()) {
                     throw e;
                 }
 
                 Optional<HttpRequest.PartialDownloadInfo> byteRangeSupport = request.canRetryPartial();
                 if (byteRangeSupport.isPresent()) {
+                    log.info("Resuming " + name + " from byte " + byteRangeSupport.get().getCurrentLength()
+                            + " of " + byteRangeSupport.get().getExpectedLength());
                     tryDownloadFrom(url, file, byteRangeSupport.get(), tries + 1);
+                } else {
+                    // 14.11.2026: раніше без підтримки Range метод мовчки повертався, і обрізаний файл ішов як успішний
+                    throw e;
                 }
+                return;
+            }
+
+            // 14.11.2026: після докачки довжина має збігтися з повною довжиною з першої відповіді. Не збіглась:
+            // виняток, і файл качається заново з нуля (зовнішній цикл download(File) іде з retryDetails = null).
+            if (retryDetails != null && retryDetails.getExpectedLength() > 0
+                    && file.length() != retryDetails.getExpectedLength()) {
+                throw new IOException(String.format("Resumed download of %s has %d bytes, expected %d",
+                        name, file.length(), retryDetails.getExpectedLength()));
             }
         }
 
