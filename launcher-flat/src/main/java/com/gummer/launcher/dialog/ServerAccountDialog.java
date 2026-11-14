@@ -361,8 +361,12 @@ public class ServerAccountDialog extends JDialog {
         body.removeAll();
         boolean stats = n.path("stats").asBoolean(false);
         JPanel facts = new JPanel(new MigLayout("insets 0, wrap 2, gap 16 4", "[][grow]", ""));
-        fact(facts, "serverAccount.cabinetRegistered", date(n.path("registered").asLong()));
-        if (stats) fact(facts, "serverAccount.cabinetFirstJoin", date(n.path("first_join").asLong()));
+        // 14.11.2026: «Акаунт створено» прибрано. Сервер з 14.11 сам кладе в first_join найранішу з дат Plan і реєстрації
+        // AuthMe, тож окремий рядок реєстрації лише плутав (у gummer реєстрація 2025, а перший вхід 2020). Без Plan
+        // (stats=false) «Вперше в грі» береться з реєстрації AuthMe.
+        long firstJoin = stats ? n.path("first_join").asLong() : 0;
+        if (firstJoin <= 0) firstJoin = n.path("registered").asLong();
+        fact(facts, "serverAccount.cabinetFirstJoin", date(firstJoin));
         fact(facts, "serverAccount.cabinetLastLogin", date(n.path("last_login").asLong()));
         if (stats) fact(facts, "serverAccount.cabinetTotal", hours(n.path("total_ms").asLong()));
         body.add(facts, "gapbottom 6");
