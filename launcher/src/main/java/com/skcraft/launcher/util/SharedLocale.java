@@ -89,6 +89,20 @@ public class SharedLocale {
     }
 
     /**
+     * Переклад з запасним текстом: для вікон, які можуть з'явитися ще до завантаження мови (помилка при старті),
+     * щоб гравець не побачив {@code ${ключ}}.
+     */
+    public static String trOr(String key, String fallback) {
+        if (bundle != null) {
+            try {
+                return bundle.getString(key);
+            } catch (MissingResourceException ignored) {
+            }
+        }
+        return fallback;
+    }
+
+    /**
      * Load a shared resource bundle.
      *
      * @param baseName the bundle name

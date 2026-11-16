@@ -53,10 +53,11 @@ public class LauncherFrameFlat extends JFrame {
     public final Launcher launcher;
     private final Lang lang;
     private final String langCode;
-    public static LauncherFrameFlat rootFrame;
+    /** Поточне головне вікно (будь-якого вигляду: Liquid Glass, Класика, Бібліотека); на нього спливають сповіщення діалогів. */
+    public static JFrame rootFrame;
 
     @Getter
-    private final InstanceTable instancesTable = new InstanceTable();
+    private final InstanceTable instancesTable = new CardInstanceTable(); // дизайн 1.35: картки з підписами розділів
     private final InstanceTableModel instancesModel;
     @Getter
     private final JScrollPane instanceScroll = new JScrollPane(instancesTable);
@@ -103,7 +104,14 @@ public class LauncherFrameFlat extends JFrame {
     /** Онлайн серверів (адреса -> стан), оновлюється раз на хвилину. */
     private final java.util.Map<String, com.gummer.launcher.server.ServerPing.Status> online = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<String> offlineServers = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
-    private final JLabel onlineLabel = new JLabel(" ");
+    private final JLabel onlineLabel = new JLabel(" ") {
+        // 1.35: кілька пікселів запасу, інакше на деяких екранах останні літери («онлайн») обрізались
+        @Override
+        public Dimension getPreferredSize() {
+            Dimension d = super.getPreferredSize();
+            return new Dimension(d.width + 6, d.height);
+        }
+    };
     private final JCheckBox quickJoinBox = new JCheckBox(tr("launcher.quickJoin"));
     //private final JButton refreshButton;  // disable for now refreshBurron
     /** 1.33: плашка необов'язкового акаунта сервера вгорі справа; null, якщо serverAccount=false у launcher.properties. */
@@ -177,29 +185,12 @@ public class LauncherFrameFlat extends JFrame {
         //    101,101,
         //    SharedLocale.tr("tooltip.settings")
         //);
-        optionsButton = new CustomImageButton(
-            ImageIO.read(Objects.requireNonNull(
-                Launcher.class.getResourceAsStream("ui/button/settings_" + langCode + ".png")
-            )),
-            101,101,
-            SharedLocale.tr("tooltip.settings")
-        );
-        wikiButton = new CustomImageButton(
-            ImageIO.read(Objects.requireNonNull(
-                Launcher.class.getResourceAsStream("ui/button/faq_" + langCode + ".png")
-            )),
-            101,101,
-            SharedLocale.tr("tooltip.faq")
-        );
+        // дизайн 1.35: слоти хотбару замість картинок 101x101 (іконки ті самі, вирізані з settings/faq/support_*.png)
+        optionsButton = new HotbarSlot("ui/icon/slot/settings.png", SharedLocale.tr("look.slot.settings"), SharedLocale.tr("tooltip.settings"));
+        wikiButton = new HotbarSlot("ui/icon/slot/faq.png", SharedLocale.tr("look.slot.wiki"), SharedLocale.tr("tooltip.faq"));
         supportService = com.gummer.launcher.support.SupportService.create(launcher);
         if (supportService != null) {
-            supportButton = new CustomImageButton(
-                ImageIO.read(Objects.requireNonNull(
-                    Launcher.class.getResourceAsStream("ui/button/support_" + langCode + ".png")
-                )),
-                101,101,
-                SharedLocale.tr("tooltip.support")
-            );
+            supportButton = new HotbarSlot("ui/icon/slot/support.png", SharedLocale.tr("look.slot.support"), SharedLocale.tr("tooltip.support"));
         }
         launchButton = new CustomImageButton(
             ImageIO.read(Objects.requireNonNull(
@@ -229,12 +220,22 @@ public class LauncherFrameFlat extends JFrame {
 
         SwingHelper.setFrameIcon(this, Launcher.class, "icon.png");
 
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                loadInstances();
-            }
-        });
+        // 16.11.2026: перемикання вигляду в налаштуваннях: список збірок уже завантажений, тож без мережі і діалогу
+        // «Перевірка нових модпаків», і запам'ятована збірка вибрана ще до показу вікна (раніше ~2 с була перша в списку)
+        // і на звичайному старті (16.11.2026, «щоб не тупило»): спершу список з кешів на диску, вікно одразу повне,
+        // без діалогу; справжній список з мережі оновлюється потім тихо у фоні (refreshInstancesQuietly)
+        boolean reopened = com.gummer.launcher.FancyLauncher.takeQuickReopen() && launcher.getInstances().size() > 0;
+        if (reopened || loadInstancesFromCache()) {
+            instancesReady();
+            if (!reopened) SwingUtilities.invokeLater(this::refreshInstancesQuietly);
+        } else {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    loadInstances();
+                }
+            });
+        }
     }
 
     private void initComponents() {
@@ -244,6 +245,7 @@ public class LauncherFrameFlat extends JFrame {
 
         // create sidebarPanel with full-height and fixed width/padding
         int sidebarWidth = 220; // fixed width for the sidebar (adjust as needed)
+        getRootPane().putClientProperty(com.gummer.launcher.look.Toast.LEFT, sidebarWidth); // сповіщення по центру сцени
         JPanel sidebarPanel = new JPanel(new BorderLayout());
                         sidebarPanel.setPreferredSize(new Dimension(sidebarWidth, 0));
         sidebarPanel.setMinimumSize(new Dimension(sidebarWidth, 0));
@@ -289,6 +291,16 @@ public class LauncherFrameFlat extends JFrame {
             sidebarButtonsPanel.add(Box.createVerticalStrut(5));
             sidebarButtonsPanel.add(coffeeButton);
         }
+        // 16.11.2026: лайк вигляду (один з IP) і «Фідбек по дизайну»
+        DesignVote vote = DesignVote.create(this, launcher, supportService, com.gummer.launcher.FancyLauncher.LOOK_GLASS);
+        if (vote != null) {
+            Dimension vd = new Dimension(200, DesignVote.HEIGHT);
+            vote.setPreferredSize(vd);
+            vote.setMinimumSize(vd);
+            vote.setMaximumSize(vd);
+            sidebarButtonsPanel.add(Box.createVerticalStrut(8));
+            sidebarButtonsPanel.add(vote);
+        }
         JComponent sourceLink = createSourceLink();
         if (sourceLink != null) {
             sidebarButtonsPanel.add(Box.createVerticalStrut(4));
@@ -308,25 +320,37 @@ public class LauncherFrameFlat extends JFrame {
         rightPanel.setOpaque(false); // transparent
 
         // create bottom buttons panel with padding
-        JPanel rightButtonsPanel = new JPanel(new MigLayout("", "[][][]push[][]", "")); // productiom! (1.32: + «Підтримка», вибір версії перед «Грати»)
+        // дизайн 1.35: хотбар ліворуч, праворуч група «вибір версії + Запуск». Група окремою панеллю, бо в одному рядку
+        // схований вибір версії (hidemode 3) лишав свій відступ і «Запуск» у збірках без вибору (StalDayZ) з'їжджав ліворуч
+        JPanel rightButtonsPanel = new JPanel(new MigLayout("insets 0 0 0 0", "[]push[]", "[]"));
+        JPanel launchGroup = new JPanel(new MigLayout("insets 0, gap 0", "[][]", "[]"));
+        launchGroup.setOpaque(false);
         //JPanel rightButtonsPanel = new JPanel(new MigLayout("", "[][][][][]push[][]", ""));
 
         rightButtonsPanel.setOpaque(false);
-        rightButtonsPanel.setBorder(BorderFactory.createEmptyBorder(12, 2, 1, 0)); // set ButtonsPanel padding
+        rightButtonsPanel.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 6)); // set ButtonsPanel padding
         //rightButtonsPanel.add(refreshButton); // hide refresh button on new template
         //rightButtonsPanel.add(updateCheck); // hide update checkbox
 
-        rightButtonsPanel.add(optionsButton);
+        JPanel hotbar = HotbarSlot.bar();
+        getRootPane().putClientProperty(com.gummer.launcher.look.Toast.ABOVE, hotbar); // сповіщення над кнопками, не на лого
+        hotbar.add(optionsButton);
         //rightButtonsPanel.add(accountButton); // disable for now accountButton
-        rightButtonsPanel.add(wikiButton);
+        hotbar.add(wikiButton);
         if (supportButton != null) {
-            rightButtonsPanel.add(supportButton);
-            supportButton.addActionListener(e -> com.gummer.launcher.dialog.SupportDialog.showFor(this, supportService, this::getSelectedInstance));
+            hotbar.add(supportButton);
+            supportButton.addActionListener(e -> {
+                if (supportButton instanceof HotbarSlot) ((HotbarSlot) supportButton).setBadge(false);
+                com.gummer.launcher.dialog.SupportDialog.showFor(this, supportService, this::getSelectedInstance);
+            });
             checkSupportReplies();
         }
+        rightButtonsPanel.add(hotbar, "aligny center");
         setupVersionBox();
-        rightButtonsPanel.add(versionPanel, "aligny center, hidemode 3, gapright 8");
-        rightButtonsPanel.add(launchButton);
+        launchGroup.add(versionPanel, "aligny center, hidemode 3, gapright 4");
+        // «Запуск» з м'яким світінням, що «дихає»
+        launchGroup.add(HotbarSlot.glow(launchButton, new Color(0x8C, 0xE0, 0x4A)), "aligny center");
+        rightButtonsPanel.add(launchGroup, "aligny center");
 
         // add elements to rightPanel
         // 1.32: замість прихованої веб-панелі новин (у Java 8 немає браузера) картки з news.json над кнопками
@@ -551,28 +575,16 @@ public class LauncherFrameFlat extends JFrame {
         return wrap;
     }
 
-    /** 1.32: раз при старті, у фоні: чи відповіли адміни на звернення, поки лаунчер був закритий. */
+    /**
+     * 1.32: чи відповіли адміни на звернення. З 16.11.2026 не раз при старті, а поки вікно видно (раз на хвилину,
+     * {@link SupportUnread}), з числом непрочитаних на кнопці.
+     */
     private void checkSupportReplies() {
-        if (!supportService.hasConversation()) return;
-        new SwingWorker<Integer, Void>() {
-            @Override
-            protected Integer doInBackground() throws Exception {
-                return supportService.unreadReplies();
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    if (get() > 0) {
-                        supportButton.setToolTipText(SharedLocale.tr("support.newReplyTooltip"));
-                        showNotification(LauncherFrameFlat.rootFrame, LauncherFrameFlat.class, Notification.Type.INFO,
-                                SharedLocale.tr("support.newReply"));
-                    }
-                } catch (Exception e) {
-                    log.log(java.util.logging.Level.INFO, "Support: could not check replies", e);
-                }
-            }
-        }.execute();
+        SupportUnread.watch(this, supportService, n -> {
+            supportButton.setToolTipText(SharedLocale.tr(n > 0 ? "support.newReplyTooltip" : "tooltip.support"));
+            if (supportButton instanceof HotbarSlot) ((HotbarSlot) supportButton).setBadge(n);
+        }, () -> showNotification(LauncherFrameFlat.rootFrame, LauncherFrameFlat.class, Notification.Type.INFO,
+                SharedLocale.tr("support.newReply")));
     }
 
     /** Пак у вибраному рядку (для групи: вибрана версія), або null. */
@@ -587,7 +599,7 @@ public class LauncherFrameFlat extends JFrame {
         versionLabel.setForeground(new Color(230, 230, 230));
         versionLabel.setFont(versionLabel.getFont().deriveFont(Font.BOLD, 13f));
         versionPanel.add(versionLabel);
-        versionPanel.add(versionBox, "growx, h 44!");
+        versionPanel.add(versionBox, "growx, wmin 0, h 44!"); // wmin 0: ширина за колонкою, а не за найдовшою версією
         versionBox.setFocusable(false);
         versionBox.setFont(versionBox.getFont().deriveFont(Font.BOLD, 18f));
         versionBox.setMaximumRowCount(12);
@@ -599,6 +611,9 @@ public class LauncherFrameFlat extends JFrame {
                 if (value instanceof Instance) {
                     Instance i = (Instance) value;
                     String version = instancesModel.versionLabelOf(i);
+                    // «музей» Vanilla (16.11.2026) без «Minecraft»: «Pre-classic rd-20090515» і так довге, а з префіксом
+                    // поле версії розпирало під кнопку запуску
+                    String mc = com.gummer.launcher.vanilla.VanillaVersions.museumIndex(i) >= 0 ? "" : "Minecraft ";
                     // 1.32: стан видно не лише текстом. Встановлено - зелена крапка і білий текст, є оновлення - жовта,
                     // не встановлено - порожнє коло і приглушений текст; найновіша - синя позначка
                     boolean installed = i.isLocal() && i.isInstalled();
@@ -606,14 +621,14 @@ public class LauncherFrameFlat extends JFrame {
                     String dot = "<span style=\"color:" + dotColor + "\">" + (installed ? "●" : "○") + "</span>&nbsp;";
                     if (index < 0) {
                         // закритий список: позначка і версія
-                        text = "<html>" + dot + "Minecraft " + SwingHelper.htmlEscape(version) + "</html>";
+                        text = "<html><nobr>" + dot + mc + SwingHelper.htmlEscape(version) + "</nobr></html>";
                     } else {
                         String status = !installed ? tr("launcher.versionNotInstalled")
                                 : i.isUpdatePending() ? tr("launcher.versionUpdate") : tr("launcher.versionInstalled");
                         String statusColor = !installed ? "#8a8f98" : dotColor;
                         String newest = index == 0 ? "&nbsp;&nbsp;<span style=\"color:#5aa9ff;font-size:11\">"
                                 + SwingHelper.htmlEscape(tr("launcher.versionNewest")) + "</span>" : "";
-                        text = "<html>" + dot + "<b" + (installed ? "" : " style=\"color:#b4b8bf\"") + ">Minecraft "
+                        text = "<html>" + dot + "<b" + (installed ? "" : " style=\"color:#b4b8bf\"") + ">" + mc
                                 + SwingHelper.htmlEscape(version) + "</b>&nbsp;&nbsp;<span style=\"color:" + statusColor + ";font-size:11\">"
                                 + SwingHelper.htmlEscape(status) + "</span>" + newest + "</html>";
                     }
@@ -623,6 +638,16 @@ public class LauncherFrameFlat extends JFrame {
                     // у відкритому списку шрифт менший, ніж у самому полі (18), щоб влазив стан версії
                     c.setFont(c.getFont().deriveFont(Font.BOLD, 14f));
                     ((JComponent) c).setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+                } else if (versionBox.getWidth() > 0) {
+                    // закрите поле (16.11.2026): довга назва («Pre-classic rd-20090515») при 18 не влазить і
+                    // переносилась на два рядки; зменшуємо шрифт, доки не влізе (не менше 13)
+                    int room = versionBox.getWidth() - 44; // мінус стрілка і відступи поля
+                    float size = 18f;
+                    c.setFont(c.getFont().deriveFont(Font.BOLD, size));
+                    while (c.getPreferredSize().width > room && size > 13f) {
+                        size -= 1f;
+                        c.setFont(c.getFont().deriveFont(Font.BOLD, size));
+                    }
                 }
                 return c;
             }
@@ -633,11 +658,7 @@ public class LauncherFrameFlat extends JFrame {
             Instance chosen = (Instance) versionBox.getSelectedItem();
             Instance shown = getSelectedInstance();
             if (chosen == null || chosen == shown) return;
-            instancesModel.chooseInGroup(chosen);
-            launcher.getConfig().setLastInstance(chosen.getName());
-            com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
-            instancesTable.clearSelection(); // щоб вибір рядка спрацював заново (фон, кнопки збірки)
-            instancesModel.update();         // tableChanged -> selectRememberedInstance -> рядок групи з новою версією
+            showPack(chosen);
         });
         instancesTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
@@ -661,6 +682,28 @@ public class LauncherFrameFlat extends JFrame {
             @Override
             protected javax.swing.plaf.basic.ComboPopup createPopup() {
                 return new FlatComboPopup(comboBox) {
+                    {
+                        // 16.11.2026: поки список закритий, рядки не міряються. Інакше кожна зміна групи (і вибір
+                        // версії) рендерила всі HTML-рядки (Vanilla з музеєм: 164) ще до відкриття. Розміри задає show().
+                        list.setFixedCellWidth(1);
+                        list.setFixedCellHeight(1);
+                    }
+
+                    @Override
+                    @SuppressWarnings({"unchecked", "rawtypes"})
+                    public void show() {
+                        int w = 1, h = 1;
+                        ListCellRenderer r = list.getCellRenderer();
+                        for (int k = 0; k < list.getModel().getSize(); k++) {
+                            Dimension d = r.getListCellRendererComponent(list, list.getModel().getElementAt(k), k, false, false).getPreferredSize();
+                            w = Math.max(w, d.width);
+                            h = Math.max(h, d.height);
+                        }
+                        list.setFixedCellWidth(w);
+                        list.setFixedCellHeight(h);
+                        super.show();
+                    }
+
                     @Override
                     protected Rectangle computePopupBounds(int px, int py, int pw, int ph) {
                         // ширина рядків (рендерер з індексом >= 0: версія, стан, «найновіша») + рамки списку;
@@ -680,7 +723,10 @@ public class LauncherFrameFlat extends JFrame {
                         if (comboBox.getItemCount() > comboBox.getMaximumRowCount()) {
                             need += scroller.getVerticalScrollBar().getPreferredSize().width;
                         }
-                        return super.computePopupBounds(px, py, Math.max(pw, need), ph);
+                        // 16.11.2026: ширший за поле список росте ліворуч, а не праворуч: праворуч кнопка запуску
+                        // (Liquid Glass, Класика) чи край вікна (Бібліотека), і список її перекривав
+                        int w = Math.max(pw, need);
+                        return super.computePopupBounds(px - (w - pw), py, w, ph);
                     }
                 };
             }
@@ -693,11 +739,20 @@ public class LauncherFrameFlat extends JFrame {
         java.util.List<Instance> members = instancesModel.getGroupMembers(shown);
         updatingVersionBox = true;
         try {
-            versionBox.removeAllItems();
+            // 16.11.2026: список версій міняється лише коли змінилась група, і одним махом (setModel). Раніше
+            // removeAllItems + addItem по одній: після кожної Swing перемірював усі рядки (HTML), з музеєм Vanilla
+            // (164 версії) це ~500 рендерів на кожну зміну версії.
+            java.util.List<Instance> items = members.size() >= 2 ? members : java.util.Collections.<Instance>emptyList();
+            boolean same = versionBox.getItemCount() == items.size();
+            for (int k = 0; same && k < items.size(); k++) {
+                same = versionBox.getItemAt(k) == items.get(k);
+            }
+            if (!same) {
+                // закрите поле міряє лише поточну версію, а не всі (16.11.2026, швидкість переходу на Vanilla)
+                versionBox.setPrototypeDisplayValue(items.isEmpty() ? null : shown);
+                versionBox.setModel(new DefaultComboBoxModel<Instance>(items.toArray(new Instance[0])));
+            }
             if (members.size() >= 2) {
-                for (Instance m : members) {
-                    versionBox.addItem(m);
-                }
                 versionBox.setSelectedItem(shown);
             }
             versionPanel.setVisible(members.size() >= 2);
@@ -795,11 +850,36 @@ public class LauncherFrameFlat extends JFrame {
 
     /** Вибрати пак у списку (для групи: цю версію в групі). */
     private void selectPack(Instance target) {
+        showPack(target);
+    }
+
+    /**
+     * Показати пак (для групи: цю версію в рядку групи) і вибрати його рядок. До 16.11.2026 тут були clearSelection і
+     * повне update(), а новий вибір ставився лише в наступному кроці EDT (tableChanged -> invokeLater): між ними
+     * вікно встигало намалюватись без вибраної збірки, і при кожній зміні версії миготіли список зліва, вибір версії
+     * та фон. Тепер рядки лише оновлюються (вибір не знімається), а вибір переставляється за один крок: слухачі
+     * отримують одну подію вже з новою версією.
+     */
+    private void showPack(Instance target) {
         instancesModel.chooseInGroup(target);
         launcher.getConfig().setLastInstance(target.getName());
         com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
-        instancesTable.clearSelection();
-        instancesModel.update(); // tableChanged -> selectRememberedInstance
+        instancesModel.refreshChoice();
+        int row = instancesModel.rowOf(target.getName());
+        if (row < 0) { // пака немає в списку (фільтр): як раніше
+            instancesTable.clearSelection();
+            instancesModel.update(); // tableChanged -> selectRememberedInstance
+            return;
+        }
+        ListSelectionModel sm = instancesTable.getSelectionModel();
+        sm.setValueIsAdjusting(true);
+        try {
+            instancesTable.clearSelection();
+            instancesTable.setRowSelectionInterval(row, row);
+        } finally {
+            sm.setValueIsAdjusting(false); // одна подія для слухачів: фон, вибір версії, рядок стану
+        }
+        instancesTable.scrollRectToVisible(instancesTable.getCellRect(row, 0, true));
     }
 
     /** Текст для Vanilla і Fabric («версія»), якщо є, інакше звичайний («модпак»). */
@@ -861,11 +941,19 @@ public class LauncherFrameFlat extends JFrame {
             onlineLabel.setText("● " + tr("launcher.onlineUnavailable"));
             onlineLabel.setForeground(new Color(0xB0, 0xB0, 0xB0));
             onlineLabel.setVisible(true);
+        } else if (show) {
+            // 16.11.2026: поки пінг не повернувся, місце під рядок уже зайняте (раніше він з'являвся і все зсувалось)
+            onlineLabel.setText("● " + tr("launcher.onlineChecking"));
+            onlineLabel.setForeground(new Color(0xB0, 0xB0, 0xB0));
+            onlineLabel.setVisible(true);
         } else {
             onlineLabel.setVisible(false);
         }
         if (pillPanel != null) {
             pillPanel.setVisible(show);
+            // 1.35: перерахувати і рядок, інакше довший текст онлайну обрізався («онлай…»)
+            Container row = pillPanel.getParent();
+            if (row != null) row.revalidate();
             pillPanel.revalidate();
             pillPanel.repaint();
         }
@@ -1433,18 +1521,64 @@ public class LauncherFrameFlat extends JFrame {
         future.addListener(new Runnable() {
             @Override
             public void run() {
-                instancesModel.update();
-                if (instancesTable.getRowCount() > 0) {
-                    selectRememberedInstance();
-                }
-                requestFocus();
-                startOnlinePolling();
-                loadNews();
+                instancesReady();
             }
         }, SwingExecutor.INSTANCE);
 
         ProgressDialog.showProgress(this, future, SharedLocale.tr("launcher.checkingTitle"), SharedLocale.tr("launcher.checkingStatus"));
         SwingHelper.addErrorDialogCallback(this, future);
+    }
+
+    /** Список збірок готовий (після завантаження або одразу при перемиканні вигляду): показати і вибрати. */
+    private void instancesReady() {
+        instancesModel.update();
+        if (instancesTable.getRowCount() > 0) {
+            selectRememberedInstance();
+        }
+        requestFocus();
+        startOnlinePolling();
+        loadNews();
+    }
+
+    /** Швидкий перший показ: список збірок лише з кешів на диску (мілісекунди, без мережі). false - кешу немає. */
+    private boolean loadInstancesFromCache() {
+        try {
+            launcher.getInstances().createEnumerator(true).call();
+            return launcher.getInstances().size() > 0;
+        } catch (Exception e) {
+            log.log(java.util.logging.Level.INFO, "No cached instance list yet, loading from the network", e);
+            return false;
+        }
+    }
+
+    /** Справжній список з мережі у фоні, без діалогу; вибрана збірка лишається вибраною (одна подія EDT, без мигання). */
+    private void refreshInstancesQuietly() {
+        com.skcraft.launcher.InstanceList.Enumerator loader = launcher.getInstances().createEnumerator();
+        ObservableFuture<InstanceList> future = new ObservableFuture<InstanceList>(launcher.getExecutor().submit(loader), loader);
+        future.addListener(() -> {
+            Instance current = getSelectedInstance();
+            String keep = current != null ? current.getName() : null;
+        instancesModel.update();
+        if (instancesTable.getRowCount() > 0) {
+            reselect(keep);
+        }
+        }, SwingExecutor.INSTANCE);
+    }
+
+    /** Знову вибрати збірку на ім'я (або запам'ятовану), не записуючи це як вибір гравця. */
+    private void reselect(String name) {
+        int row = name != null ? instancesModel.rowOf(name) : -1;
+        if (row < 0) {
+            selectRememberedInstance();
+            return;
+        }
+        restoringSelection = true;
+        try {
+            instancesTable.setRowSelectionInterval(row, row);
+        } finally {
+            restoringSelection = false;
+        }
+        refreshVersionBox();
     }
 
     private void showOptions() {

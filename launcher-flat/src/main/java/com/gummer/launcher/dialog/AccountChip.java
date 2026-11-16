@@ -134,8 +134,7 @@ final class AccountChip extends JPanel {
         // та сама темна напівпрозора підкладка, що в блоку «Версія Minecraft»
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setColor(new Color(0, 0, 0, hover ? 190 : 150));
-        g2.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
+        SkinChip.paintGlassChip(g2, this, hover); // дизайн 1.35: як у «Змінити скін»
         g2.dispose();
         super.paintComponent(g);
     }

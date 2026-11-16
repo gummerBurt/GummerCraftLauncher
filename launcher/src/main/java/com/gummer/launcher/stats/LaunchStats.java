@@ -67,8 +67,19 @@ public final class LaunchStats {
 
     /** Адреса події або null, якщо надсилати не треба (вимкнено гравцем, не задано адресу, чужий хост). */
     static URL buildUrl(Launcher launcher, Instance instance) {
+        if (instance == null) {
+            return null;
+        }
+        return eventUrl(launcher, "e=launch&p=" + packOf(instance));
+    }
+
+    /**
+     * 16.11.2026: спільна адреса для анонімних подій ({@code launch}, {@code dl}): база з {@code launchStatsUrl},
+     * параметри query і анонімний ID. null, якщо гравець вимкнув статистику, адреси немає або хост не наш.
+     */
+    static URL eventUrl(Launcher launcher, String query) {
         String base = launcher.getProperties().getProperty("launchStatsUrl");
-        if (base == null || base.trim().isEmpty() || instance == null) {
+        if (base == null || base.trim().isEmpty()) {
             return null;
         }
         File baseDir = launcher.getBaseDir();
@@ -80,7 +91,7 @@ public final class LaunchStats {
             return null;
         }
         StringBuilder sb = new StringBuilder(url.toString());
-        sb.append(url.getQuery() != null ? '&' : '?').append("e=launch&p=").append(packOf(instance));
+        sb.append(url.getQuery() != null ? '&' : '?').append(query);
         String id = InstallId.get(baseDir);
         if (id != null) {
             sb.append("&i=").append(id);
@@ -106,7 +117,7 @@ public final class LaunchStats {
         return OTHER;
     }
 
-    private static boolean isOurHost(URL url) {
+    static boolean isOurHost(URL url) {
         if (url == null || url.getHost() == null) {
             return false;
         }
@@ -114,7 +125,7 @@ public final class LaunchStats {
         return host.equals("gummercraft.fun") || host.endsWith(".gummercraft.fun");
     }
 
-    private static void send(URL url) {
+    static void send(URL url) {
         HttpRequest request = null;
         try {
             request = HttpRequest.get(url);

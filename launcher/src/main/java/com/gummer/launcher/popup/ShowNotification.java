@@ -12,6 +12,8 @@ public class ShowNotification {
 
     // with translated title
     public static void showNotification(Frame frame, Class<?> clazz, Notification.Type type, String message, String title) {
+        com.gummer.launcher.ui.UiHooks.Toast hook = com.gummer.launcher.ui.UiHooks.toast;
+        if (hook != null && hook.show(frame, type, message, title)) return; // 16.11.2026: у стилі вигляду
         Notification panel;
         try {
             panel = new Notification(
@@ -29,6 +31,8 @@ public class ShowNotification {
 
     // with default title
     public static void showNotification(Frame frame, Class<?> clazz, Notification.Type type, String message) {
+        com.gummer.launcher.ui.UiHooks.Toast hook = com.gummer.launcher.ui.UiHooks.toast;
+        if (hook != null && hook.show(frame, type, message, null)) return; // 16.11.2026: у стилі вигляду
         Notification panel;
         try {
             panel = new Notification(

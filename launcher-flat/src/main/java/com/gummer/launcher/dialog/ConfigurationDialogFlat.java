@@ -7,6 +7,9 @@ package com.gummer.launcher.dialog;
 import com.formdev.flatlaf.util.SystemInfo;
 import com.gummer.launcher.i18n.I18n;
 import com.gummer.launcher.i18n.Lang;
+import com.gummer.launcher.look.LookTheme;
+import com.gummer.launcher.look.LookUi;
+import net.miginfocom.swing.MigLayout;
 import com.gummer.launcher.popup.Notification;
 import com.gummer.launcher.shared.BootstrapConfig;
 import com.gummer.launcher.swing.SwingExtras;
@@ -124,7 +127,7 @@ public class ConfigurationDialogFlat extends JDialog {
      * @param owner the window owner
      * @param launcher the launcher
      */
-    public ConfigurationDialogFlat(Window owner, @NonNull Launcher launcher, LauncherFrameFlat window) {
+    public ConfigurationDialogFlat(Window owner, @NonNull Launcher launcher, JFrame window) {
         super(owner, ModalityType.DOCUMENT_MODAL);
 
         this.launcher = launcher;
@@ -149,12 +152,12 @@ public class ConfigurationDialogFlat extends JDialog {
         setTitle(SharedLocale.tr("options.title"));
         initComponents(); // Must be called after jvmRuntime model setup
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        if( SystemInfo.isMacOS ) {
-            setSize(new Dimension(430, 560));
-        } else {
-            setSize(new Dimension(400, 560));
-        }
-        setResizable(false);
+        // 16.11.2026: під розмір екрана (на малому екрані і з масштабом Windows старе 400x560 обрізалось), розтягується
+        Dimension size = LookTheme.fitToScreen(this, 760, 560, 560, 420);
+        setSize(size);
+        setMinimumSize(new Dimension(Math.min(560, size.width), Math.min(420, size.height)));
+        setResizable(true);
+        LookUi.decorate(this, owner);
         setLocationRelativeTo(owner);
 
         mapper.map(jvmArgsText, "jvmArgs");
@@ -180,36 +183,18 @@ public class ConfigurationDialogFlat extends JDialog {
         mapper.copyFromObject();
     }
 
+    /**
+     * 16.11.2026: нова розкладка. Раніше вкладки (на малому екрані і з масштабом Windows переносились у два ряди)
+     * у вікні 400x560 без прокрутки, текст обрізався. Тепер навігація ліворуч, розділи картками з прокруткою,
+     * вікно під розмір екрана і розтягується, стиль свій для кожного вигляду (look.LookTheme). Поля, зв'язки з
+     * налаштуваннями (mapper) і дії ті самі.
+     */
     private void initComponents() {
-        // style components
-        logButton.putClientProperty("FlatLaf.styleClass", "small");
-        okButton.putClientProperty("FlatLaf.styleClass", "large");
-        cancelButton.putClientProperty("FlatLaf.styleClass", "large");
+        LookTheme.Palette pal = LookTheme.palette();
 
-        installDirDescInfo.putClientProperty("FlatLaf.styleClass", "large");
-        //consoleUseColorsCheck.putClientProperty("FlatLaf.styleClass", "large");
-        //showConsoleCheck.putClientProperty("FlatLaf.styleClass", "large");
-        //showLauncherConsoleCheck.putClientProperty("FlatLaf.styleClass", "large");
-        bitsWarn.putClientProperty("FlatLaf.styleClass", "large");
-        devBetaDesc.putClientProperty("FlatLaf.styleClass", "large");
-
-        //langChangeRestartInfo.putClientProperty("FlatLaf.styleClass", "medium");
-        //installDirDesc2Info.putClientProperty("FlatLaf.styleClass", "medium");
-
-        homedirTitleLabel.putClientProperty("FlatLaf.styleClass", "h2");
-        consoleTitle.putClientProperty("FlatLaf.styleClass", "h2");
-        langTitle.putClientProperty("FlatLaf.styleClass", "h2");
-        jvmTitleLabel.putClientProperty("FlatLaf.styleClass", "h2");
-        memlimitTitleLabel.putClientProperty("FlatLaf.styleClass", "h2");
-        devTitleLabel.putClientProperty("FlatLaf.styleClass", "h2");
-        buildInfoTitle.putClientProperty("FlatLaf.styleClass", "h2");
-
-        memorySlider.putClientProperty("FlatLaf.styleClass", "large");
-
-        // init lang selector
+        // мова
         JComboBox<Lang> languageSelector = new JComboBox<>(Lang.values());
-        languageSelector.setSelectedItem(Lang.getFromName(launcher.getConfig().getLang())); // setting the selected lang
-
+        languageSelector.setSelectedItem(Lang.getFromName(launcher.getConfig().getLang()));
         languageSelector.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index,
@@ -217,266 +202,151 @@ public class ConfigurationDialogFlat extends JDialog {
                 JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 if (value instanceof Lang) {
                     Lang langValue = (Lang) value;
-                    // Format the text as desired
                     label.setText(" " + langValue.getName() + "  " + langValue.getTranslataor());
-                    // Get the flag icon from our mapping
                     label.setIcon(flagIcons.get(langValue));
                 }
-                label.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 25));
+                label.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 16));
                 return label;
             }
         });
 
-        // populate build info
         Properties launcherProps = launcher.getProperties();
-        final JLabel buildVersion = new JLabel(launcherProps.getProperty("version", "N/A"));
-        final JLabel pipelineId = new JLabel(launcherProps.getProperty("pipelineId", "N/A"));
-        final JLabel branch = new JLabel(launcherProps.getProperty("branch", "N/A"));
-        final JLabel commit = new JLabel(launcherProps.getProperty("commit", "N/A"));
-        final JLabel targetJvm = new JLabel(launcherProps.getProperty("targetJvm", "N/A"));
 
-        //
-        // generalSettingsPanel
-        //
+        // ---------------------------------------------------------- Загальні
+        JPanel general = page();
+        JPanel lookCard = section(SharedLocale.tr("settings.look.title"), SharedLocale.tr("settings.look.desc"));
+        lookCard.add(createLookBox(), "growx 0, gaptop 6");
+        general.add(lookCard);
 
-        // homedir
-        generalSettingsPanel.addRow(homedirTitleLabel);
-        generalSettingsPanel.addRow(installDirDescInfo);
-        generalSettingsPanel.addRow(Box.createVerticalStrut(1));
-        installDirText.putClientProperty( FlatClientProperties.TEXT_FIELD_TRAILING_ICON, folderIcon);
-        generalSettingsPanel.addRow(installDirText);
-        //generalSettingsPanel.addRow(Box.createVerticalStrut(1));
-        generalSettingsPanel.addRow(installDirDesc2Info);
+        JPanel langCard = section(SharedLocale.tr("settings.lang.title"), SharedLocale.tr("settings.lang.desc"));
+        langCard.add(languageSelector, "growx 0, gaptop 6");
+        general.add(langCard);
 
-        generalSettingsPanel.addRow(Box.createVerticalStrut(21));
+        JPanel dirCard = section(SharedLocale.tr("settings.dir.title"), SharedLocale.tr("settings.dir.desc"));
+        installDirText.putClientProperty(FlatClientProperties.TEXT_FIELD_TRAILING_ICON, folderIcon);
+        installDirText.setEditable(false);
+        installDirText.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        installDirText.setToolTipText(SharedLocale.tr("settings.dir.change"));
+        dirCard.add(installDirText, "gaptop 6, h 34!, wmin 0");
+        dirCard.add(LookUi.body(SharedLocale.tr("options.installDirDesc2"), true), "gaptop 4, wmin 0");
+        general.add(dirCard);
 
-        // console params
-        // Create a panel just for the label and style it
-        JPanel consoleTitlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        consoleTitlePanel.add(consoleTitle);
-        consoleTitlePanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-
-        // Then create another panel for the button
-        JPanel consoleButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        consoleButtonPanel.add(logButton);
-        consoleButtonPanel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
-        consoleButtonPanel.setToolTipText(SharedLocale.tr("tooltip.launcherConsole"));
-
-        // And add both panels to a parent container (with an appropriate layout)
-        JPanel consoleTitleLabel = new JPanel(new BorderLayout());
-        consoleTitleLabel.add(consoleTitlePanel, BorderLayout.WEST);
-        consoleTitleLabel.add(consoleButtonPanel, BorderLayout.EAST);
-        consoleTitleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-
-        // remove extra padding
-        consoleUseColorsCheck.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 0));
-        enableDebugCheck.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 0));
-        showLauncherConsoleCheck.setBorder(BorderFactory.createEmptyBorder(2, 4, 0, 0));
-        showConsoleCheck.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 0));
-
-        // add panel for console label + button
-        generalSettingsPanel.addRow(consoleTitleLabel);
-        generalSettingsPanel.addRow(showLauncherConsoleCheck);
-        generalSettingsPanel.addRow(showConsoleCheck);
-        //generalSettingsPanel.addRow(consoleUseColorsCheck);
-        generalSettingsPanel.addRow(enableDebugCheck);
-
-        generalSettingsPanel.addRow(Box.createVerticalStrut(21));
-
-        // language
-        // Create a panel just for the label and style it
-        JPanel langTitlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        langTitlePanel.add(langTitle);
-        langTitlePanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-
-        // Then create another panel for the button
-        JPanel langSelectorPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        langSelectorPanel.add(languageSelector);
-        langSelectorPanel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
-
-        // And add both panels to a parent container (with an appropriate layout)
-        JPanel langTitleLabel = new JPanel(new BorderLayout());
-        langTitleLabel.add(langTitlePanel, BorderLayout.WEST);
-        langTitleLabel.add(langSelectorPanel, BorderLayout.EAST);
-        langTitleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-
-        // add titile + dropdown to panel
-        generalSettingsPanel.addRow(langTitleLabel);
-
-        // add restart notice label
-        langChangeRestartInfo.setHorizontalAlignment(SwingConstants.CENTER);
-        JPanel langChangeRestartInfoPanel = new JPanel(new BorderLayout());
-        langChangeRestartInfoPanel.add(langChangeRestartInfo, BorderLayout.CENTER);
-        langChangeRestartInfoPanel.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
-        langChangeRestartInfo.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-        //generalSettingsPanel.addRow(langChangeRestartInfoPanel);
-
-        SwingHelper.removeOpaqueness(generalSettingsPanel);
-        SwingExtras.addTabWidthMode(
-            tabbedPane,
-            generalTabTitle,
-            TABBED_PANE_TAB_WIDTH_MODE_EQUAL,
-            //settingsIcon,
-            SwingHelper.alignTabbedPane(generalSettingsPanel)
-        );
-
-        //
-        // javaSettingsPanel
-        //
-
-
-        javaSettingsPanel.addRow(jvmTitleLabel);
-        javaSettingsPanel.addRow(Box.createVerticalStrut(3));
-        jvmArgsText.putClientProperty("JTextField.placeholderText", SharedLocale.tr("options.automaticPlaceholder"));
-        enforceRuntimeCheck.setBorder(BorderFactory.createEmptyBorder(3, 0, 0, 0));
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.jvmPath")), jvmRuntime);
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.jvmArguments")), jvmArgsText);
-        javaSettingsPanel.addRow(enforceRuntimeCheck);
-
-
-        javaSettingsPanel.addRow(Box.createVerticalStrut(15));
-
-        javaSettingsPanel.addRow(memlimitTitleLabel);
-        // add memory slider to window
-        javaSettingsPanel.addRow(minMemorySpinner);
-        javaSettingsPanel.addRow(maxMemorySpinner);
+        // ---------------------------------------------------------- Java і пам'ять
+        JPanel java = page();
+        JPanel memCard = section(SharedLocale.tr("settings.memory.title"), SharedLocale.tr("settings.memory.desc"));
         minMemorySpinner.setVisible(false);
         maxMemorySpinner.setVisible(false);
-        javaSettingsPanel.addRow(Box.createVerticalStrut(3));
         SwingExtras.configureMemorySlider(memorySlider, minMemorySpinner, maxMemorySpinner);
-        javaSettingsPanel.addRow(memorySlider);
-        javaSettingsPanel.addRow(Box.createVerticalStrut(5));
-        javaSettingsPanel.addRow(bitsWarn);
+        memorySlider.setOpaque(false);
+        memCard.add(memorySlider, "gaptop 6, wmin 0");
+        memCard.add(minMemorySpinner, "hidemode 3");
+        memCard.add(maxMemorySpinner, "hidemode 3");
+        memCard.add(LookUi.body(SharedLocale.tr("options.64BitJavaWarning"), true), "gaptop 2, wmin 0");
+        java.add(memCard);
 
-        SwingHelper.removeOpaqueness(javaSettingsPanel);
-        SwingExtras.addTabWidthMode(
-            tabbedPane,
-            jvmTabTitle,
-            TABBED_PANE_TAB_WIDTH_MODE_EQUAL,
-            //javaIcon,
-            SwingHelper.alignTabbedPane(javaSettingsPanel)
-        );
+        JPanel jvmCard = section(SharedLocale.tr("settings.java.title"), SharedLocale.tr("settings.java.desc"));
+        JPanel jvmGrid = new JPanel(new MigLayout("insets 0, gap 12 8, fillx", "[][grow,fill]", ""));
+        jvmGrid.setOpaque(false);
+        jvmGrid.add(label(SharedLocale.tr("settings.java.runtime")));
+        jvmGrid.add(jvmRuntime, "wmin 0, wrap");
+        jvmArgsText.putClientProperty("JTextField.placeholderText", SharedLocale.tr("options.automaticPlaceholder"));
+        jvmGrid.add(label(SharedLocale.tr("settings.java.args")));
+        jvmGrid.add(jvmArgsText, "wmin 0, h 32!, wrap");
+        jvmCard.add(jvmGrid, "gaptop 6, wmin 0");
+        enforceRuntimeCheck.setOpaque(false);
+        jvmCard.add(enforceRuntimeCheck, "gaptop 4");
+        java.add(jvmCard);
 
-        //
-        // gameSettingsPanel
-        //
+        // ---------------------------------------------------------- Додатково
+        JPanel adv = page();
+        JPanel consoleCard = section(SharedLocale.tr("settings.console.title"), null);
+        logButton.setText(SharedLocale.tr("settings.console.open"));
+        logButton.setToolTipText(SharedLocale.tr("tooltip.launcherConsole"));
+        logButton.putClientProperty("FlatLaf.styleClass", null);
+        LookUi.secondary(logButton);
+        for (JCheckBox c : new JCheckBox[]{showLauncherConsoleCheck, showConsoleCheck, enableDebugCheck}) {
+            c.setOpaque(false);
+            consoleCard.add(c, "gaptop 2, wmin 0");
+        }
+        consoleCard.add(logButton, "growx 0, gaptop 8");
+        adv.add(consoleCard);
 
-        gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowWidth")), widthSpinner);
-        gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowHeight")), heightSpinner);
-
-        SwingHelper.removeOpaqueness(gameSettingsPanel);
-        // hide game tab
-        //tabbedPane.addTab(SharedLocale.tr("options.minecraftTab"), SwingHelper.alignTabbedPane(gameSettingsPanel));
-
-        //
-        // proxySettingsPanel
-        //
-
-        proxySettingsPanel.addRow(useProxyCheck);
-        proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyHost")), proxyHostText);
-        proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyPort")), proxyPortText);
-        proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyUsername")), proxyUsernameText);
-        proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyPassword")), proxyPasswordText);
-
-        SwingHelper.removeOpaqueness(proxySettingsPanel);
-        // hide proxy tab
-        // tabbedPane.addTab(SharedLocale.tr("options.proxyTab"), SwingHelper.alignTabbedPane(proxySettingsPanel));
-
-        //
-        // advancedPanel
-        //
-
-        advancedPanel.addRow(devTitleLabel);
-        advancedPanel.addRow(devBetaDesc);
-        //gameKeyText.setLineWrap(true);
-        //gameKeyText.setWrapStyleWord(true);
+        JPanel betaCard = section(SharedLocale.tr("settings.beta.title"), SharedLocale.tr("options.devBetaDesc"));
         gameKeyText.setEditable(true);
         gameKeyText.putClientProperty("JTextField.placeholderText", SharedLocale.tr("options.devBetaPlaceholder"));
-        advancedPanel.addRow(gameKeyText);
+        betaCard.add(gameKeyText, "gaptop 6, h 32!, wmin 0");
+        adv.add(betaCard);
 
-        advancedPanel.addRow(Box.createVerticalStrut(20));
-
-        // build info
-        advancedPanel.addRow(buildInfoTitle);
-        advancedPanel.addRow(Box.createVerticalStrut(5),0,0,0,0);
-        advancedPanel.addRow(
-            buidInfoVersion, buildVersion,
-            0,5,2,3
-        );
-        advancedPanel.addRow(
-            buidInfoPipeline, pipelineId,
-            0,5,2,3
-        );
-        advancedPanel.addRow(
-            buidInfoCommit, commit,
-            0,5,2,3
-        );
-        advancedPanel.addRow(
-            buidInfoBranch, branch,
-            0,5,2,3
-        );
+        JPanel aboutCard = section(SharedLocale.tr("settings.about.title"), null);
+        JPanel about = new JPanel(new MigLayout("insets 0, gap 16 4, fillx", "[][grow,fill]", ""));
+        about.setOpaque(false);
+        aboutRow(about, SharedLocale.tr("options.buidinfo.version"), launcherProps.getProperty("version", "N/A"));
+        aboutRow(about, SharedLocale.tr("options.buidinfo.commit"), launcherProps.getProperty("commit", "N/A"));
+        aboutRow(about, SharedLocale.tr("options.buidinfo.branch"), launcherProps.getProperty("branch", "N/A"));
+        aboutRow(about, SharedLocale.tr("options.buidinfo.pipeline"), launcherProps.getProperty("pipelineId", "N/A"));
         int runtimeCount = jvmRuntime.getItemCount();
         for (int i = 0; i < runtimeCount - 1; i++) {
-            JavaRuntime runtime = jvmRuntime.getItemAt(i);
-
-            JLabel runtimeLabel = new JLabel(runtime.toString());
-            runtimeLabel.putClientProperty("FlatLaf.styleClass", "small");
-
-            if(i == 0) {
-                advancedPanel.addRow(buidInfoJvm, runtimeLabel, 0, 5, 2, 3);
-            } else {
-                advancedPanel.addRow(new JLabel(""), runtimeLabel, 0, 5, 2, 3);
-            }
+            aboutRow(about, i == 0 ? SharedLocale.tr("options.buidinfo.jvm") : "", String.valueOf(jvmRuntime.getItemAt(i)));
         }
+        aboutCard.add(about, "gaptop 4, wmin 0");
+        adv.add(aboutCard);
 
-        SwingHelper.removeOpaqueness(advancedPanel);
-        SwingExtras.addTabWidthMode(
-            tabbedPane,
-            advancedTabTitle,
-            TABBED_PANE_TAB_WIDTH_MODE_EQUAL,
-            //invaderIcon,
-            SwingHelper.alignTabbedPane(advancedPanel)
-        );
+        // ---------------------------------------------------------- каркас
+        final CardLayout pages = new CardLayout();
+        final JPanel pageHost = new JPanel(pages);
+        pageHost.setOpaque(false);
+        pageHost.add(scroll(general), "0");
+        pageHost.add(scroll(java), "1");
+        pageHost.add(scroll(adv), "2");
+        LookUi.Nav nav = new LookUi.Nav(new String[]{SharedLocale.tr("settings.nav.general"),
+                SharedLocale.tr("settings.nav.java"), SharedLocale.tr("settings.nav.advanced")},
+                i -> pages.show(pageHost, String.valueOf(i)));
 
+        JPanel body = new JPanel(new MigLayout("insets 14 14 0 14, gap 14 0, fill", "[170!][grow,fill]", "[grow,fill]"));
+        body.setOpaque(false);
+        JPanel navCol = new JPanel(new MigLayout("insets 0, wrap 1, fillx", "[grow,fill]", "[]push[]"));
+        navCol.setOpaque(false);
+        navCol.add(nav, "growx");
+        JLabel version = new JLabel(launcher.getVersion());
+        version.setFont(version.getFont().deriveFont(11.5f));
+        version.setForeground(pal.text3);
+        navCol.add(version, "gapleft 14, gapbottom 4");
+        body.add(navCol, "grow");
+        body.add(pageHost, "grow, wmin 0");
 
-        //
-        // window buttons
-        //
+        okButton.setText(SharedLocale.tr("settings.save"));
+        cancelButton.setText(SharedLocale.tr("settings.cancel"));
+        okButton.putClientProperty("FlatLaf.styleClass", null);
+        cancelButton.putClientProperty("FlatLaf.styleClass", null);
+        LookUi.primary(okButton);
+        LookUi.secondary(cancelButton);
+        buttonsPanel.setLayout(new MigLayout("insets 12 16 14 16, gap 8", "push[][]", "[34!]"));
+        buttonsPanel.setOpaque(false);
+        buttonsPanel.add(cancelButton, "w 120!");
+        buttonsPanel.add(okButton, "w 140!");
+        getRootPane().setDefaultButton(okButton);
 
-        //buttonsPanel.addElement(logButton);
-
-        buttonsPanel.add(cancelButton, BorderLayout.WEST);
-        buttonsPanel.add(okButton, BorderLayout.EAST);
-        buttonsPanel.setBorder(BorderFactory.createEmptyBorder(0, 20, 17, 20));
-
-        tabContainer.add(tabbedPane, BorderLayout.CENTER);
-        tabContainer.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        add(tabContainer, BorderLayout.CENTER);
-        add(buttonsPanel, BorderLayout.SOUTH);
-
-        SwingHelper.equalWidth(okButton, cancelButton);
+        JPanel content = new JPanel(new BorderLayout());
+        content.setBackground(pal.bg);
+        content.add(body, BorderLayout.CENTER);
+        content.add(buttonsPanel, BorderLayout.SOUTH);
+        setContentPane(content);
+        nav.select(0);
 
         languageSelector.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 I18n.changeLang((Lang) Lang.values()[languageSelector.getSelectedIndex()], launcher);
-                //restartRequired("lang");
                 save();
                 SelfRestart.restartRequiredDialog(
                     ConfigurationDialogFlat.class,
                     SharedLocale.tr("options.needrestartforsuretitle"),
                     SharedLocale.tr("options.needrestartforsure")
                 );
-                //RestartRequiredDialog.show(ConfigurationDialogFlat.this);
             }
         });
 
-        logButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                ConsoleFrame.showMessagesColor(config.isConsoleUseColors());
-            }
-        });
+        logButton.addActionListener(e -> ConsoleFrame.showMessagesColor(config.isConsoleUseColors()));
 
         okButton.addActionListener(new ActionListener() {
             @Override
@@ -514,14 +384,12 @@ public class ConfigurationDialogFlat extends JDialog {
                         BootstrapConfig.get().setWorkingDirectory(fc.getSelectedFile());
                         BootstrapConfig.get().save();
                         installDirText.setText(BootstrapConfig.get().getWorkingDirectory().getAbsolutePath());
-                        //RestartRequiredDialog.show(ConfigurationDialogFlat.this);
                         save();
                         SelfRestart.restartRequiredDialog(
                             ConfigurationDialogFlat.class,
                             SharedLocale.tr("options.needrestartforsuretitle"),
                             SharedLocale.tr("options.needrestartforsure")
                         );
-                        //RestartRequiredDialog.show(ConfigurationDialogFlat.this);
                     }
                 });
                 fc.showDialog(ConfigurationDialogFlat.this, SharedLocale.tr("options.installDir.fileChooser.buttonAccept"));
@@ -551,9 +419,107 @@ public class ConfigurationDialogFlat extends JDialog {
         });
     }
 
+    /** Сторінка розділу: картки одна під одною. */
+    private static JPanel page() {
+        JPanel p = new JPanel(new MigLayout("insets 0 0 14 4, wrap 1, gap 0 12, fillx", "[grow,fill]", ""));
+        p.setOpaque(false);
+        return p;
+    }
+
+    private static JScrollPane scroll(JPanel page) {
+        // ширина сторінки йде за вікном, прокрутка лише вертикальна
+        JPanel track = new ScrollTrack(new BorderLayout());
+        track.setOpaque(false);
+        track.add(page, BorderLayout.NORTH);
+        JScrollPane sp = new JScrollPane(track, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.setOpaque(false);
+        sp.getViewport().setOpaque(false);
+        sp.getVerticalScrollBar().setUnitIncrement(18);
+        return sp;
+    }
+
+    /** Панель, що в прокрутці тягнеться по ширині (без горизонтальної прокрутки). */
+    private static final class ScrollTrack extends JPanel implements Scrollable {
+        ScrollTrack(LayoutManager l) {
+            super(l);
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle r, int o, int d) {
+            return 18;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle r, int o, int d) {
+            return r.height - 36;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
+    }
+
+    /** Картка розділу з заголовком і (необов'язково) поясненням. */
+    private static JPanel section(String title, String desc) {
+        JPanel c = LookUi.card("insets 16 18 16 18, wrap 1, gap 0 4, fillx", "[grow,fill]", "");
+        c.add(LookUi.title(title, 15f));
+        if (desc != null) c.add(LookUi.body(desc, false), "wmin 0");
+        return c;
+    }
+
+    private static JLabel label(String text) {
+        JLabel l = new JLabel(text);
+        l.setForeground(LookTheme.palette().text2);
+        return l;
+    }
+
+    private static void aboutRow(JPanel p, String key, String value) {
+        JLabel k = new JLabel(key);
+        k.setForeground(LookTheme.palette().text3);
+        k.setFont(k.getFont().deriveFont(12f));
+        JLabel v = new JLabel(value);
+        v.setForeground(LookTheme.palette().text2);
+        v.setFont(v.getFont().deriveFont(12f));
+        p.add(k);
+        p.add(v, "wmin 0, wrap");
+    }
+
     /**
-     * Save the configuration and close the dialog.
+     * Вибір вигляду лаунчера (16.11.2026): Liquid Glass, Класика, Бібліотека. Зміна зберігає налаштування
+     * (як вибір мови) і одразу перевідкриває головне вікно в новому вигляді, без перезапуску лаунчера.
      */
+    private JComboBox<String> createLookBox() {
+        final String[] ids = {com.gummer.launcher.FancyLauncher.LOOK_GLASS, com.gummer.launcher.FancyLauncher.LOOK_CLASSIC,
+                com.gummer.launcher.FancyLauncher.LOOK_LIBRARY};
+        final String[] names = {SharedLocale.tr("options.look.glass"), SharedLocale.tr("options.look.classic"),
+                SharedLocale.tr("options.look.library")};
+        final JComboBox<String> box = new JComboBox<>(names);
+        int current = java.util.Arrays.asList(ids).indexOf(config.getLauncherLook());
+        box.setSelectedIndex(current >= 0 ? current : 0);
+        box.setToolTipText(SharedLocale.tr("options.look.tooltip"));
+        box.addActionListener(e -> {
+            String chosen = ids[Math.max(0, box.getSelectedIndex())];
+            if (chosen.equals(config.getLauncherLook())) return;
+            config.setLauncherLook(chosen);
+            save(); // зберігає всі налаштування і закриває діалог
+            com.gummer.launcher.FancyLauncher.reopenLauncherWindow(launcher, LauncherFrameFlat.rootFrame);
+        });
+        return box;
+    }
+
     public void save() {
         mapper.copyFromSwing();
         config.setJavaRuntime((JavaRuntime) jvmRuntime.getSelectedItem());

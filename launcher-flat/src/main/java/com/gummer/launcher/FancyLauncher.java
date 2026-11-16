@@ -62,7 +62,8 @@ public class FancyLauncher {
                     enforceUIManagerDefaults();
 
                     launcher.setMainWindowSupplier(new CustomWindowSupplier(launcher));
-                    launcher.showLauncherWindow();
+                    Window first = launcher.showLauncherWindow();
+                    prewarmOptions(launcher, first);
 
                     // show launcher console if config option enabled
                     if (launcher.getConfig().isShowLauncherConsole()) {
@@ -70,8 +71,7 @@ public class FancyLauncher {
                     }
                 } catch (Throwable t) {
                     log.log(Level.WARNING, "Load failure", t);
-                    SwingHelper.showErrorDialog(null, "Uh oh! The updater couldn't be opened because a " +
-                            "problem was encountered.", "Launcher error", t);
+                    SwingHelper.showStartupError(t);
                 }
             }
         });
@@ -88,8 +88,65 @@ public class FancyLauncher {
         @SneakyThrows
         @Override
         public Window get() {
+            // 16.11.2026: вигляд головного вікна з налаштувань (Liquid Glass, Класика, Бібліотека). Вікно і так
+            // створюється наново після кожної гри, тож перемикач у налаштуваннях просто перевідкриває його.
+            String look = launcher.getConfig().getLauncherLook();
+            // 16.11.2026: свій стиль вікон і сповіщень для кожного вигляду (look.LookTheme, look.Toast)
+            com.gummer.launcher.look.LookTheme.apply(look);
+            com.gummer.launcher.ui.UiHooks.toast = com.gummer.launcher.look.Toast::show;
+            if (LOOK_CLASSIC.equals(look)) return new FlatLauncherFrame2(launcher);
+            if (LOOK_LIBRARY.equals(look)) return new FlatLauncherFrame3(launcher);
             return new FlatLauncherFrame(launcher);
         }
+    }
+
+    /** Значення {@code Configuration.launcherLook}. */
+    public static final String LOOK_GLASS = "glass", LOOK_CLASSIC = "classic", LOOK_LIBRARY = "library";
+
+    /** Закрити поточне головне вікно і відкрити нове (після зміни вигляду в налаштуваннях). */
+    public static void reopenLauncherWindow(Launcher launcher, Window current) {
+        SwingUtilities.invokeLater(() -> {
+            quickReopen = true; // нове вікно візьме вже завантажений список збірок (див. takeQuickReopen)
+            Window next;
+            try {
+                next = launcher.showLauncherWindow();
+            } finally {
+                quickReopen = false;
+            }
+            if (current != null) current.dispose(); // старе закриваємо після показу нового: без миготіння і стрибка фокусу
+            next.toFront();
+            next.requestFocus();
+        });
+    }
+
+    /**
+     * 16.11.2026: перше відкриття налаштувань чекало ~0.3 с (завантаження класів Swing/FlatLaf, пошук Java), далі
+     * ~0.03 с. Через 2.5 с після старту один раз будуємо діалог невидимим і викидаємо, тож і перше відкриття швидке.
+     */
+    private static void prewarmOptions(Launcher launcher, Window owner) {
+        if (!(owner instanceof JFrame)) return;
+        Timer t = new Timer(2500, e -> {
+            try {
+                if (!owner.isShowing()) return;
+                com.gummer.launcher.dialog.ConfigurationDialogFlat d =
+                        new com.gummer.launcher.dialog.ConfigurationDialogFlat(owner, launcher, (JFrame) owner);
+                d.pack();
+                d.dispose();
+            } catch (Throwable ex) {
+                log.log(Level.FINE, "Options prewarm failed", ex);
+            }
+        });
+        t.setRepeats(false);
+        t.start();
+    }
+
+    private static volatile boolean quickReopen;
+
+    /** true один раз, якщо вікно створюється перемиканням вигляду (список збірок уже є, перезавантажувати не треба). */
+    public static boolean takeQuickReopen() {
+        boolean q = quickReopen;
+        quickReopen = false;
+        return q;
     }
 
     /**

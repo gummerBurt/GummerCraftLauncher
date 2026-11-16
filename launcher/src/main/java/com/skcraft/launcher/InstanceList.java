@@ -112,7 +112,15 @@ public class InstanceList {
      * @return the worker
      */
     public Enumerator createEnumerator() {
-        return new Enumerator();
+        return new Enumerator(false);
+    }
+
+    /**
+     * 16.11.2026: {@code cacheOnly} - без мережі, лише з кешів на диску (packages_cache.json, *_versions.json тощо),
+     * щоб вікно відкрилось одразу повним; справжнє оновлення списку потім у фоні. Кешу збірок немає: помилка.
+     */
+    public Enumerator createEnumerator(boolean cacheOnly) {
+        return new Enumerator(cacheOnly);
     }
 
     /**
@@ -140,12 +148,28 @@ public class InstanceList {
 
     public final class Enumerator implements Callable<InstanceList>, ProgressObservable {
         private ProgressObservable progress = new DefaultProgress(-1, null);
+        private final boolean cacheOnly;
 
-        private Enumerator() {
+        private Enumerator(boolean cacheOnly) {
+            this.cacheOnly = cacheOnly;
         }
 
         @Override
         public InstanceList call() throws Exception {
+            if (!cacheOnly) return enumerate();
+            // без збереженого списку збірок швидкий показ був би неповним (лише встановлені), а потім стрибав би
+            if (readPackageCache() == null) throw new IOException("No saved modpack list for a cache-only pass");
+            HttpRequest.setCacheOnly(true);
+            try {
+                InstanceList result = enumerate();
+                InstanceList.this.offline = false; // це не «немає інтернету», а лише швидкий перший показ
+                return result;
+            } finally {
+                HttpRequest.setCacheOnly(false);
+            }
+        }
+
+        private InstanceList enumerate() throws Exception {
             // display local system info on debug
             SwingExtras.logDebugMessage(launcher,"system information",
                 "\n   os.name: " + System.getProperty("os.name") +
@@ -214,9 +238,12 @@ public class InstanceList {
             Set<String> vanillaNames = new HashSet<String>();
             List<com.gummer.launcher.vanilla.VanillaVersions.Release> releases = new ArrayList<com.gummer.launcher.vanilla.VanillaVersions.Release>();
             try {
-                releases = com.gummer.launcher.vanilla.VanillaVersions.releases(launcher);
-                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : releases) {
-                    if (r.old) continue; // 1.7.10 лише для старого Forge
+                List<com.gummer.launcher.vanilla.VanillaVersions.Release> all = com.gummer.launcher.vanilla.VanillaVersions.releases(launcher);
+                // завантажувачі (Fabric, Quilt, Forge, NeoForge, mrpack) лише з 1.7.10, «музей» тільки у Vanilla
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : all) {
+                    if (!r.museum) releases.add(r);
+                }
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : all) {
                     String vname = com.gummer.launcher.vanilla.VanillaVersions.nameOf(r.id);
                     vanillaNames.add(vname.toLowerCase(Locale.ROOT));
                     Instance found = null;

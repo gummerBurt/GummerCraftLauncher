@@ -131,7 +131,15 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
 
         if (updateDesired) {
             log.info("Updating " + instance.getTitle() + "...");
-            update(instance);
+            // 16.11.2026: анонімна подія про завантаження (звідки качалось, скільки, де висло), див. DownloadStats
+            com.gummer.launcher.stats.DownloadStats.begin();
+            boolean ok = false;
+            try {
+                update(instance);
+                ok = true;
+            } finally {
+                com.gummer.launcher.stats.DownloadStats.finish(launcher, instance, ok);
+            }
         } else {
             log.info("No update found for " + instance.getTitle());
         }
@@ -337,6 +345,10 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
             log.info("Added library source: " + url);
             librarySources.add(0, url);
         }
+
+        // 16.11.2026: перша установка цієї версії гри: ассети і бібліотеки Minecraft одним архівом з нашого CDN
+        // (докачка після обриву, звірка кожного файлу); не вдалось: далі звичайне пофайлове завантаження
+        com.gummer.launcher.install.BaseArchive.prefetch(launcher, version, p -> progress = p);
 
         progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.collectingLibraries"));
         installLibraries(installer, manifest, launcher.getLibrariesDir(), librarySources);

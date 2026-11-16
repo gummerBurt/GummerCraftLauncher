@@ -20,15 +20,20 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
 final class SkinChip extends JPanel {
 
     private static final String SEEN = "skinChipSeen";
-    private static final Color GREEN = new Color(0x76, 0xB8, 0x2A);
-    private static final Color GREEN_HOVER = new Color(0x86, 0xCC, 0x34);
+    /** Сіра напівпрозора підкладка з тонкою рамкою (SkinChip і AccountChip, дизайн 1.35). */
+    static void paintGlassChip(Graphics2D g2, JComponent c, boolean hover) {
+        g2.setColor(new Color(255, 255, 255, hover ? 34 : 16));
+        g2.fillRoundRect(0, 0, c.getWidth(), c.getHeight(), 12, 12);
+        g2.setColor(new Color(255, 255, 255, hover ? 60 : 32));
+        g2.drawRoundRect(0, 0, c.getWidth() - 1, c.getHeight() - 1, 12, 12);
+    }
 
     private boolean hover;
     private final Timer pulse;
     private float phase;
 
     SkinChip(Runnable onClick) {
-        super(new MigLayout("insets 6 10 6 14, gap 8", "[][]", "[center]"));
+        super(new MigLayout("insets 0 10 0 14, gap 8", "[][]", "[grow, center]")); // 1.35: вміст рівно по вертикалі
         setOpaque(false);
         JLabel icon = new JLabel(SwingHelper.createIcon(Launcher.class, "default_skin.png", 24, 24));
         JLabel text = new JLabel(tr("serverAccount.skinChip"));
@@ -75,13 +80,13 @@ final class SkinChip extends JPanel {
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setColor(hover ? GREEN_HOVER : GREEN);
-        g2.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
+        // дизайн 1.35: сіра скляна підкладка, як у карток збірок (яскраво-зелена відволікала, відгук гравців 16.11)
+        paintGlassChip(g2, this, hover);
         if (pulse.isRunning()) {
             int a = (int) (90 + 120 * (0.5 + 0.5 * Math.sin(phase)));
             g2.setStroke(new BasicStroke(2.5f));
             g2.setColor(new Color(255, 255, 255, Math.min(255, a)));
-            g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 17, 17);
+            g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 11, 11);
         }
         g2.dispose();
         super.paintComponent(g);

@@ -25,6 +25,15 @@ public final class UiHooks {
         void run(Window owner, Instance instance);
     }
 
+    /**
+     * 16.11.2026: сповіщення в стилі вигляду лаунчера, всередині вікна (launcher-flat, {@code look.Toast}).
+     * Повертає false, якщо показати не вийшло (вікно сховане): тоді старе {@code popup.Notification}.
+     */
+    public interface Toast {
+        boolean show(java.awt.Frame frame, com.gummer.launcher.popup.Notification.Type type, String message, String title);
+    }
+
+    public static volatile Toast toast;
     public static volatile Support support;
     public static volatile InstanceAction instanceSettings;
     public static volatile InstanceAction reinstall;

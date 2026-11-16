@@ -52,6 +52,7 @@ public class Configuration {
     private String customInstancesDirectory = null; // by default use homedir
     private String lang = Lang.UKRAINIAN.getName(); // use UA-uk lang by default
     private String lastInstance = null; // назва останньої вибраної збірки: її вибрано й оформлено одразу при старті
+    private String launcherLook = "glass"; // вигляд головного вікна (16.11.2026): glass = Liquid Glass, classic = Класика, library = Бібліотека
     private String autoUpdatedTo = null; // версія, яку лаунчер уже ставив автоматично (запобіжник від циклу оновлення-перезапуску)
 
     // social links

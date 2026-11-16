@@ -210,6 +210,15 @@ public class Instance implements Comparable<Instance> {
         if (priority != o.priority) {
             return priority > o.priority ? -1 : 1;
         }
+        // «музей» Vanilla (з 16.11.2026): після звичайних версій, у порядку Mojang
+        int ma = com.gummer.launcher.vanilla.VanillaVersions.museumIndex(this);
+        int mb = com.gummer.launcher.vanilla.VanillaVersions.museumIndex(o);
+        if (ma != mb && (ma < 0 || mb < 0)) {
+            return ma < 0 ? -1 : 1;
+        }
+        if (ma != mb) {
+            return Integer.compare(ma, mb);
+        }
         int byVersion = compareVersions(versionOf(o), versionOf(this));
         if (byVersion != 0) {
             return byVersion;

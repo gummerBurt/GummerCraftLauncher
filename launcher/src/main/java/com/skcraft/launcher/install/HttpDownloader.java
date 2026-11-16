@@ -425,11 +425,16 @@ public class HttpDownloader implements Downloader {
 
         private void tryDownloadFrom(URL url, File file, HttpRequest.PartialDownloadInfo retryDetails, int tries)
                 throws InterruptedException, IOException {
+            long startedAt = System.currentTimeMillis();
             try {
                 request = HttpRequest.get(url);
                 request.setResumeInfo(retryDetails).execute().expectResponseCode(200).saveContent(file);
+                com.gummer.launcher.stats.DownloadStats.record(url, request.getReadBytes(),
+                        System.currentTimeMillis() - startedAt, true);
             } catch (IOException e) {
                 log.log(Level.WARNING, "Failed to download " + url, e);
+                com.gummer.launcher.stats.DownloadStats.record(url, request != null ? request.getReadBytes() : 0,
+                        System.currentTimeMillis() - startedAt, false);
 
                 // We only want to try to resume a partial download if the request succeeded before
                 // throwing an exception halfway through. If it didn't succeed, just throw the error.

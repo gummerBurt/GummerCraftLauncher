@@ -24,6 +24,8 @@ public class CustomImageButton extends JButton {
         this.setContentAreaFilled(false);
         this.setBorderPainted(false);
         this.setFocusPainted(false);
+        // 16.11.2026: поля сталі (старі FlatLaf 2/14), щоб тема вигляду (Button.margin) не роздувала кнопку-картинку
+        this.setMargin(new Insets(2, 14, 2, 14));
 
         ToolTipManager.sharedInstance().setInitialDelay(700);
         this.setToolTipText(tooltip);

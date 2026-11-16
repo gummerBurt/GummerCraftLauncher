@@ -178,6 +178,19 @@ public final class SwingHelper {
         return hint;
     }
 
+    private static final String UNKNOWN_HINT_NO_SUPPORT = "Спробуй ще раз. Якщо помилка повторюється, натисни "
+            + "«Скопіювати деталі» та надішли їх нам в Telegram: @gummerCraft_help_bot.";
+
+    /**
+     * Лаунчер не зміг відкрити головне вікно (виняток у main). Заголовок і текст з мови, а якщо мова ще не
+     * завантажилась, українською за замовчуванням. Раніше тут був англійський текст SKCraft про «updater».
+     */
+    public static void showStartupError(Throwable t) {
+        showErrorDialog(null,
+                SharedLocale.trOr("errors.startupFailed", "Лаунчер не зміг запуститися через помилку."),
+                SharedLocale.trOr("errors.startupTitle", "Лаунчер не запустився"), t);
+    }
+
     public static void showErrorDialog(Component parentComponent, @NonNull String message,
                                        @NonNull String title) {
         showErrorDialog(parentComponent, message, title, null);
@@ -252,7 +265,12 @@ public final class SwingHelper {
         } else {
             html.append("<b>").append(htmlEscape(message)).append("</b>");
             if (details != null) {
-                html.append("<br><br>").append(htmlEscape(tr("errors.unknownHint")));
+                // Кнопка «Написати в підтримку» є лише після побудови головного вікна (UiHooks.support). При помилці
+                // старту її немає, тож тоді підказка веде в Telegram-бот підтримки з деталями з «Скопіювати деталі».
+                String hint = com.gummer.launcher.ui.UiHooks.support != null
+                        ? SharedLocale.trOr("errors.unknownHint", "Спробуй ще раз. Якщо помилка повторюється, натисни «Написати в підтримку»: деталі та лог підуть разом зі зверненням.")
+                        : SharedLocale.trOr("errors.unknownHintNoSupport", UNKNOWN_HINT_NO_SUPPORT);
+                html.append("<br><br>").append(htmlEscape(hint));
             }
         }
         html.append("</div></html>");
@@ -271,14 +289,15 @@ public final class SwingHelper {
 
             JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
             buttons.setOpaque(false);
-            final JButton toggle = new JButton(tr("errors.showDetails"));
+            final JButton toggle = new JButton(SharedLocale.trOr("errors.showDetails", "Показати деталі"));
             toggle.addActionListener(e -> {
                 scroll.setVisible(!scroll.isVisible());
-                toggle.setText(tr(scroll.isVisible() ? "errors.hideDetails" : "errors.showDetails"));
+                toggle.setText(scroll.isVisible() ? SharedLocale.trOr("errors.hideDetails", "Сховати деталі")
+                        : SharedLocale.trOr("errors.showDetails", "Показати деталі"));
                 Window w = SwingUtilities.getWindowAncestor(panel);
                 if (w != null) w.pack();
             });
-            JButton copy = new JButton(tr("errors.copyDetails"));
+            JButton copy = new JButton(SharedLocale.trOr("errors.copyDetails", "Скопіювати деталі"));
             copy.addActionListener(e -> setClipboard(message + "\n\n" + fullDetails));
             buttons.add(toggle);
             buttons.add(Box.createHorizontalStrut(8));

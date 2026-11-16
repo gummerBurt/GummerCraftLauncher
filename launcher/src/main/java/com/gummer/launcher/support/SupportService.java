@@ -182,6 +182,45 @@ public class SupportService {
         return conv;
     }
 
+    /**
+     * 16.11.2026: фідбек по дизайну лаунчера (кнопка у кожному вигляді). Окрема розмова в тій самій скриньці Chatwoot
+     * «Лаунчер», тема «Лаунчер»; поточну розмову гравця з підтримкою (state.conversationId) не підміняє. У фоні.
+     *
+     * @param nick  нік (може бути порожнім)
+     * @param look  ключ вигляду (glass, classic, library), іде в атрибут launcher_design
+     * @param title назва вигляду для людини (Liquid Glass, Класика...)
+     */
+    public int submitDesignFeedback(String nick, String look, String title, String text) throws IOException {
+        nick = nick == null ? "" : nick.trim();
+        String name = NICK.matcher(nick).matches() ? nick : "Гравець (фідбек по дизайну)";
+        String sourceId;
+        synchronized (this) {
+            sourceId = state.sourceId;
+        }
+        if (sourceId == null) {
+            sourceId = client.createContact(contactBody(name, ""));
+            rememberContact(sourceId, nick, "");
+        }
+        Map<String, Object> attrs = new HashMap<String, Object>();
+        if (NICK.matcher(nick).matches()) attrs.put("game_nick", nick);
+        attrs.put("problem_with", "Лаунчер");
+        attrs.put("source", "лаунчер: фідбек по дизайну");
+        attrs.put("launcher_design", look);
+        attrs.put("launcher_version", launcher.getVersion());
+        attrs.put("launcher_os", System.getProperty("os.name") + " " + System.getProperty("os.version"));
+        int conv;
+        try {
+            conv = client.createConversation(sourceId, attrs);
+        } catch (SupportClient.SupportException e) {
+            if (e.code != 404) throw e;
+            sourceId = client.createContact(contactBody(name, "")); // контакт видалили в Chatwoot: новий
+            rememberContact(sourceId, nick, "");
+            conv = client.createConversation(sourceId, attrs);
+        }
+        client.sendMessage(sourceId, conv, "Фідбек по дизайну лаунчера («" + title + "»):\n\n" + text.trim());
+        return conv;
+    }
+
     public List<SupportMessage> messages() throws IOException {
         String s;
         int c;
@@ -252,6 +291,9 @@ public class SupportService {
         List<Map.Entry<String, byte[]>> files = new ArrayList<Map.Entry<String, byte[]>>();
         files.add(entry("system.txt", systemInfo(selected).getBytes(StandardCharsets.UTF_8)));
         files.add(entry("launcher.log", tail(SupportLogBuffer.text().getBytes(StandardCharsets.UTF_8))));
+        // 16.11.2026: лог попереднього запуску (гравець часто пише вже після перезапуску лаунчера)
+        File previous = LauncherLogFile.previousLog(launcher.getBaseDir());
+        if (previous != null) addFile(files, previous, "launcher-previous.log");
         if (selected != null) {
             File logs = new File(selected.getContentDir(), "logs");
             addFile(files, new File(logs, "latest.log"), "game-latest.log");

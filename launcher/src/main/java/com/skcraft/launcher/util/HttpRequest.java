@@ -101,6 +101,17 @@ public class HttpRequest implements Closeable, ProgressObservable {
      * @param value the header value
      * @return this object
      */
+    private static final ThreadLocal<Boolean> CACHE_ONLY = new ThreadLocal<Boolean>();
+
+    /**
+     * 16.11.2026: у цьому потоці кожен запит одразу падає з IOException, тож код, що має запасну копію на диску
+     * (списки версій, packages_cache.json), бере її без мережі. Знімати в finally.
+     */
+    public static void setCacheOnly(boolean on) {
+        if (on) CACHE_ONLY.set(Boolean.TRUE);
+        else CACHE_ONLY.remove();
+    }
+
     public HttpRequest header(String key, String value) {
         headers.put(key, value);
         return this;
@@ -115,6 +126,10 @@ public class HttpRequest implements Closeable, ProgressObservable {
      * @throws java.io.IOException on I/O error
      */
     public HttpRequest execute() throws IOException {
+        if (Boolean.TRUE.equals(CACHE_ONLY.get())) {
+            // 16.11.2026: швидкий прохід списку збірок лише з кешів на диску (InstanceList.createEnumerator(true))
+            throw new IOException("Cache-only pass, network skipped: " + url);
+        }
         boolean successful = false;
 
         try {

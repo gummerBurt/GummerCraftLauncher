@@ -60,6 +60,11 @@ public class SupportDialog extends JDialog {
     private boolean polling;
     private long shownMaxId = -1;
 
+    /** 16.11.2026: для значка непрочитаних (SupportUnread): поки вікно відкрите, воно саме показує відповіді. */
+    public static boolean isOpen() {
+        return open != null && open.isDisplayable() && open.isVisible();
+    }
+
     public static void showFor(Window owner, SupportService service, Supplier<Instance> selectedInstance) {
         if (open != null && open.isDisplayable()) {
             open.toFront();
@@ -104,8 +109,13 @@ public class SupportDialog extends JDialog {
         root.add(buildForm(), "form");
         root.add(buildChat(), "chat");
         setContentPane(root);
-        setSize(new Dimension(560, 640));
-        setMinimumSize(new Dimension(480, 520));
+        // 16.11.2026: під розмір екрана і стиль вигляду лаунчера
+        Dimension size = com.gummer.launcher.look.LookTheme.fitToScreen(this, 560, 640, 440, 420);
+        setSize(size);
+        setMinimumSize(new Dimension(Math.min(440, size.width), Math.min(420, size.height)));
+        com.gummer.launcher.look.LookUi.primary(sendButton);
+        com.gummer.launcher.look.LookUi.primary(replyButton);
+        com.gummer.launcher.look.LookUi.decorate(this, owner);
         setLocationRelativeTo(owner);
         if (service.hasConversation()) {
             showChat();

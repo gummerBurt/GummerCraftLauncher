@@ -4,7 +4,10 @@
 
 package com.gummer.launcher.dialog;
 
+import com.gummer.launcher.look.LookTheme;
+import com.gummer.launcher.look.LookUi;
 import com.gummer.launcher.popup.Notification;
+import net.miginfocom.swing.MigLayout;
 import com.gummer.launcher.swing.SwingExtras;
 //import com.skcraft.launcher.Configuration;
 import com.skcraft.launcher.Instance;
@@ -66,129 +69,95 @@ public class InstanceSettingsDialogFlat extends JDialog {
         setTitle(SharedLocale.tr("instance.options.title"));
         setModalityType(DEFAULT_MODALITY_TYPE);
         initComponents();
-        setSize(new Dimension(400, 550));
-        setResizable(false);
+        // 16.11.2026: під розмір екрана, розтягується, стиль вигляду (було 400x550 без зміни розміру)
+        Dimension size = LookTheme.fitToScreen(this, 560, 540, 440, 380);
+        setSize(size);
+        setMinimumSize(new Dimension(Math.min(440, size.width), Math.min(380, size.height)));
+        setResizable(true);
+        LookUi.decorate(this, owner);
         setLocationRelativeTo(owner);
     }
 
+    /**
+     * 16.11.2026: нова розкладка в стилі вигляду лаунчера (look.LookTheme): дві картки з перемикачем справа,
+     * вікно під розмір екрана, прокрутка. Стан, як і раніше, у перемикачах Увімк/Вимк і в settings.
+     */
     private void initComponents() {
+        LookTheme.Palette pal = LookTheme.palette();
 
-        // styling components
-        memlimitTitleLabel.putClientProperty("FlatLaf.styleClass", "h2");
-        jvmTitleLabel.putClientProperty("FlatLaf.styleClass", "h2");
-        memInfoLabel.putClientProperty("FlatLaf.styleClass", "large");
-        jvmInfoLabel.putClientProperty("FlatLaf.styleClass", "large");
-        jvmWarning.putClientProperty("FlatLaf.styleClass", "large");
-        //jvmWarning.putClientProperty("FlatLaf.styleClass", "small");
-        okButton.putClientProperty("FlatLaf.styleClass", "large");
-        cancelButton.putClientProperty("FlatLaf.styleClass", "large");
-
-        //
-        // jvm panel
-        //
-
-        // TODO: Do we keep this list centrally somewhere? Or is actively refreshing good?
         JavaRuntime[] javaRuntimes = JavaRuntimeFinder.getAvailableRuntimes().toArray(new JavaRuntime[0]);
         javaRuntimeBox.setModel(new DefaultComboBoxModel<>(javaRuntimes));
 
-        // setup toolbar
-        runtimeToolBar.setFloatable(false);
-        runtimeToolBar.setOpaque(true);
-        runtimeToolBar.setBorder(BorderFactory.createEmptyBorder());
-
-        // define button enable memlimit override
-        runtimeEnableButton.setText(SharedLocale.tr("option.toolbar.on"));
-        runtimeEnableButton.putClientProperty("FlatLaf.styleClass", "small");
+        styleSwitch(runtimeToolBar, runtimeEnableButton, runtimeDisableButton);
         runtimeEnableButton.addActionListener(e -> jvmFeatureChange("true"));
-        runtimeToolBar.add(runtimeEnableButton);
-
-        // define button disable memlimit override
-        runtimeDisableButton.setText(SharedLocale.tr("option.toolbar.off"));
-        runtimeDisableButton.putClientProperty("FlatLaf.styleClass", "small");
         runtimeDisableButton.addActionListener(e -> jvmFeatureChange("false"));
-        runtimeToolBar.add(runtimeDisableButton);
-
-        // setup button group
-        ButtonGroup runtimeButtonGroup = new ButtonGroup();
-        runtimeButtonGroup.add(runtimeEnableButton);
-        runtimeButtonGroup.add(runtimeDisableButton);
-
-        // create panel for label + button group
-        JPanel jvmTitlePanel = new JPanel(new BorderLayout());
-        jvmTitlePanel.add(jvmTitleLabel, BorderLayout.WEST); // label to the left (WEST)
-        jvmTitlePanel.add(runtimeToolBar, BorderLayout.EAST); // toolbar to the right (EAST)
-        runtimePanel.addRow(jvmTitlePanel);
-
-        // setup info panel
-        formJvmInfoPanel.addRow(Box.createVerticalStrut(5));
-        formJvmInfoPanel.addRow(jvmInfoLabel);
-        formJvmInfoPanel.addRow(Box.createVerticalStrut(2));
-        runtimePanel.addRow(formJvmInfoPanel);
-        formJvmInfoPanel.setVisible(false); // hide InfoPanel
-
-        // fields with labeles
-        formJvmControls.addRow(new JLabel(SharedLocale.tr("instance.options.jvmRuntime")), javaRuntimeBox);
-        formJvmControls.addRow(new JLabel(SharedLocale.tr("instance.options.jvmArguments")), javaArgsBox);
-        formJvmControls.addRow(Box.createVerticalStrut(5));
-        runtimePanel.addRow(formJvmControls);
-
-        //
-        // memory panel
-        //
-
-        // setup toolbar
-        memlimitToolBar.setFloatable(false);
-        memlimitToolBar.setOpaque(true);
-        memlimitToolBar.setBorder(BorderFactory.createEmptyBorder());
-
-        // define button enable memlimit override
-        memlimitEnableButton.setText(SharedLocale.tr("option.toolbar.on"));
-        memlimitEnableButton.putClientProperty("FlatLaf.styleClass", "small");
+        styleSwitch(memlimitToolBar, memlimitEnableButton, memlimitDisableButton);
         memlimitEnableButton.addActionListener(e -> memlimitFeatureChange("true"));
-        memlimitToolBar.add(memlimitEnableButton);
-
-        // define button disable memlimit override
-        memlimitDisableButton.setText(SharedLocale.tr("option.toolbar.off"));
-        memlimitDisableButton.putClientProperty("FlatLaf.styleClass", "small");
         memlimitDisableButton.addActionListener(e -> memlimitFeatureChange("false"));
-        memlimitToolBar.add(memlimitDisableButton);
 
-        // setup button group
-        ButtonGroup memlimitButtonGroup = new ButtonGroup();
-        memlimitButtonGroup.add(memlimitEnableButton);
-        memlimitButtonGroup.add(memlimitDisableButton);
+        // Java
+        JPanel jvmCard = LookUi.card("insets 16 18 16 18, wrap 1, gap 0 6, fillx", "[grow,fill]", "");
+        jvmCard.add(header(SharedLocale.tr("instance.look.java.title"), runtimeToolBar));
+        formJvmInfoPanel.removeAll();
+        formJvmInfoPanel.setLayout(new BorderLayout());
+        formJvmInfoPanel.setOpaque(false);
+        formJvmInfoPanel.add(LookUi.body(SharedLocale.tr("instance.options.jvmRuntimeInfo"), false));
+        jvmCard.add(formJvmInfoPanel, "hidemode 3, wmin 0");
+        formJvmControls.removeAll();
+        formJvmControls.setLayout(new MigLayout("insets 0, gap 12 8, fillx", "[][grow,fill]", ""));
+        formJvmControls.setOpaque(false);
+        formJvmControls.add(label(SharedLocale.tr("settings.java.runtime")));
+        formJvmControls.add(javaRuntimeBox, "wmin 0, wrap");
+        formJvmControls.add(label(SharedLocale.tr("settings.java.args")));
+        formJvmControls.add(javaArgsBox, "wmin 0, h 32!, wrap");
+        jvmCard.add(formJvmControls, "hidemode 3, wmin 0");
 
-        // create panel for label + button group
-        JPanel memlimitTitlePanel = new JPanel(new BorderLayout());
-        memlimitTitlePanel.add(memlimitTitleLabel, BorderLayout.WEST); // label to the left (WEST)
-        memlimitTitlePanel.add(memlimitToolBar, BorderLayout.EAST); // toolbar to the right (EAST)
-        memorySettingsPanel.addRow(memlimitTitlePanel); // add title panel to memorySettingsPanel
-
-        // setup info panel
-        formMemInfoPanel.addRow(Box.createVerticalStrut(5));
-        formMemInfoPanel.addRow(memInfoLabel);
-        formMemInfoPanel.addRow(Box.createVerticalStrut(5));
-        memorySettingsPanel.addRow(formMemInfoPanel);
-        formMemInfoPanel.setVisible(false); // hide InfoPanel
-
-        // hidden raw legacy spinner, keep them to not change all globals
-        memorySettingsPanel.addRow(minMemorySpinner);
-        memorySettingsPanel.addRow(maxMemorySpinner);
+        // Пам'ять
+        JPanel memCard = LookUi.card("insets 16 18 16 18, wrap 1, gap 0 6, fillx", "[grow,fill]", "");
+        memCard.add(header(SharedLocale.tr("instance.look.memory.title"), memlimitToolBar));
+        formMemInfoPanel.removeAll();
+        formMemInfoPanel.setLayout(new BorderLayout());
+        formMemInfoPanel.setOpaque(false);
+        formMemInfoPanel.add(LookUi.body(SharedLocale.tr("instance.options.memlimitInfo"), false));
+        memCard.add(formMemInfoPanel, "hidemode 3, wmin 0");
         minMemorySpinner.setVisible(false);
         maxMemorySpinner.setVisible(false);
-
-        // add memory slider to window
+        memCard.add(minMemorySpinner, "hidemode 3");
+        memCard.add(maxMemorySpinner, "hidemode 3");
         SwingExtras.configureMemorySlider(memorySlider, minMemorySpinner, maxMemorySpinner);
-        memorySettingsPanel.addRow(Box.createVerticalStrut(5));
-        memorySettingsPanel.addRow(memorySlider);
-        memorySettingsPanel.addRow(Box.createVerticalStrut(5));
-        memorySettingsPanel.addRow(jvmWarning);
-        memorySettingsPanel.addRow(Box.createVerticalStrut(2));
+        memorySlider.setOpaque(false);
+        memCard.add(memorySlider, "hidemode 3, wmin 0");
+        JTextArea warn = LookUi.body(SharedLocale.tr("options.64BitJavaWarning"), true);
+        jvmWarningArea = warn;
+        memCard.add(warn, "hidemode 3, wmin 0");
 
-        //okButton.setMargin(new Insets(0, 10, 0, 10)); // fix button size by removing Margin
-        buttonsPanel.addElement(cancelButton);
-        buttonsPanel.addGlue();
-        buttonsPanel.addElement(okButton);
+        JPanel page = new JPanel(new MigLayout("insets 14 16 8 16, wrap 1, gap 0 12, fillx", "[grow,fill]", ""));
+        page.setOpaque(false);
+        page.add(LookUi.body(SharedLocale.tr("instance.look.intro"), true), "wmin 0");
+        page.add(jvmCard);
+        page.add(memCard);
+        JPanel track = new JPanel(new BorderLayout()) {
+        };
+        track.setOpaque(false);
+        track.add(page, BorderLayout.NORTH);
+        JScrollPane sp = new JScrollPane(new WidthTrack(track), ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(null);
+        sp.setOpaque(false);
+        sp.getViewport().setOpaque(false);
+        sp.getVerticalScrollBar().setUnitIncrement(18);
+
+        okButton.setText(SharedLocale.tr("settings.save"));
+        cancelButton.setText(SharedLocale.tr("settings.cancel"));
+        okButton.putClientProperty("FlatLaf.styleClass", null);
+        cancelButton.putClientProperty("FlatLaf.styleClass", null);
+        LookUi.primary(okButton);
+        LookUi.secondary(cancelButton);
+        JPanel buttons = new JPanel(new MigLayout("insets 10 16 14 16, gap 8", "push[][]", "[34!]"));
+        buttons.setOpaque(false);
+        buttons.add(cancelButton, "w 120!");
+        buttons.add(okButton, "w 140!");
+        getRootPane().setDefaultButton(okButton);
 
         okButton.addActionListener(e -> {
             save();
@@ -200,17 +169,87 @@ public class InstanceSettingsDialogFlat extends JDialog {
             );
             dispose();
         });
-
         cancelButton.addActionListener(e -> dispose());
 
-        formsPanel.addElement(Box.createVerticalStrut(2));
-        formsPanel.addElement(runtimePanel);
-        formsPanel.addElement(memorySettingsPanel);
-
-        add(formsPanel, BorderLayout.NORTH);
-        add(buttonsPanel, BorderLayout.SOUTH);
+        JPanel content = new JPanel(new BorderLayout());
+        content.setBackground(pal.bg);
+        content.add(sp, BorderLayout.CENTER);
+        content.add(buttons, BorderLayout.SOUTH);
+        setContentPane(content);
 
         updateComponents();
+    }
+
+    private JTextArea jvmWarningArea;
+
+    /** Перемикач «Увімк / Вимк» таблетками в стилі вигляду. */
+    private static void styleSwitch(JToolBar bar, JToggleButton on, JToggleButton off) {
+        LookTheme.Palette p = LookTheme.palette();
+        bar.setFloatable(false);
+        bar.setOpaque(false);
+        bar.setBorder(BorderFactory.createEmptyBorder());
+        on.setText(SharedLocale.tr("option.toolbar.on"));
+        off.setText(SharedLocale.tr("option.toolbar.off"));
+        String style = "arc: " + p.buttonArc + "; selectedBackground: " + LookUi.hex(p.accent)
+                + "; selectedForeground: #FFFFFF; toolbar.selectedBackground: " + LookUi.hex(p.accent)
+                + "; toolbar.hoverBackground: " + LookUi.hex(p.surface3) + "; margin: 4,12,4,12";
+        for (JToggleButton b : new JToggleButton[]{on, off}) {
+            b.putClientProperty("FlatLaf.styleClass", null);
+            b.putClientProperty("FlatLaf.style", style);
+            b.setFocusable(false);
+            bar.add(b);
+        }
+        ButtonGroup g = new ButtonGroup();
+        g.add(on);
+        g.add(off);
+    }
+
+    private static JPanel header(String title, JComponent right) {
+        JPanel h = new JPanel(new MigLayout("insets 0, fillx", "[grow][]", "[]"));
+        h.setOpaque(false);
+        h.add(LookUi.title(title, 15f));
+        h.add(right);
+        return h;
+    }
+
+    private static JLabel label(String text) {
+        JLabel l = new JLabel(text);
+        l.setForeground(LookTheme.palette().text2);
+        return l;
+    }
+
+    /** Обгортка для прокрутки: по ширині тягнеться за вікном. */
+    private static final class WidthTrack extends JPanel implements Scrollable {
+        WidthTrack(JComponent inner) {
+            super(new BorderLayout());
+            setOpaque(false);
+            add(inner);
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle r, int o, int d) {
+            return 18;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle r, int o, int d) {
+            return r.height - 36;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
     }
 
     private void updateComponents() {
@@ -225,14 +264,14 @@ public class InstanceSettingsDialogFlat extends JDialog {
             // hide display info and show controls
             formMemInfoPanel.setVisible(false);
             memorySlider.setVisible(true);
-            jvmWarning.setVisible(true);
+            jvmWarningArea.setVisible(true);
         } else {
             memorySettingsPanel.setEnabled(false);
             memlimitDisableButton.setSelected(true);
             memlimitEnableButton.setSelected(false);
             // hide controls and display info
             memorySlider.setVisible(false);
-            jvmWarning.setVisible(false);
+            jvmWarningArea.setVisible(false);
             formMemInfoPanel.setVisible(true);
         }
 

@@ -133,8 +133,11 @@ public class ServerAccountDialog extends JDialog {
         root.add(accountCard, "in");
         setContentPane(root);
         // UIScale: на Java 8 FlatLaf сам збільшує шрифти під масштаб Windows, а розмір у пікселях лишався б малим
-        setSize(new Dimension(UIScale.scale(640), UIScale.scale(600)));
-        setMinimumSize(new Dimension(UIScale.scale(560), UIScale.scale(480)));
+        // 16.11.2026: не більше за екран, стиль вигляду лаунчера
+        Dimension size = com.gummer.launcher.look.LookTheme.fitToScreen(this, UIScale.scale(640), UIScale.scale(600), 460, 420);
+        setSize(size);
+        setMinimumSize(new Dimension(Math.min(UIScale.scale(560), size.width), Math.min(UIScale.scale(480), size.height)));
+        com.gummer.launcher.look.LookUi.decorate(this, owner);
         setLocationRelativeTo(owner);
 
         Login saved = ServerAccount.saved();

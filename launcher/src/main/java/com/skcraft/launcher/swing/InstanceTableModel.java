@@ -73,22 +73,22 @@ public class InstanceTableModel extends AbstractTableModel {
         this.instances = instances;
         this.grouped = lastInstance != null;
         this.lastInstance = lastInstance;
-        instanceIcon = SwingHelper.createIcon(Launcher.class, "instance_icon.png", 32, 32);
+        instanceIcon = CrispIcon.of(Launcher.class, "instance_icon.png", 32, 32);
         customInstanceIcon = instanceIcon;
-        downloadIcon = SwingHelper.createIcon(Launcher.class, "download_icon.png", 32, 32);
-        staldayzIcon = SwingHelper.createIcon(Launcher.class, "icon_staldayz.png", 32, 32);
-        gummercraftIcon = SwingHelper.createIcon(Launcher.class, "icon_gummercraft.png", 32, 32);
-        vanillaIcon = SwingHelper.createIcon(Launcher.class, "icon_vanilla.png", 32, 32);
+        downloadIcon = CrispIcon.of(Launcher.class, "download_icon.png", 32, 32);
+        staldayzIcon = CrispIcon.of(Launcher.class, "icon_staldayz.png", 32, 32);
+        gummercraftIcon = CrispIcon.of(Launcher.class, "icon_gummercraft.png", 32, 32);
+        vanillaIcon = CrispIcon.of(Launcher.class, "icon_vanilla.png", 32, 32);
         // icon_fabric.png: офіційна іконка FabricMC/fabric-loader (src/main/resources/assets/fabricloader/icon.png, Apache 2.0)
-        fabricIcon = SwingHelper.createIcon(Launcher.class, "icon_fabric.png", 32, 32);
+        fabricIcon = CrispIcon.of(Launcher.class, "icon_fabric.png", 32, 32);
         // icon_forge.png: ковадло з логотипа Forge (установник Forge, big_logo_dark_mode.png), 64x64
-        forgeIcon = SwingHelper.createIcon(Launcher.class, "icon_forge.png", 32, 32);
+        forgeIcon = CrispIcon.of(Launcher.class, "icon_forge.png", 32, 32);
         // icon_quilt.png: офіційна іконка Quilt (quilt-loader, ui/icon/quilt_x128.png, Apache 2.0), 64x64
-        quiltIcon = SwingHelper.createIcon(Launcher.class, "icon_quilt.png", 32, 32);
+        quiltIcon = CrispIcon.of(Launcher.class, "icon_quilt.png", 32, 32);
         // icon_modrinth.png: іконка застосунку Modrinth (github.com/modrinth/code, apps/app/icons/128x128.png), 64x64
-        modrinthIcon = SwingHelper.createIcon(Launcher.class, "icon_modrinth.png", 32, 32);
+        modrinthIcon = CrispIcon.of(Launcher.class, "icon_modrinth.png", 32, 32);
         // icon_neoforge.png: логотип NeoForged (установник NeoForge, icons/neoforged_background_128x128.png), 64x64
-        neoforgeIcon = SwingHelper.createIcon(Launcher.class, "icon_neoforge.png", 32, 32);
+        neoforgeIcon = CrispIcon.of(Launcher.class, "icon_neoforge.png", 32, 32);
     }
 
     private static boolean isStalDayZ(Instance instance) {
@@ -140,6 +140,17 @@ public class InstanceTableModel extends AbstractTableModel {
             }
         }
         return members;
+    }
+
+    /**
+     * Лише перебудувати рядки після вибору версії в групі (16.11.2026): кількість і порядок рядків ті самі, тож
+     * подія «рядки оновлено», а не «усе змінилось», і JTable не знімає вибір (див. LauncherFrameFlat.showPack).
+     */
+    public void refreshChoice() {
+        rebuildRows();
+        if (getRowCount() > 0) {
+            fireTableRowsUpdated(0, getRowCount() - 1);
+        }
     }
 
     /** Гравець вибрав версію в групі: рядок групи тепер показує її. */
@@ -197,6 +208,12 @@ public class InstanceTableModel extends AbstractTableModel {
 
     /** Версія паку для вибору версії і рядка групи: «Main 1.21» у групі «Main» -> «1.21». */
     public String versionLabelOf(Instance instance) {
+        if (instance.isVanilla()) {
+            // «музей»: Beta 1.7.3, Alpha 1.2.6, Classic 0.30_01c (числа з назви дали б «1.7.3», як у релізу)
+            String id = com.gummer.launcher.vanilla.VanillaVersions.versionIdOf(instance);
+            String museum = com.gummer.launcher.vanilla.VanillaVersions.museumName(id);
+            if (!museum.equals(id)) return museum;
+        }
         // число версії з назви паку (main-1.19.3 -> 1.19.3): назви паків на CDN («Main 26.2») не збігаються з назвою групи
         int[] v = Instance.versionOf(instance);
         if (v.length > 0) {
@@ -251,6 +268,13 @@ public class InstanceTableModel extends AbstractTableModel {
         String prefix = groupTitle + " ";
         return title.regionMatches(true, 0, prefix, 0, prefix.length()) && title.length() > prefix.length()
                 ? title.substring(prefix.length()) : title;
+    }
+
+    /** Назва рядка без розмітки: назва групи (Vanilla, GummerCraft) або назва паку. Для вікна редизайну 2 (16.11.2026). */
+    public String titleOf(Instance instance) {
+        if (instance == null) return "";
+        String group = groupTitleFor(instance);
+        return group != null ? group : instance.getTitle() != null ? instance.getTitle() : instance.getName();
     }
 
     /** Назва групи для рядка (зі списку v2), або null, якщо пак показується сам по собі. */

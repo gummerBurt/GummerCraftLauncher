@@ -33,8 +33,6 @@ public final class VanillaVersions {
 
     public static final String PREFIX = "vanilla-";
     public static final String GROUP = "vanilla";
-    /** Найстаріший реліз у списку: 1.8 (вересень 2014). Старіші версії мають інший формат ресурсів і майже не потрібні. */
-    private static final String OLDEST_RELEASE_TIME = "2014-09-02";
     /** Найстаріший реліз для завантажувачів: 1.7.10 (у Mojang дата 14.05.2014; старий Forge). */
     private static final String OLDEST_LOADER_TIME = "2014-05-01";
 
@@ -45,17 +43,34 @@ public final class VanillaVersions {
     public static final class Release {
         public final String id;
         public final String url;
-        /** Старіший за 1.8: у розділі Vanilla не показується, лише для старого Forge (1.7.10). */
-        public final boolean old;
+        /**
+         * «Музей» (з 16.11.2026): pre-classic, Classic, Indev, Infdev, Alpha, Beta і релізи старіші за 1.7.10.
+         * Лише у Vanilla, без завантажувачів. Версії до 1.6 запускаються без звуків: їм треба ассети в
+         * {@code <гра>/resources} ({@code map_to_resources}), цього лаунчер свідомо не робить.
+         */
+        public final boolean museum;
 
-        Release(String id, String url, boolean old) {
+        Release(String id, String url, boolean museum) {
             this.id = id;
             this.url = url;
-            this.old = old;
+            this.museum = museum;
         }
     }
 
+    /** Порядок «музею» з маніфесту Mojang (назва паку -> 0 для найновішої), для сортування списку. */
+    private static volatile java.util.Map<String, Integer> museumOrder = java.util.Collections.emptyMap();
+
     private VanillaVersions() {
+    }
+
+    /**
+     * Місце версії в «музеї» (0 найновіша) або -1, якщо це не музейна версія чи список ще не завантажений.
+     * Номери з назв тут не годяться: Beta 1.7.3 стала б поруч з релізом 1.7.3, а rd-20090515 вище rd-161348.
+     */
+    public static int museumIndex(Instance instance) {
+        if (!isVanilla(instance)) return -1;
+        Integer i = museumOrder.get(instance.getName().toLowerCase(Locale.ROOT));
+        return i != null ? i : -1;
     }
 
     public static boolean isVanilla(Instance instance) {
@@ -71,7 +86,18 @@ public final class VanillaVersions {
     }
 
     public static String titleOf(String versionId) {
-        return "Minecraft " + versionId;
+        return "Minecraft " + museumName(versionId);
+    }
+
+    /** Людська назва старих версій: b1.7.3 -> Beta 1.7.3, c0.30_01c -> Classic 0.30_01c, rd-132211 -> Pre-classic rd-132211. */
+    public static String museumName(String id) {
+        if (id.startsWith("rd-")) return "Pre-classic " + id;
+        if (id.startsWith("c0.")) return "Classic " + id.substring(1);
+        if (id.startsWith("in-")) return "Indev " + id.substring(3);
+        if (id.startsWith("inf-")) return "Infdev " + id.substring(4);
+        if (id.matches("a1\\..*")) return "Alpha " + id.substring(1);
+        if (id.matches("b1\\..*")) return "Beta " + id.substring(1);
+        return id;
     }
 
     /** Версія з назви паку: vanilla-1.21.4 -> 1.21.4. */
@@ -80,7 +106,7 @@ public final class VanillaVersions {
     }
 
     /**
-     * Релізи від новішого до старішого (без снапшотів і бет). Список кешується в {@code <тека>/vanilla_versions.json}:
+     * Релізи від новішого до старішого, без снапшотів; наприкінці «музей» ({@link Release#museum}). Список кешується в {@code <тека>/vanilla_versions.json}:
      * без інтернету показується останній збережений.
      */
     public static List<Release> releases(Launcher launcher) {
@@ -111,16 +137,20 @@ public final class VanillaVersions {
         }
         List<Release> out = new ArrayList<Release>();
         if (root == null) return out;
+        java.util.Map<String, Integer> order = new java.util.HashMap<String, Integer>();
         for (JsonNode v : root.path("versions")) {
             String id = v.path("id").asText(null);
             String url = v.path("url").asText(null);
             String type = v.path("type").asText("");
             String time = v.path("releaseTime").asText("");
-            if (id == null || url == null || !"release".equals(type)) continue;
-            if (time.compareTo(OLDEST_LOADER_TIME) < 0) continue;
+            boolean release = "release".equals(type);
+            if (id == null || url == null || !(release || "old_beta".equals(type) || "old_alpha".equals(type))) continue;
             if (!id.matches("[0-9A-Za-z._-]+")) continue; // стає назвою теки
-            out.add(new Release(id, url, time.compareTo(OLDEST_RELEASE_TIME) < 0));
+            boolean museum = !release || time.compareTo(OLDEST_LOADER_TIME) < 0;
+            if (museum) order.put(nameOf(id).toLowerCase(Locale.ROOT), order.size());
+            out.add(new Release(id, url, museum));
         }
+        museumOrder = order;
         return out;
     }
 

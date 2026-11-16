@@ -101,6 +101,7 @@ public final class Launcher {
         this.properties = LauncherUtils.loadProperties(Launcher.class, "launcher.properties", "com.skcraft.launcher.propertiesFile");
         com.skcraft.launcher.swing.SwingHelper.setNewLauncherDownloadUrl(properties.getProperty("newLauncherDownloadUrl"));
         com.gummer.launcher.support.SupportLogBuffer.install(); // лог лаунчера для звернень у підтримку (1.32)
+        com.gummer.launcher.support.LauncherLogFile.install(this.baseDir); // і у файл logs/launcher.log (16.11.2026)
         this.instances = new InstanceList(this);
         this.assets = new AssetsRoot(new File(baseDir, "assets"));
         this.accounts = Persistence.load(new File(configDir, "accounts.dat"), AccountList.class);
@@ -508,8 +509,7 @@ public final class Launcher {
                 launcher.showLauncherWindow();
             } catch (Throwable t) {
                 log.log(Level.WARNING, "Load failure", t);
-                SwingHelper.showErrorDialog(null, "Uh oh! The updater couldn't be opened because a " +
-                        "problem was encountered.", "Launcher error", t);
+                SwingHelper.showStartupError(t);
             }
          });
 

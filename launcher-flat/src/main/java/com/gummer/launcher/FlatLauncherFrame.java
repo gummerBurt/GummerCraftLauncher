@@ -33,6 +33,11 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
         SwingHelper.removeOpaqueness(getInstanceScroll());
         getInstanceScroll().setBorder(BorderFactory.createEmptyBorder());
 
+        // дизайн 1.35: редактор розкладки (код ↑↑↓↓←→←→BA), правки в <--dir>/launcher/frame-edit
+        if (backgroundPanel != null) {
+            LayoutEditor.install(this, backgroundPanel, new java.io.File(launcher.getBaseDir(), "launcher/frame-edit"));
+        }
+
         // одразу вигляд останньої вибраної збірки (ще до завантаження списку збірок) - без "стандартний, а потім перемикання"
         String last = launcher.getConfig().getLastInstance();
         if (backgroundPanel != null && last != null) {
