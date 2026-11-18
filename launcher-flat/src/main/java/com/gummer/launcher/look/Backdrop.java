@@ -99,25 +99,58 @@ public final class Backdrop extends JPanel {
         return out.getSubimage(pad, pad, w, h);
     }
 
+    /**
+     * 17.11.2026: готове тло (розмиття, темний шар, відблиск) у фізичних пікселях. Раніше на кожен кадр прокрутки
+     * знімок розтягувався вчетверо і зверху лягали два напівпрозорі шари на все вікно; тепер кадр це одне копіювання.
+     * Перебудовується лише коли вікно зсунули чи змінили розмір або масштаб.
+     */
+    private BufferedImage composed;
+    private java.util.List<Object> composedKey;
+
     @Override
     protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g.create();
         try {
             int w = getWidth(), h = getHeight();
-            if (blur != null && ownerAt != null && isShowing()) {
+            double ds = DevicePixels.scale(g2);
+            int pw = DevicePixels.px(w, ds), ph = DevicePixels.px(h, ds);
+            int dx = 0, dy = 0;
+            boolean withBlur = blur != null && ownerAt != null && isShowing();
+            if (withBlur) {
                 Point me = getLocationOnScreen();
-                int dx = ownerAt.x - me.x, dy = ownerAt.y - me.y;
+                dx = ownerAt.x - me.x;
+                dy = ownerAt.y - me.y;
+            }
+            java.util.List<Object> key = java.util.Arrays.<Object>asList(pw, ph, ds, dx, dy, withBlur);
+            if (composed == null || !key.equals(composedKey)) {
+                composed = compose(pw, ph, ds, w, h, withBlur, dx, dy);
+                composedKey = key;
+            }
+            DevicePixels.draw(g2, composed, 0, 0, w, h);
+        } finally {
+            g2.dispose();
+        }
+    }
+
+    private BufferedImage compose(int pw, int ph, double ds, int w, int h, boolean withBlur, int dx, int dy) {
+        BufferedImage out = new BufferedImage(pw, ph, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = out.createGraphics();
+        try {
+            g2.scale(ds, ds);
+            g2.setColor(getBackground());
+            g2.fillRect(0, 0, w + 1, h + 1);
+            if (withBlur) {
                 g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
                 g2.drawImage(blur, dx, dy, blur.getWidth() * SCALE, blur.getHeight() * SCALE, null);
             }
             // темний шар і легкий відблиск згори
             g2.setColor(new Color(10, 12, 15, 168));
-            g2.fillRect(0, 0, w, h);
+            g2.fillRect(0, 0, w + 1, h + 1);
             g2.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, 16), 0, Math.min(h, 160), new Color(255, 255, 255, 0)));
-            g2.fillRect(0, 0, w, Math.min(h, 160));
+            g2.fillRect(0, 0, w + 1, Math.min(h, 160));
         } finally {
             g2.dispose();
         }
+        return out;
     }
 }

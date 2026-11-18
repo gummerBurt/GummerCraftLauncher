@@ -43,11 +43,16 @@ dependencies {
     implementation 'net.java.dev.jna:jna-platform:5.11.0'
     implementation 'net.java.dev.timingframework:timingframework:1.0'
     implementation 'org.json:json:20210307'
+    // 17.11.2026: іконки Modrinth (WebP) у вікні «Керування збіркою»; чистий Java, BSD-3, Java 8+. Викликається напряму (ModrinthBrowse.icon)
+    implementation 'com.twelvemonkeys.imageio:imageio-webp:3.12.0'
 
     implementation project(path: ':launcher-shared')
 }
 
 processResources {
+    // 18.11.2026: без цього інкрементальна збірка лишала стару версію в launcher.properties після зміни version
+    // (тестовий jar 1.36 показував «v1.35»; release.sh робить clean, реліз це не зачіпало)
+    inputs.property('projectVersion', project.version.toString())
     filesMatching('**/*.properties') {
         filter {
             it.replace('${project.version}', project.version)
@@ -74,6 +79,8 @@ processResources {
 
 shadowJar {
     archiveClassifier.set("")
+    // 17.11.2026: TwelveMonkeys (WebP) викликається напряму; без його реєстрації в ImageIO читання інших картинок не міняється
+    exclude 'META-INF/services/javax.imageio.spi.*'
 }
 
 build {

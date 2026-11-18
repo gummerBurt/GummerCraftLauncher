@@ -52,7 +52,7 @@ public final class QuiltVersions {
     }
 
     public static boolean isQuilt(Instance instance) {
-        return instance != null && isQuiltName(instance.getName());
+        return instance != null && isQuiltName(instance.getKindName());
     }
 
     public static boolean isQuiltName(String name) {
@@ -69,7 +69,7 @@ public final class QuiltVersions {
 
     /** Версія Minecraft з назви паку: quilt-1.21.4 -> 1.21.4. */
     public static String versionIdOf(Instance instance) {
-        return instance.getName().substring(PREFIX.length());
+        return instance.getKindName().substring(PREFIX.length());
     }
 
     /**

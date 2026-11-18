@@ -51,8 +51,14 @@ public class Configuration {
 
     private String customInstancesDirectory = null; // by default use homedir
     private String lang = Lang.UKRAINIAN.getName(); // use UA-uk lang by default
+    /** 17.11.2026: лівий список «Встановлені» (кожна збірка на диску окремо) замість «Усі». Запам'ятовується. */
+    private boolean installedOnly = false;
     private String lastInstance = null; // назва останньої вибраної збірки: її вибрано й оформлено одразу при старті
+    /** 17.11.2026: останній вибір у «Усі» (може бути рядок Modrinth) і у «Встановлені», окремо (ListMemory). */
+    private String lastInstanceAll = null;
+    private String lastInstanceInstalled = null;
     private String launcherLook = "glass"; // вигляд головного вікна (16.11.2026): glass = Liquid Glass, classic = Класика, library = Бібліотека
+    private boolean manageTipSeen = false; // 17.11.2026: вікно «Збірка» вже відкривали, підказку і рамку на кнопці не показувати
     private String autoUpdatedTo = null; // версія, яку лаунчер уже ставив автоматично (запобіжник від циклу оновлення-перезапуску)
 
     // social links

@@ -28,13 +28,16 @@ public class FlatLauncherFrame3 extends LauncherFrameFlat3 {
 
         setSize(800, 500);
         setLocationRelativeTo(null);
+        // 17.11.2026 (власник: «треба щоб лаунчер пам'ятав про повноекранку»): launcher-ui.json, windowMaximized
+        com.gummer.launcher.look.Zoom.rememberMaximized(this);
 
         SwingHelper.removeOpaqueness(getInstancesTable());
         SwingHelper.removeOpaqueness(getInstanceScroll());
         getInstanceScroll().setBorder(BorderFactory.createEmptyBorder());
 
         // одразу вигляд останньої вибраної збірки (ще до завантаження списку збірок) - без "стандартний, а потім перемикання"
-        String last = launcher.getConfig().getLastInstance();
+        // копія збірки (copy-...): вигляд оригіналу з її instance.json (17.11.2026)
+        String last = com.gummer.launcher.manage.InstanceCopies.kindNameOf(launcher.getInstancesDir(), launcher.getConfig().getLastInstance());
         if (backgroundPanel != null && last != null) {
             String look = FlatBackgroundPanel3.lookKeyOfName(last);
             backgroundPanel.showPack(look, false);
@@ -50,25 +53,38 @@ public class FlatLauncherFrame3 extends LauncherFrameFlat3 {
 
     private boolean firstSelection = true;
 
+    @Override
+    protected void packArtChanged() {
+        updatePackBackground();
+    }
+
     private void updatePackBackground() {
         if (backgroundPanel == null) return;
         com.skcraft.launcher.Instance selected = getSelectedInstance();
         if (selected == null) return; // нічого не вибрано (список ще вантажиться) - лишаємо поточний вигляд
+        // 17.11.2026: рядок Modrinth (сторінка модпаків) не збірка: свій фон bg_modrinth.jpg без лого збірки
+        // (раніше лишався фон і лого попередньої збірки, напр. StalDayZ), вибір не запам'ятовується
+        if (com.skcraft.launcher.swing.InstanceTableModel.isBrowser(selected)) {
+            if (!restoringSelection) com.gummer.launcher.manage.ListMemory.remember(launcher.getConfig(), selected); // 17.11.2026: Modrinth теж пам'ять «Усі»
+            backgroundPanel.showPack(FlatBackgroundPanel.BROWSER_LOOK, !firstSelection, null);
+            firstSelection = false;
+            return;
+        }
         String name = selected.getName();
         // усі ванільні версії (vanilla-1.21.1, vanilla-26.3, ...) мають одне оформлення: bg_vanilla.jpg і logo_vanilla.png
         // 1.33: Fabric має своє оформлення (bg_fabric.jpg, logo_fabric.png, власник 13.11)
         // Forge і NeoForge мають своє оформлення (bg_forge.jpg, logo_forge.png, logo_neoforge.png, власник 13.11)
         String look = FlatBackgroundPanel3.lookKey(selected);
-        backgroundPanel.showPack(look, !firstSelection);
+        // 17.11.2026 ~23:35 (власник: «Усі хибно підтягує картинки з модпаків ... цим бекграундам місце у встановлених»):
+        // у «Усі» рядок розділу показує оформлення свого завантажувача, навіть якщо у виборі версії модпак; свій фон лише у «Встановлених»
+        backgroundPanel.showPack(look, !firstSelection, launcher.getConfig().isInstalledOnly() ? com.gummer.launcher.manage.InstanceArt.background(selected) : null);
         showPackButtons(look != null ? look.toLowerCase(java.util.Locale.ROOT) : null);
         firstSelection = false;
 
         // запам'ятати вибір гравця (config.json) - наступного разу лаунчер одразу відкриється з цією збіркою;
         // вибір, який лаунчер відновлює сам (restoringSelection), не запам'ятовуємо
-        if (!restoringSelection && name != null && !name.equals(launcher.getConfig().getLastInstance())) {
-            launcher.getConfig().setLastInstance(name);
-            com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
-        }
+        // 17.11.2026: окремо для «Усі» і «Встановлені» (ListMemory), плюс lastInstance для старту
+        if (!restoringSelection) com.gummer.launcher.manage.ListMemory.remember(launcher.getConfig(), selected);
     }
 
     /** Вікі вибраної збірки (wiki.url у frame_&lt;назва&gt;.properties), інакше - загальна. */

@@ -31,6 +31,8 @@ public final class PackShelf extends JComponent implements Scrollable {
         public String online;
         public boolean update;
         public boolean notInstalled;
+        /** 17.11.2026: є оновлення модпака Modrinth чи своїх модів (UpdateBadges): зелена стрілка. */
+        public boolean updates;
         /** Підпис групи, якщо з цієї плитки починається нова група. */
         public String group;
         public String tooltip;
@@ -212,6 +214,7 @@ public final class PackShelf extends JComponent implements Scrollable {
         layoutTiles();
         Graphics2D g2 = Ui.smooth(g);
         try {
+            int prevLabelEnd = 0;
             for (int i = 0; i < tiles.size(); i++) {
                 Tile t = tiles.get(i);
                 Rectangle r = rects.get(i);
@@ -219,11 +222,26 @@ public final class PackShelf extends JComponent implements Scrollable {
                     g2.setFont(Ui.font(Font.BOLD, 11f));
                     g2.setColor(Ui.TEXT_3);
                     FontMetrics fm = g2.getFontMetrics();
+                    String label = t.group.toUpperCase(java.util.Locale.ROOT);
+                    // 17.11.2026 (власник: «перевір що ніде нічого не вилазить»): підпис групи з однієї плитки («МОДПАКИ ОДНИМ
+                    // КЛІКОМ» над Modrinth) ширший за неї і обрізався краєм вікна. Межа: наступна група або край полиці;
+                    // не влазить - зсув ліворуч (не на попередній підпис), інакше «...»
+                    int end = getWidth() - 4;
+                    for (int j = i + 1; j < tiles.size(); j++) {
+                        if (tiles.get(j).group != null) {
+                            end = rects.get(j).x - 12;
+                            break;
+                        }
+                    }
+                    int need = spacedWidth(fm, label);
                     int x = r.x;
-                    for (char c : t.group.toUpperCase(java.util.Locale.ROOT).toCharArray()) {
+                    if (x + need > end) x = Math.max(prevLabelEnd + 16, end - need);
+                    while (label.length() > 1 && x + spacedWidth(fm, label) > end) label = label.substring(0, label.length() - 2) + "…";
+                    for (char c : label.toCharArray()) {
                         g2.drawString(String.valueOf(c), x, LABEL_H - 6);
                         x += fm.charWidth(c) + 1;
                     }
+                    prevLabelEnd = x;
                 }
                 paintTile(g2, t, r, i == selected, i == hover);
             }
@@ -232,7 +250,14 @@ public final class PackShelf extends JComponent implements Scrollable {
         }
     }
 
-    private void paintTile(Graphics2D g, Tile t, Rectangle r0, boolean sel, boolean hov) {
+    /** Ширина підпису групи з розрядкою 1 px між літерами. */
+    private static int spacedWidth(FontMetrics fm, String s) {
+        int w = 0;
+        for (char c : s.toCharArray()) w += fm.charWidth(c) + 1;
+        return w;
+    }
+
+        private void paintTile(Graphics2D g, Tile t, Rectangle r0, boolean sel, boolean hov) {
         Rectangle r = new Rectangle(r0);
         if (hov && !sel) r.y -= 2;
         int arc = Ui.RADIUS + 2;
@@ -291,6 +316,11 @@ public final class PackShelf extends JComponent implements Scrollable {
             g.fillOval(bx - w + 7, by + 6, 6, 6);
             g.drawString(t.online, bx - w + 16, by + 13);
             bx -= w + 4;
+        }
+        if (t.updates && !t.update && !t.notInstalled) {
+            g.setColor(new Color(0, 0, 0, 175));
+            g.fillOval(bx - 18, by, 18, 18);
+            Glyph.UPDATE.paint(g, bx - 15, by + 3, 12, Ui.ONLINE);
         }
         if (t.update || t.notInstalled) {
             g.setColor(new Color(0, 0, 0, 175));

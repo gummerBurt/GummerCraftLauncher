@@ -46,9 +46,16 @@ public class HardResetter implements Callable<Instance>, ProgressObservable {
 
         new File(instance.getDir(), "update_cache.json").delete();
 
-        removeDir(new File(instance.getContentDir(), "config"));
-        removeDir(new File(instance.getContentDir(), "mods"));
-        
+        // 18.11.2026 (власник: «"Перевстановити пак" мені поставив чистий фордж»): моди й конфіги стираються лише в
+        // модпаках GummerCraft і StalDayZ, які їх качають знову за своїм маніфестом. У збірці Modrinth, копії і розділі
+        // завантажувача моди веде гравець чи модпак Modrinth: їх ніхто не перекачає, тож там перевстановлюється лише гра
+        // і завантажувач, а mods і config лишаються
+        boolean ownMods = instance.isMrpack() || instance.isCopy() || instance.isBuiltIn();
+        if (!ownMods) {
+            removeDir(new File(instance.getContentDir(), "config"));
+            removeDir(new File(instance.getContentDir(), "mods"));
+        }
+
         return instance;
     }
 

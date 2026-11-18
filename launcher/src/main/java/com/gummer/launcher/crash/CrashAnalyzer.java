@@ -28,6 +28,8 @@ public final class CrashAnalyzer {
         REINSTALL,
         /** Оновити драйвер відеокарти: відкрити інструкцію. */
         DRIVERS,
+        /** 17.11.2026: вимкнути мод, який звалив гру ({@link Diagnosis#modFile}). */
+        DISABLE_MOD,
         /** Без особливої дії: лише підтримка. */
         NONE
     }
@@ -40,12 +42,30 @@ public final class CrashAnalyzer {
         public final String detail;
         /** Файл, з якого взято причину (звіт про збій), або null. */
         public final File source;
+        /** 17.11.2026: увімкнений мод, який можна вимкнути кнопкою (для {@link Action#DISABLE_MOD}), або null. */
+        public final File modFile;
+        /** 18.11.2026: назва мода для кнопки «Вимкнути», якщо деталь довша (missingDep: «мод → залежність»). */
+        public final String modName;
+        /** 18.11.2026: id залежності, якої бракує чи яка застара (missingDep, depTooOld), або null. */
+        public String depId;
+        /** 18.11.2026: jar цієї залежності в збірці (depTooOld: його кнопка «Оновити»), або null. */
+        public File depFile;
 
         Diagnosis(String key, Action action, String detail, File source) {
+            this(key, action, detail, source, null);
+        }
+
+        Diagnosis(String key, Action action, String detail, File source, File modFile) {
+            this(key, action, detail, source, modFile, detail);
+        }
+
+        Diagnosis(String key, Action action, String detail, File source, File modFile, String modName) {
+            this.modName = modName;
             this.key = key;
             this.action = action;
             this.detail = detail;
             this.source = source;
+            this.modFile = modFile;
         }
     }
 
@@ -78,7 +98,7 @@ public final class CrashAnalyzer {
         File source = crash != null ? crash : hsErr;
 
         Diagnosis d = match(t, source);
-        if (d != null) return d;
+        if (d != null) return withMod(instance, d);
         // відомі коди виходу Windows: 0xC0000005 (-1073741819) доступ до пам'яті, найчастіше драйвер відеокарти
         if (exitCode == -1073741819 || exitCode == -1073740791) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
@@ -88,6 +108,13 @@ public final class CrashAnalyzer {
 
     /** Пошук відомих причин у тексті звіту чи лога. Пакетний доступ для перевірки. */
     static Diagnosis match(String t, File source) {
+        // 18.11.2026 (власник обрав: «помічник при вильоті розпізнає цей текст і пише гравцю по-людськи»): модпак, автори
+        // якого дозволяють гру лише зі свого лаунчера (Official Grand Theft Warzone, мод GtwNpc: «Invalid minecraft
+        // configuration. Unsupported launcher. Stopping.»). Це їхній захист, лаунчер його не обходить. Першим: у такому
+        // лозі є й інші помилки (текстури, моделі), але гру зупинила саме ця перевірка
+        if (t.contains("Unsupported launcher") || t.contains("unsupported launcher")) {
+            return new Diagnosis("launcherLocked", Action.NONE, null, source);
+        }
         if (t.contains("java.lang.OutOfMemoryError") || t.contains("Java heap space")
                 || t.contains("GC overhead limit exceeded")) {
             return new Diagnosis("memory", Action.MEMORY, null, source);
@@ -112,6 +139,33 @@ public final class CrashAnalyzer {
                 || DRIVER_DLL.matcher(t).find()) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
         }
+        // 17.11.2026: моду бракує іншого мода. Fabric: «Mod 'Sodium Extra' (sodium-extra) 0.5.4 requires any version of
+        // sodium, which is missing!»; Forge і NeoForge: «Mod ID: 'architectury', Requested by: 'rei'»
+        Matcher fabricMissing = Pattern.compile("Mod '([^'\\n]+)' \\([A-Za-z0-9_\\-]+\\)[^\\n]*? requires [^\\n]*?(?:of (?:mod )?)'?([^'\\n,]+?)'?(?: \\([A-Za-z0-9_\\-]+\\))?, which is missing").matcher(t);
+        if (fabricMissing.find()) {
+            return new Diagnosis("missingDep", Action.NONE, fabricMissing.group(1).trim() + " → " + fabricMissing.group(2).trim(), source);
+        }
+        Matcher forgeMissing = Pattern.compile("Mod ID: '([A-Za-z0-9_\\-]+)', Requested by: '([A-Za-z0-9_\\-]+)'").matcher(t);
+        if (forgeMissing.find() && t.contains("[MISSING]")) {
+            return new Diagnosis("missingDep", Action.NONE, forgeMissing.group(2) + " → " + forgeMissing.group(1), source);
+        }
+        // 17.11.2026: залежність стоїть, але стара (The Pixelmon Modpack: «Mod pixelmon only supports byg 1.3.4 or above
+        // Currently, byg is 1.1.6»). Forge 1.16: «requires/only supports X V or above»; Forge 1.17+: «Expected range»;
+        // Fabric: «requires version V or later of ..., but only the wrong version is present»
+        Matcher oldForge = Pattern.compile("Mod ([A-Za-z0-9_\\-]+) (?:requires|only supports) ([A-Za-z0-9_\\-]+) (\\S+) or above\\s*Currently, [A-Za-z0-9_\\-]+ is (\\S+)").matcher(t);
+        if (oldForge.find()) {
+            // «Currently, byg is not installed»: залежності немає зовсім
+            if ("not".equals(oldForge.group(4))) return new Diagnosis("missingDep", Action.NONE, oldForge.group(1) + " → " + oldForge.group(2), source);
+            return new Diagnosis("depTooOld", Action.NONE, oldForge.group(1) + " → " + oldForge.group(2) + " " + oldForge.group(3) + "+", source);
+        }
+        Matcher oldForge2 = Pattern.compile("Mod ID: '([A-Za-z0-9_\\-]+)', Requested by: '([A-Za-z0-9_\\-]+)', Expected range: '[\\[(]([^,'\\]]+)[^']*', Actual version: '([^'\\[]+)'").matcher(t);
+        if (oldForge2.find()) {
+            return new Diagnosis("depTooOld", Action.NONE, oldForge2.group(2) + " → " + oldForge2.group(1) + " " + oldForge2.group(3) + "+", source);
+        }
+        Matcher oldFabric = Pattern.compile("Mod '([^'\\n]+)' \\([A-Za-z0-9_\\-]+\\)[^\\n]*? requires version (\\S+) or later of (?:mod )?'?([^'\\n,]+?)'?(?: \\([A-Za-z0-9_\\-]+\\))?, but only the wrong version is present").matcher(t);
+        if (oldFabric.find()) {
+            return new Diagnosis("depTooOld", Action.NONE, oldFabric.group(1).trim() + " → " + oldFabric.group(3).trim() + " " + oldFabric.group(2) + "+", source);
+        }
         Matcher dup = Pattern.compile("Mod ([A-Za-z0-9_\\-]+) is present multiple times|Found duplicate mods?[^\\n]*?([A-Za-z0-9_\\-]+)").matcher(t);
         if (dup.find()) {
             return new Diagnosis("duplicateMod", Action.REINSTALL, firstGroup(dup), source);
@@ -130,6 +184,79 @@ public final class CrashAnalyzer {
         }
         if (t.contains("There is not enough space on the disk") || t.contains("No space left on device")) {
             return new Diagnosis("disk", Action.NONE, null, source);
+        }
+        // 17.11.2026: хто звалив гру. Forge і NeoForge пишуть у звіті «Suspected Mod(s): Назва (modid)», у Fabric
+        // помилка в коді мода видна як «... from mod modid» у стеку
+        Matcher suspected = Pattern.compile("Suspected Mods?:\\s*([^\\n(]+?)\\s*\\(([a-z0-9_\\-]+)\\)").matcher(t);
+        if (suspected.find() && !BUILTIN.contains(suspected.group(2))) {
+            return new Diagnosis("modCrash", Action.NONE, suspected.group(2), source);
+        }
+        Matcher fromMod = Pattern.compile("from mod ([a-z0-9_\\-]+)").matcher(t);
+        while (fromMod.find()) {
+            if (!BUILTIN.contains(fromMod.group(1))) return new Diagnosis("modCrash", Action.NONE, fromMod.group(1), source);
+        }
+        return null;
+    }
+
+    /** id, які не є «винним модом»: сама гра і завантажувачі. */
+    private static final java.util.Set<String> BUILTIN = new java.util.HashSet<String>(java.util.Arrays.asList(
+            "minecraft", "java", "forge", "neoforge", "fml", "fabricloader", "fabric", "quilt_loader", "mixinextras", "unknown"));
+
+    /**
+     * 17.11.2026: якщо причина в конкретному моді (mixin, «звалив мод»), знайти його увімкнений jar у цій збірці: тоді
+     * у вікні буде кнопка «Вимкнути». Назва мода замість id. Мод StalDayZ (заблокований) не пропонуємо.
+     */
+    private static Diagnosis withMod(Instance instance, Diagnosis d) {
+        if (d.detail != null && ("missingDep".equals(d.key) || "depTooOld".equals(d.key))) return withDependent(instance, d);
+        if (d.detail == null || !("mixin".equals(d.key) || "modCrash".equals(d.key))) return d;
+        try {
+            String id = d.detail.toLowerCase(java.util.Locale.ROOT);
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+                if (!m.enabled || m.locked) continue;
+                com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.of(m.file);
+                if (info.provides.contains(id) || info.name != null && info.name.equalsIgnoreCase(d.detail)) {
+                    return new Diagnosis(d.key, Action.DISABLE_MOD, info.name != null ? info.name : d.detail, d.source, m.file);
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // без кнопки
+        }
+        return d;
+    }
+
+    /**
+     * 18.11.2026 (власник: помічник при вильоті з людською назвою мода і кнопками). «mod → залежність»: мод зліва
+     * знайти в збірці, показати його назву замість id і дати кнопку «Вимкнути» саме його: без нього гра запуститься.
+     */
+    private static Diagnosis withDependent(Instance instance, Diagnosis d) {
+        int arrow = d.detail.indexOf(" → ");
+        if (arrow <= 0) return d;
+        String id = d.detail.substring(0, arrow).trim().toLowerCase(java.util.Locale.ROOT);
+        try {
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+                if (!m.enabled || m.locked) continue;
+                com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.of(m.file);
+                if (!id.equals(info.id == null ? null : info.id.toLowerCase(java.util.Locale.ROOT)) && !info.provides.contains(id)) continue;
+                String name = info.name != null ? info.name : id;
+                Diagnosis out = new Diagnosis(d.key, Action.DISABLE_MOD, name + d.detail.substring(arrow), d.source, m.file, name);
+                String dep = d.detail.substring(arrow + 3).trim();
+                int sp = dep.indexOf(' ');
+                out.depId = sp > 0 ? dep.substring(0, sp) : dep;
+                if ("depTooOld".equals(d.key)) out.depFile = providerOf(instance, out.depId);
+                return out;
+            }
+        } catch (RuntimeException ignored) {
+            // без кнопки
+        }
+        return d;
+    }
+
+    /** Увімкнений jar збірки, що дає id (для оновлення застарілої залежності), або null. */
+    private static File providerOf(Instance instance, String id) {
+        String low = id.toLowerCase(java.util.Locale.ROOT);
+        for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+            if (!m.enabled || m.locked) continue;
+            if (com.gummer.launcher.manage.ModInfo.of(m.file).provides.contains(low)) return m.file;
         }
         return null;
     }

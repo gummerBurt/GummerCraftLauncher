@@ -48,6 +48,11 @@ public class HttpDownloader implements Downloader {
     private static final int RETRY_ROUNDS = 4;
     /** 1.32.2: поточне коло повторів (0 = основний прохід), для статусу у вікні. */
     private int retryRound = 0;
+    /**
+     * 17.11.2026: коли востаннє файл не скачався (обрив, таймаут з'єднання). Власник бачив «0,0 МБ/с» на 570 з 970 МБ
+     * без жодного пояснення: у лозі тоді були десятки «Connect timed out» до resources.download.minecraft.net.
+     */
+    private volatile long lastFailAt;
 
     private List<HttpDownloadJob> queue = new ArrayList<HttpDownloadJob>();
     private final Set<String> usedKeys = new HashSet<String>();
@@ -273,6 +278,8 @@ public class HttpDownloader implements Downloader {
             line += seconds < 60 ? tr("downloader.etaSeconds", Math.max(1, seconds))
                     : tr("downloader.etaMinutes", (seconds + 59) / 60);
         }
+        // 17.11.2026: швидкість біля нуля і щойно був обрив: гравець бачить, що лаунчер не завис, а чекає на мережу
+        if (speed < 64 * 1024 && now - lastFailAt < 30_000) line += " · " + tr("downloader.connectionTrouble");
         return line;
     }
 
@@ -433,6 +440,7 @@ public class HttpDownloader implements Downloader {
                         System.currentTimeMillis() - startedAt, true);
             } catch (IOException e) {
                 log.log(Level.WARNING, "Failed to download " + url, e);
+                lastFailAt = System.currentTimeMillis();
                 com.gummer.launcher.stats.DownloadStats.record(url, request != null ? request.getReadBytes() : 0,
                         System.currentTimeMillis() - startedAt, false);
 

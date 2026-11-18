@@ -26,11 +26,14 @@ dependencies {
     implementation project(path: ':launcher-shared')
     implementation project(path: ':launcher')
     implementation 'com.formdev:flatlaf:3.5.4'
+    implementation 'net.java.dev.jna:jna-platform:5.11.0' // 17.11.2026: look/WinPlacement (та сама версія, що в :launcher)
 }
 
 shadowJar {
     dependsOn ':launcher:shadowJar'
     archiveClassifier.set("")
+    // 17.11.2026: TwelveMonkeys (WebP) викликається напряму; без його реєстрації в ImageIO читання інших картинок не міняється
+    exclude 'META-INF/services/javax.imageio.spi.*'
 }
 
 // Work around gradle shadow bug

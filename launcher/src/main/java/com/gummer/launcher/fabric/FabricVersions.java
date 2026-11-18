@@ -57,7 +57,7 @@ public final class FabricVersions {
     }
 
     public static boolean isFabric(Instance instance) {
-        return instance != null && isFabricName(instance.getName());
+        return instance != null && isFabricName(instance.getKindName());
     }
 
     public static boolean isFabricName(String name) {
@@ -74,7 +74,7 @@ public final class FabricVersions {
 
     /** Версія Minecraft з назви паку: fabric-1.21.4 -> 1.21.4. */
     public static String versionIdOf(Instance instance) {
-        return instance.getName().substring(PREFIX.length());
+        return instance.getKindName().substring(PREFIX.length());
     }
 
     /**

@@ -71,9 +71,11 @@ public class FlatBackgroundPanel3 extends JPanel {
     private final Map<String, Properties> layouts = new HashMap<>();
 
     public FlatBackgroundPanel3() {
-        defaultBackground = read("ui/frame/bg.jpg");
-        defaultLogo = read("ui/frame/logo.png");
+        defaultBackground = cached("ui/frame/bg.jpg"); // 18.11.2026: спільний кеш трьох виглядів
+        defaultLogo = cached("ui/frame/logo.png");
         current = new Scene(defaultBackground, false, 0, 0, defaultLogo, 0, 0);
+        // 18.11.2026: фони всіх збірок під розмір вікна наперед (PackPrewarm)
+        com.gummer.launcher.look.PackPrewarm.hook(this, this::prewarmBackgrounds);
 
         fadeTimer = new Timer(16, e -> {
             fade = Math.min(1.0F, (System.currentTimeMillis() - fadeStart) / (float) FADE_MS);
@@ -100,6 +102,11 @@ public class FlatBackgroundPanel3 extends JPanel {
 
     /** @param animate false - одразу, без переходу (старт лаунчера) */
     public void showPack(String packName, boolean animate) {
+        showPack(packName, animate, null);
+    }
+
+    /** 17.11.2026: customBackground - свій фон копії збірки (InstanceArt), замість фону типу збірки; null - звичайний. */
+    public void showPack(String packName, boolean animate, Image customBackground) {
         Image background = null;
         Image logo = null;
         Properties layout = new Properties();
@@ -116,10 +123,12 @@ public class FlatBackgroundPanel3 extends JPanel {
                 }
             }
         }
+        if (customBackground != null) background = customBackground;
         currentLayout = layout;
         Scene next = new Scene(background != null ? background : defaultBackground, background != null,
                 intOf(layout, "background.x"), intOf(layout, "background.y"),
-                logo != null ? logo : defaultLogo, intOf(layout, "logo.x"), intOf(layout, "logo.y"));
+                FlatBackgroundPanel.BROWSER_LOOK.equalsIgnoreCase(packName) ? FlatBackgroundPanel.NO_LOGO // 17.11.2026: сторінка Modrinth
+                        : logo != null ? logo : defaultLogo, intOf(layout, "logo.x"), intOf(layout, "logo.y"));
         if (next.looksSame(current)) return;
 
         if (!animate) {
@@ -248,7 +257,7 @@ public class FlatBackgroundPanel3 extends JPanel {
         double k = Math.max(W / (double) iw, H / (double) ih);
         int w = (int) Math.ceil(iw * k), h = (int) Math.ceil(ih * k);
         // 16.11.2026: кроки навпіл + бікубічний замість getScaledInstance (той стояв у потоці інтерфейсу), спільний кеш
-        java.awt.image.BufferedImage img = com.gummer.launcher.look.DevicePixels.cached(image, w, h, false);
+        java.awt.image.BufferedImage img = com.gummer.launcher.look.DevicePixels.cachedQuick(image, w, h, false, this);
         double kl = k / sx; // зсув фону з frame_*.properties задано в пікселях картинки
         int x = (W - w) / 2 + (int) Math.round(s.backgroundDx * kl * sx);
         int y = (H - h) / 2 + (int) Math.round(s.backgroundDy * kl * sy);
@@ -259,7 +268,13 @@ public class FlatBackgroundPanel3 extends JPanel {
             d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.min(1.0F, alpha)));
             if (plain) {
                 d.setTransform(new java.awt.geom.AffineTransform(1, 0, 0, 1, Math.round(at.getTranslateX()), Math.round(at.getTranslateY())));
-                d.drawImage(img, x, y, null);
+                if (img.getWidth() != w || img.getHeight() != h) {
+                    // тимчасова картинка іншого розміру, поки якісна рахується у фоні
+                    d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                    d.drawImage(img, x, y, w, h, null);
+                } else {
+                    d.drawImage(img, x, y, null);
+                }
             } else {
                 d.drawImage(img, x, y, getWidth() * w / Math.max(1, W), getHeight() * h / Math.max(1, H), null);
             }
@@ -329,7 +344,7 @@ public class FlatBackgroundPanel3 extends JPanel {
         return i.isVanilla() ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
                 : i.isFabric() ? com.gummer.launcher.fabric.FabricVersions.GROUP
                 : i.isQuilt() ? com.gummer.launcher.quilt.QuiltVersions.GROUP
-                : i.isMrpack() ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
+                : i.isMrpack() ? com.gummer.launcher.manage.InstanceCopies.sectionOf(i) // 17.11.2026: оформлення свого завантажувача
                 : i.isForgeLike() ? com.gummer.launcher.forge.ForgeVersions.kindOf(i).group : i.getName();
     }
 
@@ -343,6 +358,32 @@ public class FlatBackgroundPanel3 extends JPanel {
                 : com.gummer.launcher.forge.ForgeVersions.kindOfName(last) != null ? com.gummer.launcher.forge.ForgeVersions.kindOfName(last).group : last;
     }
 
+    /**
+     * 18.11.2026 (сторож EdtWatch: клік по збірці в Бібліотеці масштабував фон у потоці інтерфейсу): ті самі розміри,
+     * що порахує paintScene, наперед у фоні. false - якісь картинки ще розпаковуються.
+     */
+    private boolean prewarmBackgrounds(double ds) {
+        int W = (int) Math.round(getWidth() * ds), H = (int) Math.round(getHeight() * ds);
+        if (W <= 0 || H <= 0) return true;
+        boolean all = true;
+        for (String k : com.gummer.launcher.look.PackPrewarm.KEYS) {
+            Image bg = "default".equals(k) ? defaultBackground : com.gummer.launcher.look.FrameImages.peek("ui/frame/bg_" + k + ".jpg");
+            if (bg == null && !"default".equals(k)) {
+                String from = layout(k).getProperty("background.from");
+                if (from != null && from.matches("[a-z0-9_.-]+")) bg = com.gummer.launcher.look.FrameImages.peek("ui/frame/bg_" + from + ".jpg");
+            }
+            if (bg == null) {
+                all &= com.gummer.launcher.look.FrameImages.warmedUp();
+                continue;
+            }
+            int iw = bg.getWidth(null), ih = bg.getHeight(null);
+            if (iw <= 0 || ih <= 0) continue;
+            double kk = Math.max(W / (double) iw, H / (double) ih);
+            com.gummer.launcher.look.DevicePixels.prewarm(bg, (int) Math.ceil(iw * kk), (int) Math.ceil(ih * kk), false);
+        }
+        return all;
+    }
+
     private static final Map<String, Image> THUMB_SOURCES = new HashMap<>();
 
     /** Картинка фону для оформлення key (з background.from), або стандартний bg.jpg. Кешується. */
@@ -351,7 +392,9 @@ public class FlatBackgroundPanel3 extends JPanel {
         if (THUMB_SOURCES.containsKey(k)) return THUMB_SOURCES.get(k);
         Image img = null;
         if (k.matches("[a-z0-9_.-]+")) {
-            img = read("ui/frame/bg_" + k + ".jpg");
+            // 18.11.2026: зі спільного кешу, розпакованого у фоні від старту (раніше JPEG читався тут, у потоці
+            // інтерфейсу, при першому показі Бібліотеки: сторож EdtWatch 0,26 с)
+            img = com.gummer.launcher.look.FrameImages.get("ui/frame/bg_" + k + ".jpg");
             if (img == null) {
                 Properties props = new Properties();
                 try (InputStream in = Launcher.class.getResourceAsStream("ui/frame/frame_" + k + ".properties")) {
@@ -360,10 +403,10 @@ public class FlatBackgroundPanel3 extends JPanel {
                     // без налаштувань
                 }
                 String from = props.getProperty("background.from");
-                if (from != null && from.matches("[a-z0-9_.-]+")) img = read("ui/frame/bg_" + from + ".jpg");
+                if (from != null && from.matches("[a-z0-9_.-]+")) img = com.gummer.launcher.look.FrameImages.get("ui/frame/bg_" + from + ".jpg");
             }
         }
-        if (img == null) img = read("ui/frame/bg.jpg");
+        if (img == null) img = com.gummer.launcher.look.FrameImages.get("ui/frame/bg.jpg");
         THUMB_SOURCES.put(k, img);
         return img;
     }

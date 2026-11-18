@@ -38,7 +38,16 @@ public class FancyLauncher {
         UiScaleFit.applySaved(baseDirFromArgs(args)); // теж до AWT: збережений масштаб для малого екрана (1.32)
         SwingExtras.enforceMacDefaults(); // tune and enforce macos defaults
         Launcher.setupLogger();
+        // 17.11.2026: картинки з потоків (іконки Modrinth і модів, скіни, новини) читати з пам'яті, а не через тимчасовий
+        // файл на диску: розпаковувач WebP читав його дрібними шматками, 20 іконок їли 1.6 с процесора, у 6 потоках
+        // на мить усі ядра (вікно підвисало, шумів вентилятор). З пам'яті 46 мс
+        javax.imageio.ImageIO.setUseCache(false);
         UiScaleFit.fitOrRelaunch(baseDirFromArgs(args)); // вікно не влазить у екран: інший масштаб і перезапуск
+        // 18.11.2026: сторож затупів потоку інтерфейсу, лише в тестовому лаунчері (тека даних «...-test»)
+        com.gummer.launcher.perf.EdtWatch.installIfTest(baseDirFromArgs(args));
+        // 18.11.2026: фони і логотипи збірок розпаковуються у фоні паралельно зі створенням вікна (раніше перше
+        // звернення вигляду, а Бібліотека читала обкладинки сама в потоці інтерфейсу)
+        com.gummer.launcher.look.FrameImages.warmUp();
 
         SwingUtilities.invokeLater(new Runnable() {
             @Override
@@ -62,7 +71,12 @@ public class FancyLauncher {
                     enforceUIManagerDefaults();
 
                     launcher.setMainWindowSupplier(new CustomWindowSupplier(launcher));
-                    Window first = launcher.showLauncherWindow();
+                    // 17.11.2026 (власник: «відкриваєш лаунчер в повноекранному - і він не відкривається повністю ...
+                    // контент наче трохи "зсувається"»): вікно добудовується невидимим (розкладка, події розміру, лого
+                    // Бібліотеки) і показується вже готовим, через два проходи черги подій (без помітної затримки)
+                    Window first = launcher.getMainWindowSupplier().get();
+                    first.validate();
+                    SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(() -> first.setVisible(true)));
                     prewarmOptions(launcher, first);
 
                     // show launcher console if config option enabled
@@ -107,15 +121,26 @@ public class FancyLauncher {
     public static void reopenLauncherWindow(Launcher launcher, Window current) {
         SwingUtilities.invokeLater(() -> {
             quickReopen = true; // нове вікно візьме вже завантажений список збірок (див. takeQuickReopen)
+            reopenFrom = current;
             Window next;
             try {
-                next = launcher.showLauncherWindow();
+                next = launcher.getMainWindowSupplier().get();
             } finally {
                 quickReopen = false;
+                reopenFrom = null;
             }
-            if (current != null) current.dispose(); // старе закриваємо після показу нового: без миготіння і стрибка фокусу
-            next.toFront();
-            next.requestFocus();
+            // 17.11.2026 (власник: «воно наче "підгружає" ще щось через що все з'їзджає коли перемикаєш дизайни»):
+            // кадри вікна показали, що нове вікно з'являлось недоробленим (без виділеної збірки, панелі версії, лого) і
+            // за 70-130 мс добудовувалось. Тепер воно добудовується невидимим, а старе тим часом лишається на екрані.
+            next.validate();
+            Timer show = new Timer(REOPEN_SETTLE_MS, e -> {
+                next.setVisible(true);
+                if (current != null) current.dispose(); // старе закриваємо після показу нового: без миготіння
+                next.toFront();
+                next.requestFocus();
+            });
+            show.setRepeats(false);
+            show.start();
         });
     }
 
@@ -125,7 +150,14 @@ public class FancyLauncher {
      */
     private static void prewarmOptions(Launcher launcher, Window owner) {
         if (!(owner instanceof JFrame)) return;
-        Timer t = new Timer(2500, e -> {
+        // 18.11.2026: сторож EdtWatch показав, що це ~0,28 с у потоці інтерфейсу через 2,5 с після старту, якраз коли
+        // гравець уже клацає. Тепер чекає тиші: 1,5 с без руху миші і клавіш (перевірка раз на 0,5 с, до 60 с).
+        final long started = System.currentTimeMillis();
+        Timer t = new Timer(500, null);
+        t.setInitialDelay(2500);
+        t.addActionListener(e -> {
+            if (com.gummer.launcher.look.PackPrewarm.idleMs() < 1500 && System.currentTimeMillis() - started < 60_000) return;
+            t.stop();
             try {
                 if (!owner.isShowing()) return;
                 com.gummer.launcher.dialog.ConfigurationDialogFlat d =
@@ -136,11 +168,18 @@ public class FancyLauncher {
                 log.log(Level.FINE, "Options prewarm failed", ex);
             }
         });
-        t.setRepeats(false);
         t.start();
     }
 
     private static volatile boolean quickReopen;
+    /** Скільки нове вікно добудовується невидимим під час перемикання вигляду (картинки, вибір збірки). */
+    private static final int REOPEN_SETTLE_MS = 300;
+    private static volatile Window reopenFrom;
+
+    /** Вікно, яке зараз замінюється новим (перемикання вигляду), інакше null. */
+    public static Window reopeningFrom() {
+        return reopenFrom;
+    }
 
     /** true один раз, якщо вікно створюється перемиканням вигляду (список збірок уже є, перезавантажувати не треба). */
     public static boolean takeQuickReopen() {

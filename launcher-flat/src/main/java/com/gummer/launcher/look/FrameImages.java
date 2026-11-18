@@ -29,7 +29,23 @@ public final class FrameImages {
     private static final Map<String, Optional<Image>> CACHE = new ConcurrentHashMap<String, Optional<Image>>();
     private static final AtomicBoolean WARMING = new AtomicBoolean();
 
+    private static volatile boolean warmed;
+
+    /** 18.11.2026: true, коли warmUp розпакував усі фони і логотипи (peek далі знає остаточну відповідь). */
+    public static boolean warmedUp() {
+        return warmed;
+    }
+
     private FrameImages() {
+    }
+
+    /**
+     * 18.11.2026: картинка, лише якщо вже розпакована (не читає файл, можна в потоці інтерфейсу без затримки);
+     * null - ще не готова або її немає. Для підготовки фонів наперед (prewarm у трьох виглядах).
+     */
+    public static Image peek(String path) {
+        Optional<Image> o = CACHE.get(path);
+        return o != null ? o.orElse(null) : null;
     }
 
     /** Картинка з ресурсів лаунчера (шлях відносно Launcher.class) або null, якщо її немає чи вона бита. */
@@ -49,10 +65,14 @@ public final class FrameImages {
     public static void warmUp() {
         if (!WARMING.compareAndSet(false, true)) return;
         Thread t = new Thread(() -> {
+            // 18.11.2026: і стандартні фон та логотип (GummerCraft, свої збірки): раніше кожен вигляд читав їх сам
+            get("ui/frame/bg.jpg");
+            get("ui/frame/logo.png");
             for (String key : KEYS) {
                 get("ui/frame/bg_" + key + ".jpg");
                 get("ui/frame/logo_" + key + ".png");
             }
+            warmed = true;
         }, "GummerCraft frame images");
         t.setDaemon(true);
         t.setPriority(Thread.MIN_PRIORITY);

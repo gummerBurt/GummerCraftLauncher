@@ -101,7 +101,7 @@ public final class ForgeVersions {
 
     /** Forge чи NeoForge за назвою паку, інакше null. */
     public static Kind kindOf(Instance instance) {
-        return instance != null ? kindOfName(instance.getName()) : null;
+        return instance != null ? kindOfName(instance.getKindName()) : null;
     }
 
     public static Kind kindOfName(String name) {
@@ -122,7 +122,7 @@ public final class ForgeVersions {
 
     public static String versionIdOf(Instance instance) {
         Kind k = kindOf(instance);
-        return instance.getName().substring(k.prefix.length());
+        return instance.getKindName().substring(k.prefix.length());
     }
 
     /**

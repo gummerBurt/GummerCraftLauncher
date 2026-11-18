@@ -22,24 +22,48 @@ final class SkinChip extends JPanel {
     private static final String SEEN = "skinChipSeen";
     /** Сіра напівпрозора підкладка з тонкою рамкою (SkinChip і AccountChip, дизайн 1.35). */
     static void paintGlassChip(Graphics2D g2, JComponent c, boolean hover) {
-        g2.setColor(new Color(255, 255, 255, hover ? 34 : 16));
+        // 17.11.2026: темна підкладка, як у хотбара (на світлому фоні Vanilla сірий підпис «Акаунт ГК» губився)
+        g2.setColor(new Color(0, 0, 0, 120));
         g2.fillRoundRect(0, 0, c.getWidth(), c.getHeight(), 12, 12);
-        g2.setColor(new Color(255, 255, 255, hover ? 60 : 32));
+        if (hover) {
+            g2.setColor(new Color(255, 255, 255, 28));
+            g2.fillRoundRect(0, 0, c.getWidth(), c.getHeight(), 12, 12);
+        }
+        g2.setColor(new Color(255, 255, 255, hover ? 70 : 40));
         g2.drawRoundRect(0, 0, c.getWidth() - 1, c.getHeight() - 1, 12, 12);
     }
 
     private boolean hover;
     private final Timer pulse;
+    private final JLabel icon, text;
+    private final Font textFont;
+    private double zoom = 1.0;
+
+    /** 17.11.2026: розгорнуте скло: значок і текст більші. */
+    void setZoom(double z) {
+        if (z == zoom) return;
+        zoom = z;
+        int s = (int) Math.round(20 * z), box = (int) Math.round(22 * z), pad = (int) Math.round(8 * z);
+        MigLayout lay = (MigLayout) getLayout();
+        lay.setLayoutConstraints("insets 0 " + pad + " 0 " + pad + ", gap " + (int) Math.round(6 * z));
+        lay.setComponentConstraints(icon, "w " + box + "!, h " + box + "!");
+        icon.setIcon(SwingHelper.createIcon(Launcher.class, "default_skin.png", s, s));
+        text.setFont(textFont.deriveFont((float) (textFont.getSize2D() * z)));
+        revalidate();
+        repaint();
+    }
     private float phase;
 
     SkinChip(Runnable onClick) {
-        super(new MigLayout("insets 0 10 0 14, gap 8", "[][]", "[grow, center]")); // 1.35: вміст рівно по вертикалі
+        // 17.11.2026: вузька плашка «Скіни» вгорі справа під акаунтом (було «Змінити скін» 200x45 у боковій панелі)
+        super(new MigLayout("insets 0 8 0 8, gap 6", "[][]", "[grow, center]"));
         setOpaque(false);
-        JLabel icon = new JLabel(SwingHelper.createIcon(Launcher.class, "default_skin.png", 24, 24));
-        JLabel text = new JLabel(tr("serverAccount.skinChip"));
+        icon = new JLabel(SwingHelper.createIcon(Launcher.class, "default_skin.png", 20, 20));
+        text = new JLabel(tr("serverAccount.skinChipShort"));
         text.setForeground(Color.WHITE);
-        text.setFont(text.getFont().deriveFont(Font.BOLD, text.getFont().getSize2D() + 1f));
-        add(icon, "w 28!, h 28!");
+        text.setFont(text.getFont().deriveFont(Font.BOLD));
+        textFont = text.getFont();
+        add(icon, "w 22!, h 22!");
         add(text);
         setToolTipText(tr("tooltip.skinChip"));
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -52,7 +76,11 @@ final class SkinChip extends JPanel {
 
         addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
+            public void mouseReleased(MouseEvent e) {
+                // 18.11.2026 (власник: «інколи в повноекранному режимі, коли клацаєш по кнопці зміни дизайну, вона не
+                // спрацьовує»): mouseClicked Swing не шле, якщо миша між натисканням і відпусканням зсунулась хоч на піксель.
+                // Як у кнопки: відпускання над самою плашкою (воно приходить сюди, лише якщо натискали теж на ній)
+                if (!e.getComponent().contains(e.getPoint())) return;
                 if (!SwingUtilities.isLeftMouseButton(e)) return;
                 if (pulse.isRunning()) {
                     pulse.stop();

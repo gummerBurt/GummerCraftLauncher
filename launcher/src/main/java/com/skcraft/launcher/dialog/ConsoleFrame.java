@@ -78,6 +78,12 @@ public class ConsoleFrame extends JFrame {
         initComponents();
 
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+        // 17.11.2026 (власник: «відкрив лог лаунчера, закрити не зміг», доки збірка не докачалась): вікно «Збірка»
+        // модальне на весь лаунчер, і консоль, відкрита з вікна завантаження («показати лог»), була ним заблокована:
+        // видно, але ні закрити, ні прокрутити. Лог має працювати завжди, тож модальні вікна його не блокують.
+        if (Toolkit.getDefaultToolkit().isModalExclusionTypeSupported(Dialog.ModalExclusionType.APPLICATION_EXCLUDE)) {
+            setModalExclusionType(Dialog.ModalExclusionType.APPLICATION_EXCLUDE);
+        }
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent event) {

@@ -48,12 +48,39 @@ public class Instance implements Comparable<Instance> {
     @JsonIgnore private boolean orphaned;
     /** Зі списку v2 (1.32+): група паків (наприклад "main"), або null. */
     @JsonIgnore private String group;
+    /**
+     * 17.11.2026: версія Minecraft копії чи збірки Modrinth для порядку у виборі версії (ставить InstanceList). Копія і
+     * збірка стоять у розділі свого завантажувача одразу під чистою версією, з якої зроблені.
+     */
+    @JsonIgnore private String sortVersion;
     /** Зі списку v2: у паку є свій сервер. */
     @JsonIgnore private boolean server;
     /** Зі списку v2: рекомендована пам'ять у МБ, або null. */
     @JsonIgnore private Integer recommendedMemory;
     /** Зі списку v2 (1.32+): адреса сервера паку для «Запуск одразу на сервер» і онлайну на картці, або null. */
     @JsonIgnore private String serverAddress;
+    /**
+     * 17.11.2026: назва, яку гравець дав збірці у вікні «Керування збіркою» (null: звичайна назва). Зберігається в
+     * instance.json; InstanceList ставить її в title після того, як назва прийшла зі списку модпаків чи версій.
+     */
+    private String customTitle;
+    /**
+     * 17.11.2026: копія збірки («Мої збірки»). Тут назва збірки, з якої вона зроблена (vanilla-1.21.1, fabric-1.20.1,
+     * forge-1.16.5): тип, версія гри і завантажувач беруться з неї, а не з назви теки копії (copy-...). null: не копія.
+     */
+    private String copyOf;
+
+    /** Назва, за якою визначається тип і версія: для копії назва оригіналу, інакше власна. */
+    @JsonIgnore
+    public String getKindName() {
+        return copyOf != null && !copyOf.isEmpty() ? copyOf : name;
+    }
+
+    /** Копія збірки, зроблена гравцем (тека copy-...). */
+    @JsonIgnore
+    public boolean isCopy() {
+        return copyOf != null && !copyOf.isEmpty();
+    }
 
     /** Пак вкладки Vanilla: чиста версія Minecraft з маніфесту Mojang (назва vanilla-&lt;версія&gt;). */
     @JsonIgnore
@@ -82,7 +109,7 @@ public class Instance implements Comparable<Instance> {
     /** 1.33: збірка, імпортована з файлу Modrinth .mrpack (назва mrpack-&lt;назва&gt;). */
     @JsonIgnore
     public boolean isMrpack() {
-        return com.gummer.launcher.modrinth.MrpackPacks.isMrpackName(getName());
+        return com.gummer.launcher.modrinth.MrpackPacks.isMrpackName(getKindName());
     }
 
     /** Чистий Minecraft з завантажувачем модів (Fabric, Quilt, Forge, NeoForge): моди гравець кладе сам. */
@@ -104,6 +131,10 @@ public class Instance implements Comparable<Instance> {
      * @return a title
      */
     public String getTitle() {
+        // 17.11.2026 (власник: «нехай гравець може змінити назву, іконку та бекграунд усіх скачаних збірок, крім збірок
+        // гаммеркрафту та сталдейз»): своя назва гравця сильніша за назву, яку ставлять список версій і маніфест при
+        // кожному оновленні (VanillaVersions.buildManifest і т. ін.). Модпаки з нашого CDN своєї назви не мають.
+        if (customTitle != null && !customTitle.trim().isEmpty() && (isBuiltIn() || isCopy())) return customTitle.trim();
         return title != null ? title : name;
     }
 
@@ -125,6 +156,14 @@ public class Instance implements Comparable<Instance> {
      * @return the directory
      * @see #getContentDir() where game files are stored
      */
+    /**
+     * 17.11.2026: тека збірки без звертання до диска. {@link #getDir()} щоразу створює теку (createParentDirs + mkdir), а
+     * малювання списку збірок кликало його десятки разів на кадр (бейдж оновлень, mrpack.json): для читання брати це.
+     */
+    public File peekDir() {
+        return dir;
+    }
+
     public File getDir() {
         try {
             Files.createParentDirs(dir);
@@ -223,6 +262,18 @@ public class Instance implements Comparable<Instance> {
         if (byVersion != 0) {
             return byVersion;
         }
+        // 17.11.2026: снапшоти наступної версії одразу під останнім релізом (і його копіями), від новішого
+        int sa = com.gummer.launcher.vanilla.VanillaVersions.snapshotIndex(this);
+        int sb = com.gummer.launcher.vanilla.VanillaVersions.snapshotIndex(o);
+        if (sa != sb) {
+            if (sa < 0 || sb < 0) return sa < 0 ? -1 : 1;
+            return Integer.compare(sa, sb);
+        }
+        // 17.11.2026: чиста версія перша, під нею її копії і збірки Modrinth (за назвою)
+        boolean da = isCopy() || isMrpack(), db = o.isCopy() || o.isMrpack();
+        if (da != db) {
+            return da ? 1 : -1;
+        }
         String a = title != null ? title : (name != null ? name : "");
         String b = o.title != null ? o.title : (o.name != null ? o.name : "");
         return a.compareToIgnoreCase(b);
@@ -230,7 +281,17 @@ public class Instance implements Comparable<Instance> {
 
     /** Версія Minecraft з назви паку (main-1.19.3 -> [1, 19, 3]), або з заголовка; немає -> порожній масив. */
     public static int[] versionOf(Instance instance) {
-        int[] v = parseVersion(instance.getName());
+        // снапшот 26.4 стоїть за версією останнього релізу (26.3), а не вище за нього (17.11.2026)
+        String snapshotBase = com.gummer.launcher.vanilla.VanillaVersions.snapshotBase(instance);
+        if (snapshotBase != null) {
+            int[] s = parseVersion(snapshotBase);
+            if (s.length > 0) return s;
+        }
+        if (instance.sortVersion != null) {
+            int[] s = parseVersion(instance.sortVersion);
+            if (s.length > 0) return s;
+        }
+        int[] v = parseVersion(instance.getKindName());
         return v.length > 0 ? v : parseVersion(instance.getTitle());
     }
 

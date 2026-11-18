@@ -29,6 +29,37 @@ public class InstanceTableModel extends AbstractTableModel {
 
     private final InstanceList instances;
     private final Icon instanceIcon;
+    private final java.util.Map<java.awt.image.BufferedImage, Icon> artIcons = new java.util.WeakHashMap<>();
+    /** Іконки модпаків Modrinth за файлом: шлях -> {час зміни, Icon}. */
+    private final java.util.Map<String, Object[]> packIcons = new java.util.HashMap<>();
+
+    /**
+     * 17.11.2026 (власник: «в неї ставала іконка не modrinth, а самої збірки»): іконка проєкту з Modrinth
+     * ({@code pack-icon.png}), інакше {@code icon.png} з файлів модпака, інакше null (іконка Modrinth). Кеш за часом
+     * зміни файлу: раніше картинка читалась і зменшувалась на кожне малювання рядка.
+     */
+    private Icon packIcon(Instance instance) {
+        File f = new File(instance.getDir(), com.gummer.launcher.modrinth.MrpackPacks.PACK_ICON);
+        if (!f.isFile()) f = new File(instance.getContentDir(), "icon.png");
+        if (!f.isFile()) return null;
+        String key = f.getAbsolutePath();
+        long mod = f.lastModified();
+        synchronized (packIcons) {
+            Object[] c = packIcons.get(key);
+            if (c != null && (Long) c[0] == mod) return (Icon) c[1];
+        }
+        Icon icon = null;
+        try {
+            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(f);
+            if (img != null) icon = new CrispIcon(img, 32, 32);
+        } catch (Exception ignored) {
+            // зіпсована картинка: іконка Modrinth
+        }
+        synchronized (packIcons) {
+            packIcons.put(key, new Object[]{mod, icon});
+        }
+        return icon;
+    }
     private final Icon customInstanceIcon;
     private final Icon downloadIcon;
     /** 1.33: свої іконки трьох розділів, однакові незалежно від того, встановлено пак чи ні (власник 13.11). */
@@ -58,6 +89,111 @@ public class InstanceTableModel extends AbstractTableModel {
 
     public void setFilter(java.util.function.Predicate<Instance> filter) {
         this.filter = filter;
+    }
+
+    /**
+     * 17.11.2026 (власник: перемикач лівого меню «АБО всі доступні, АБО всі встановлені»): true, список «Встановлені»:
+     * кожна збірка на диску окремим рядком зі своєю іконкою (своя іконка копії, іконка модпака), без вибору версії.
+     * false, список «Усі»: StalDayZ, GummerCraft, Vanilla, завантажувачі (копії і модпаки у виборі версії свого
+     * розділу) і в кінці рядок Modrinth (сторінка модпаків).
+     */
+    private boolean installedOnly;
+
+    public boolean isInstalledOnly() {
+        return installedOnly;
+    }
+
+    public void setInstalledOnly(boolean installedOnly) {
+        this.installedOnly = installedOnly;
+    }
+
+    /**
+     * 17.11.2026: рядок «Modrinth» лівого меню. Не збірка, а сторінка модпаків Modrinth на місці фону: гравець вибирає
+     * модпак і версію, і модпак стає у вибір версії свого завантажувача. Вікна перевіряють {@link #isBrowser(Instance)}
+     * і не запускають, не встановлюють і не запам'ятовують його.
+     */
+    public static class BrowserRow extends Instance {
+        public BrowserRow() {
+            this("gc-browse-modrinth", "Modrinth");
+        }
+
+        protected BrowserRow(String name, String title) {
+            setName(name);
+            setTitle(title);
+            setLocal(false);
+        }
+
+        /** Не сервер (без пінгу і підпису «Сервери»), стоїть серед версій Minecraft. */
+        @Override
+        public boolean isBuiltIn() {
+            return true;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o == this;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
+    }
+
+    public static final BrowserRow MODRINTH = new BrowserRow();
+
+    /**
+     * 17.11.2026 (власник: «у режимі "Встановлені" неможливо додати збірку ... якщо треба, ок»): рядок «+ Додати збірку»
+     * у кінці списку «Встановлені». Як і рядок Modrinth, це не збірка ({@link #isBrowser} теж true); вікна, вибравши
+     * його, перемикають список на «Усі», де є всі версії і модпаки.
+     */
+    public static final class AddRow extends BrowserRow {
+        AddRow() {
+            super("gc-add-build", "+");
+        }
+
+        @Override
+        public String getTitle() {
+            return SharedLocale.tr("launcher.addBuild");
+        }
+    }
+
+    public static final AddRow ADD = new AddRow();
+
+    /** Рядок «+ Додати збірку». */
+    public static boolean isAddRow(Instance instance) {
+        return instance instanceof AddRow;
+    }
+
+    /** Іконка рядка «+ Додати збірку»: плюс у колі, без файлу картинки. */
+    private static final Icon ADD_ICON = new Icon() {
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new java.awt.Color(124, 207, 106, 60));
+            g2.fillOval(x + 1, y + 1, 30, 30);
+            g2.setColor(new java.awt.Color(124, 207, 106));
+            g2.setStroke(new java.awt.BasicStroke(3f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+            g2.drawLine(x + 16, y + 9, x + 16, y + 23);
+            g2.drawLine(x + 9, y + 16, x + 23, y + 16);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return 32;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return 32;
+        }
+    };
+
+    /** Рядок сторінки Modrinth, а не збірка. */
+    public static boolean isBrowser(Instance instance) {
+        return instance instanceof BrowserRow;
     }
 
     public void setOnlineLine(String instanceName, String line) {
@@ -99,7 +235,39 @@ public class InstanceTableModel extends AbstractTableModel {
     public void update() {
         instances.sort();
         rebuildRows();
+        shownKeys = rowKeys();
         fireTableDataChanged();
+    }
+
+    /** Що зараз показано в таблиці (група або ім'я в кожному рядку), щоб знати, чи змінився склад рядків. */
+    private List<String> shownKeys = new ArrayList<String>();
+
+    private List<String> rowKeys() {
+        List<String> keys = new ArrayList<String>();
+        for (int r = 0; r < getRowCount(); r++) {
+            Instance i = getInstanceAt(r);
+            keys.add(i.getGroup() != null && !i.isOrphaned() && !installedOnly ? "g:" + i.getGroup() : "n:" + i.getName());
+        }
+        return keys;
+    }
+
+    /**
+     * GummerCraft 17.11.2026: оновити після тихого перечитування списку з мережі. Якщо рядки ті самі (ті самі збірки
+     * в тому ж порядку), лише перемалювати їх: повне оновлення таблиці скидає вибір і висоти рядків, і в Liquid Glass
+     * (рядки з підписами розділів вищі) список на мить «блимав» через секунду після старту. Повертає true, якщо рядки
+     * лишились ті самі (вибір не скидався).
+     */
+    public boolean updateKeepingRows() {
+        instances.sort();
+        rebuildRows();
+        List<String> keys = rowKeys();
+        if (!keys.isEmpty() && keys.equals(shownKeys)) {
+            fireTableRowsUpdated(0, getRowCount() - 1);
+            return true;
+        }
+        shownKeys = keys;
+        fireTableDataChanged();
+        return false;
     }
 
     /** Пак у рядку таблиці (для групи: вибрана версія). */
@@ -132,14 +300,38 @@ public class InstanceTableModel extends AbstractTableModel {
         if (!grouped || instance == null || instance.getGroup() == null || instance.isOrphaned()) {
             return members;
         }
+        if (installedOnly) {
+            return members; // «Встановлені»: кожна збірка окремим рядком, вибору версії немає
+        }
+        // 17.11.2026 (власник: «нехай встановлені будуть вверху списку, а не під версією збірки»): спершу все
+        // встановлене (чисті версії, копії, модпаки; як зелена крапка у списку), потім решта; усередині кожної частини порядок той самий
+        // (від новішої версії, чиста перед своїми копіями і модпаками)
+        List<Instance> rest = new ArrayList<Instance>();
         synchronized (instances) {
             for (Instance i : instances.getInstances()) {
                 if (instance.getGroup().equals(i.getGroup()) && !i.isOrphaned()) {
-                    members.add(i);
+                    (i.isLocal() && i.isInstalled() ? members : rest).add(i);
                 }
             }
         }
+        members.addAll(rest);
         return members;
+    }
+
+    /**
+     * Найновіша чиста версія розділу (позначка «найновіша» у виборі версії). Раніше це був просто перший рядок, але
+     * з 17.11.2026 вгорі встановлені, тож шукаємо за загальним порядком (від новішої, без копій і модпаків).
+     */
+    public boolean isNewest(Instance instance) {
+        if (instance == null || instance.getGroup() == null || isDerived(instance)) return false;
+        synchronized (instances) {
+            for (Instance i : instances.getInstances()) {
+                if (instance.getGroup().equals(i.getGroup()) && !i.isOrphaned() && !isDerived(i)) {
+                    return i == instance;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -148,6 +340,7 @@ public class InstanceTableModel extends AbstractTableModel {
      */
     public void refreshChoice() {
         rebuildRows();
+        shownKeys = rowKeys();
         if (getRowCount() > 0) {
             fireTableRowsUpdated(0, getRowCount() - 1);
         }
@@ -165,6 +358,25 @@ public class InstanceTableModel extends AbstractTableModel {
         if (!grouped) {
             return;
         }
+        if (installedOnly) {
+            // 17.11.2026 (власник: «щоб "Встановлені" мали групування та сортування, як "Усі"»): розділи в тому ж
+            // порядку, що і в «Усі» (StalDayZ, модпаки GummerCraft, Vanilla, Fabric, Quilt, Forge, NeoForge), розділ
+            // стоїть там, де його перший рядок у загальному порядку; усередині розділу встановлені збірки підряд
+            Map<String, List<Instance>> byKey = new java.util.LinkedHashMap<String, List<Instance>>();
+            synchronized (instances) {
+                for (Instance instance : instances.getInstances()) {
+                    if (filter != null && !filter.test(instance)) continue;
+                    String group = instance.getGroup();
+                    String key = group == null || instance.isOrphaned() ? "n:" + instance.getName() : "g:" + group;
+                    List<Instance> list = byKey.get(key);
+                    if (list == null) byKey.put(key, list = new ArrayList<Instance>());
+                    if (instance.isLocal()) list.add(instance);
+                }
+            }
+            for (List<Instance> list : byKey.values()) rows.addAll(list);
+            if (filter == null) rows.add(ADD);
+            return;
+        }
         Map<String, Boolean> emitted = new HashMap<String, Boolean>();
         synchronized (instances) {
             for (Instance instance : instances.getInstances()) {
@@ -180,6 +392,30 @@ public class InstanceTableModel extends AbstractTableModel {
                 }
             }
         }
+        if (filter == null) {
+            rows.add(MODRINTH);
+        }
+    }
+
+    private static final java.util.Set<String> INSTALLED_SECTIONS = new java.util.HashSet<String>(java.util.Arrays.asList(
+            "vanilla", "fabric", "quilt", "forge", "neoforge"));
+
+    /** Розділ збірки в «Встановлених»: gummercraft (модпаки з CDN), vanilla, fabric, quilt, forge, neoforge або other. */
+    private static String installedSectionOf(Instance instance) {
+        if (!instance.isBuiltIn()) return "gummercraft";
+        String g = instance.getGroup();
+        return g != null && INSTALLED_SECTIONS.contains(g) ? g : "other";
+    }
+
+    /**
+     * 17.11.2026: підпис над першим рядком розділу в «Встановлених» («ГаммерКрафт», «Ваніль», «Fabric», ...), null в
+     * інших рядках. У режимі «Усі» теж null: там підписи свої (сервери і Minecraft) у кожному вигляді.
+     */
+    public String installedCaption(Instance instance, Instance previous) {
+        if (!installedOnly || instance == null || isBrowser(instance)) return null;
+        String s = installedSectionOf(instance);
+        if (previous != null && s.equals(installedSectionOf(previous))) return null;
+        return SharedLocale.tr("launcher.installed.section." + s);
     }
 
     /** Яку версію групи показати: вибрана за цей запуск, далі остання вибрана (config lastInstance), далі остання запущена, далі найновіша. */
@@ -204,6 +440,50 @@ public class InstanceTableModel extends AbstractTableModel {
             }
         }
         return recent != null ? recent : members.get(0);
+    }
+
+    /**
+     * 17.11.2026: збірка зі своєю назвою (копія, модпак Modrinth або версія, яку гравець перейменував): у виборі
+     * версії і під назвою розділу показується ця назва, поруч сіра версія гри.
+     */
+    public static boolean isNamed(Instance instance) {
+        return isDerived(instance) || instance != null && instance.getCustomTitle() != null
+                && !instance.getCustomTitle().trim().isEmpty() && instance.isBuiltIn();
+    }
+
+    /** 17.11.2026: копія чи збірка Modrinth, що стоїть у виборі версії розділу під чистою версією. */
+    public static boolean isDerived(Instance instance) {
+        return instance != null && (instance.isCopy() || instance.isMrpack());
+    }
+
+    /**
+     * 17.11.2026: підпис у виборі версії і під назвою розділу: «Minecraft 1.21.1», для «музею» Vanilla сама назва
+     * («Pre-classic rd-132211»), для копії і збірки Modrinth її назва («Pixelmon», «Мій Forge»).
+     */
+    public String pickerTitleOf(Instance instance) {
+        if (isNamed(instance)) return instance.getTitle() != null ? instance.getTitle() : instance.getName();
+        String v = versionLabelOf(instance);
+        return !v.isEmpty() && Character.isDigit(v.charAt(0)) ? "Minecraft " + v : v;
+    }
+
+    /** Версія Minecraft копії чи збірки Modrinth («1.16.5») для сірого підпису поруч з назвою, або null. */
+    public String derivedVersionOf(Instance instance) {
+        if (!isNamed(instance)) return null;
+        String v = versionLabelOf(instance);
+        return v.isEmpty() || !Character.isDigit(v.charAt(0)) ? null : v;
+    }
+
+    /** Гравець чи лаунчер знову вибирає збірку на ім'я: якщо вона в групі, рядок групи показуватиме саме її. true, якщо вибір у групі змінився. */
+    public boolean chooseByName(String name) {
+        if (name == null) return false;
+        synchronized (instances) {
+            for (Instance i : instances.getInstances()) {
+                if (name.equalsIgnoreCase(i.getName()) && i.getGroup() != null) {
+                    return !name.equalsIgnoreCase(groupChoice.put(i.getGroup(), i.getName()));
+                }
+            }
+        }
+        return false;
     }
 
     /** Версія паку для вибору версії і рядка групи: «Main 1.21» у групі «Main» -> «1.21». */
@@ -236,15 +516,145 @@ public class InstanceTableModel extends AbstractTableModel {
         return "<span style=\"color:" + color + ";\">" + SwingHelper.htmlEscape(text) + "</span>";
     }
 
-    /** Другий рядок: частини через сіру крапку, шрифт 11. */
-    private static String line(String... parts) {
-        StringBuilder sb = new StringBuilder();
-        for (String p : parts) {
-            if (p == null) continue;
-            if (sb.length() > 0) sb.append(span(GREY, " · "));
-            sb.append(p);
+    /** Частина другого рядка: колір і текст (текст може бути скорочений, щоб рядок влазив). */
+    private static String[] part(String color, String text) {
+        return text == null ? null : new String[]{color, text};
+    }
+
+    // ---- 17.11.2026 (власник: «тут щось з текстом»): у Liquid Glass рядок списку фіксованої висоти, а HTML у Swing
+    // не вміє «не переносити» (тег nobr він не знає). Довге («Minecraft Pre-classic rd-132211», «The Pixelmon
+    // Modpack · 1.16.5») переносилось на зайвий рядок і обрізалось знизу. Тепер таблиця каже ширину колонки
+    // (setTextArea), текст міряється тим самим шрифтом і скорочується трикрапкою; повний текст у підказці (tooltipAt).
+    private Font fitFont;
+    private int fitWidth;
+    private boolean fitOff;
+    private javax.swing.JLabel measure;
+    private final Map<String, String> fitCache = new java.util.LinkedHashMap<String, String>(64, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+            return size() > 256;
         }
-        return sb.length() == 0 ? "" : "<br /> &nbsp;&nbsp;&nbsp;<span style=\"font-size:11;\">" + sb + "</span>";
+    };
+
+    /** Шрифт і ширина колонки тексту (px). true, якщо змінились (тоді таблицю треба перемалювати). */
+    public boolean setTextArea(Font font, int width) {
+        if (width == fitWidth && (font == null ? fitFont == null : font.equals(fitFont))) return false;
+        fitFont = font;
+        fitWidth = width;
+        fitCache.clear();
+        return true;
+    }
+
+    private int widthOf(String html) {
+        if (measure == null) measure = new javax.swing.JLabel();
+        measure.setFont(fitFont);
+        measure.setText("<html>" + html + "</html>");
+        return measure.getPreferredSize().width;
+    }
+
+    private boolean fitting() {
+        return !fitOff && fitWidth > 0 && fitFont != null && javax.swing.SwingUtilities.isEventDispatchThread();
+    }
+
+    /**
+     * Перший крок, що влазить у fitWidth (ширина з кроками лише зменшується), або останній, якщо не влазить жоден.
+     * Те саме, що перевіряти кроки по черзі, але ~log2(n) вимірів замість n.
+     */
+    private int firstFit(java.util.List<String> steps) {
+        int last = steps.size() - 1;
+        if (widthOf(steps.get(0)) <= fitWidth || last == 0) return 0;
+        if (widthOf(steps.get(last)) > fitWidth) return last;
+        int lo = 0, hi = last; // lo не влазить, hi влазить
+        while (hi - lo > 1) {
+            int mid = (lo + hi) >>> 1;
+            if (widthOf(steps.get(mid)) <= fitWidth) hi = mid;
+            else lo = mid;
+        }
+        return hi;
+    }
+
+    private static String shorter(String s) {
+        if (s.endsWith("…")) s = s.substring(0, s.length() - 1);
+        s = s.substring(0, Math.max(1, s.length() - 1)).trim();
+        return s + "…";
+    }
+
+    /** Перший рядок: назва (шрифт 13) і онлайн; назва скорочується, якщо не влазить. */
+    private String titleLine(String title, Instance instance) {
+        String badge = onlineBadge(instance);
+        String html = "&nbsp;<span style=\"font-size:" + fs(13) + "\">" + SwingHelper.htmlEscape(title) + "</span>" + badge;
+        if (!fitting()) return html;
+        String key = "t|" + fitWidth + "|" + html;
+        String cached = fitCache.get(key);
+        if (cached != null) return cached;
+        // 18.11.2026: ті самі кроки скорочення, що й раніше (по символу), але вимірюється не кожен, а двійковим
+        // пошуком: вимір HTML ~1-3 мс, а довга назва давала десятки вимірів (сторож EdtWatch: 0,15 с на першому кадрі)
+        java.util.List<String> steps = new ArrayList<String>();
+        String t = title;
+        steps.add(html);
+        while (t.length() > 2 && steps.size() < 400) {
+            t = shorter(t);
+            steps.add("&nbsp;<span style=\"font-size:" + fs(13) + "\">" + SwingHelper.htmlEscape(t) + "</span>" + badge);
+        }
+        String out = steps.get(firstFit(steps));
+        fitCache.put(key, out);
+        return out;
+    }
+
+    /** Другий рядок: частини через сіру крапку, шрифт 11; якщо не влазить, скорочується найдовша частина. */
+    private String line(String[]... parts) {
+        java.util.List<String[]> list = new ArrayList<String[]>();
+        for (String[] p : parts) if (p != null && p[1] != null && !p[1].isEmpty()) list.add(new String[]{p[0], p[1]});
+        if (list.isEmpty()) return "";
+        String body = lineBody(list);
+        if (fitting()) {
+            String key = "l|" + fitWidth + "|" + body;
+            String cached = fitCache.get(key);
+            if (cached != null) {
+                body = cached;
+            } else {
+                // 18.11.2026: кроки ті самі (найдовша частина на символ), вимір двійковим пошуком (див. titleLine)
+                java.util.List<String> steps = new ArrayList<String>();
+                steps.add(body);
+                while (steps.size() < 400) {
+                    String[] longest = null;
+                    for (String[] p : list) if (longest == null || p[1].length() > longest[1].length()) longest = p;
+                    if (longest == null || longest[1].length() <= 2) break;
+                    longest[1] = shorter(longest[1]);
+                    steps.add(lineBody(list));
+                }
+                body = steps.get(firstFit(steps));
+                fitCache.put(key, body);
+            }
+        }
+        return "<br />" + body;
+    }
+
+    private String lineBody(java.util.List<String[]> parts) {
+        StringBuilder sb = new StringBuilder();
+        for (String[] p : parts) {
+            if (sb.length() > 0) sb.append(span(GREY, " · "));
+            sb.append(span(p[0], p[1]));
+        }
+        return " &nbsp;&nbsp;&nbsp;<span style=\"font-size:" + fs(11) + ";\">" + sb + "</span>";
+    }
+
+    /** Повний текст рядка для підказки, якщо в списку він скорочений; інакше null. */
+    public String tooltipAt(int row) {
+        if (row < 0 || row >= getRowCount()) return null;
+        Object shown = getValueAt(row, 1);
+        fitOff = true;
+        Object full;
+        try {
+            full = getValueAt(row, 1);
+        } finally {
+            fitOff = false;
+        }
+        String updates = updatesText(getInstanceAt(row)); // 17.11.2026: що означає зелена стрілка на іконці
+        if (full == null || full.equals(shown)) return updates;
+        return (updates != null ? full + " · " + updates : full.toString()).replaceAll("<br\\s*/?>", " · ").replaceAll("<[^>]+>", "").replace("&nbsp;", " ")
+                .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+                .replaceAll("\\s+", " ").replace(" ·  · ", " · ").trim();
     }
 
     /**
@@ -254,12 +664,18 @@ public class InstanceTableModel extends AbstractTableModel {
      */
     private String onlineBadge(Instance instance) {
         String online = onlineLines.get(instance.getName());
-        return online != null ? "&nbsp;&nbsp;<span style=\"color:" + GREEN + ";font-size:11;\">● " + SwingHelper.htmlEscape(online) + "</span>" : "";
+        return online != null ? "&nbsp;&nbsp;<span style=\"color:" + GREEN + ";font-size:" + fs(11) + ";\">● " + SwingHelper.htmlEscape(online) + "</span>" : "";
     }
 
     /** Другий рядок групи: «Minecraft 1.21». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */
     private String groupLine(Instance instance) {
-        return line(span(GREY, "Minecraft " + versionLabelOf(instance)));
+        // 17.11.2026: старі версії «музею» («Pre-classic rd-132211») з префіксом «Minecraft» переносились у третій рядок
+        if (isNamed(instance)) {
+            // копія, збірка Modrinth чи перейменована версія: її назва, поруч сіра версія гри
+            String v = derivedVersionOf(instance);
+            return line(part("#d6d8dc", pickerTitleOf(instance)), part(GREY, v));
+        }
+        return line(part(GREY, pickerTitleOf(instance)));
     }
 
     /** Підпис версії під назвою групи: «Main 1.21» у групі «Main» -> «1.21». */
@@ -279,10 +695,14 @@ public class InstanceTableModel extends AbstractTableModel {
 
     /** Назва групи для рядка (зі списку v2), або null, якщо пак показується сам по собі. */
     private String groupTitleFor(Instance instance) {
-        if (!grouped || instance.getGroup() == null || getGroupMembers(instance).size() < 2) {
+        if (!grouped || installedOnly || instance.getGroup() == null || getGroupMembers(instance).size() < 2) {
             return null;
         }
         String title = instances.getGroupTitles().get(instance.getGroup());
+        if (title == null) {
+            // 17.11.2026: у розділі може бути вибрана копія чи збірка Modrinth: назва за групою, а не за самою збіркою
+            title = com.gummer.launcher.manage.InstanceCopies.sectionTitle(instance.getGroup());
+        }
         if (title == null && com.gummer.launcher.vanilla.VanillaVersions.GROUP.equals(instance.getGroup())) {
             title = "Vanilla";
         }
@@ -356,13 +776,162 @@ public class InstanceTableModel extends AbstractTableModel {
         return 2;
     }
 
+    // ---- 17.11.2026 (власник: «в повноекранці масштабувати (збільшити)» список у Liquid Glass): множник розміру
+    // тексту і іконок; рядки і підписи збільшує сама таблиця (CardInstanceTable.setZoom)
+    private double zoom = 1.0;
+    private final Map<Icon, Icon> zoomIcons = new java.util.WeakHashMap<Icon, Icon>();
+
+    public void setZoom(double zoom) {
+        if (zoom == this.zoom) return;
+        this.zoom = zoom;
+        fitCache.clear();
+        zoomIcons.clear();
+        // 17.11.2026: не fireTableDataChanged, бо той скидав виділену збірку, і при розгортанні скла на мить гасла
+        // «ЗАПУСК», ховався вибір версії і перемальовувався фон (власник: «так різко перебудовується»)
+        if (getRowCount() > 0) fireTableRowsUpdated(0, getRowCount() - 1);
+    }
+
+    public double getZoom() {
+        return zoom;
+    }
+
+    private String fs(int size) {
+        return zoom == 1.0 ? String.valueOf(size) : String.valueOf((int) Math.round(size * zoom));
+    }
+
+    /** Іконка, збільшена малюванням (CrispIcon і далі бере пікселі екрана, тож не розмивається). */
+    private static final class ZoomIcon implements Icon {
+        private final Icon inner;
+        private final double zoom;
+
+        ZoomIcon(Icon inner, double zoom) {
+            this.inner = inner;
+            this.zoom = zoom;
+        }
+
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.translate(x, y);
+            g2.scale(zoom, zoom);
+            inner.paintIcon(c, g2, 0, 0);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return (int) Math.round(inner.getIconWidth() * zoom);
+        }
+
+        @Override
+        public int getIconHeight() {
+            return (int) Math.round(inner.getIconHeight() * zoom);
+        }
+    }
+
     @Override
-    @SuppressWarnings({"ConstantConditions"})
     public Object getValueAt(int rowIndex, int columnIndex) {
+        Object v = valueAt(rowIndex, columnIndex);
+        if (columnIndex == 0 && zoom != 1.0 && v instanceof Icon) {
+            Icon icon = (Icon) v;
+            Icon z = zoomIcons.get(icon);
+            if (z == null) zoomIcons.put(icon, z = new ZoomIcon(icon, zoom));
+            v = z;
+        }
+        // 17.11.2026 (власник: «а бейдж не влазить»): оновлення збірки це зелена стрілка на куті іконки, а не текст у
+        // підписі (там він скорочувався до «є оновленн...»); повний текст у підказці (tooltipAt) і біля «Запуску»
+        if (columnIndex == 0 && v instanceof Icon && updatesText(getInstanceAt(rowIndex)) != null) {
+            Icon icon = (Icon) v;
+            synchronized (badgeIcons) {
+                Icon b = badgeIcons.get(icon);
+                if (b == null) badgeIcons.put(icon, b = new UpdateBadgeIcon(icon));
+                return b;
+            }
+        }
+        return v;
+    }
+
+    private final java.util.Map<Icon, Icon> badgeIcons = new java.util.WeakHashMap<Icon, Icon>();
+
+    /** Іконка збірки з зеленим кружечком і стрілкою вгору в правому нижньому куті (є оновлення). */
+    public static final class UpdateBadgeIcon implements Icon {
+        private final Icon base;
+
+        public UpdateBadgeIcon(Icon base) {
+            this.base = base;
+        }
+
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+            base.paintIcon(c, g, x, y);
+            paintBadge(g, x, y, getIconWidth(), getIconHeight());
+        }
+
+        /** Сам кружечок у межах іконки w x h (його малює і полиця Бібліотеки). */
+        public static void paintBadge(java.awt.Graphics g, int x, int y, int w, int h) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_STROKE_CONTROL, java.awt.RenderingHints.VALUE_STROKE_PURE);
+                double d = Math.max(11, Math.min(w, h) * 0.46);
+                double bx = x + w - d, by = y + h - d, ring = Math.max(1.5, d * 0.12);
+                g2.setColor(new java.awt.Color(16, 18, 22));
+                g2.fill(new java.awt.geom.Ellipse2D.Double(bx - ring, by - ring, d + ring * 2, d + ring * 2));
+                g2.setColor(new java.awt.Color(92, 196, 84));
+                g2.fill(new java.awt.geom.Ellipse2D.Double(bx, by, d, d));
+                g2.setColor(java.awt.Color.WHITE);
+                g2.setStroke(new java.awt.BasicStroke((float) Math.max(1.4, d * 0.13), java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+                double cx = bx + d / 2, top = by + d * 0.26, bottom = by + d * 0.74, arm = d * 0.2;
+                java.awt.geom.Path2D.Double arrow = new java.awt.geom.Path2D.Double();
+                arrow.moveTo(cx, bottom);
+                arrow.lineTo(cx, top);
+                arrow.moveTo(cx - arm, top + arm);
+                arrow.lineTo(cx, top);
+                arrow.lineTo(cx + arm, top + arm);
+                g2.draw(arrow);
+            } finally {
+                g2.dispose();
+            }
+        }
+
+        @Override
+        public int getIconWidth() {
+            return base.getIconWidth();
+        }
+
+        @Override
+        public int getIconHeight() {
+            return base.getIconHeight();
+        }
+    }
+
+    @SuppressWarnings({"ConstantConditions"})
+    private Object valueAt(int rowIndex, int columnIndex) {
         Instance instance;
         switch (columnIndex) {
             case 0:
                 instance = getInstanceAt(rowIndex);
+                if (isAddRow(instance)) return ADD_ICON;
+                if (isBrowser(instance)) {
+                    return modrinthIcon;
+                }
+                // 17.11.2026 (власник: «в форджі змінилась іконка. Так не треба, іконка нехай міняється лише в
+                // встановлені збірки»): рядок розділу завжди з іконкою розділу, навіть коли в ньому вибрано копію чи
+                // модпак; своя іконка копії і іконка модпака лише в списку «Встановлені», де кожна збірка окремо
+                boolean sectionRow = groupTitleFor(instance) != null;
+                if (sectionRow && isDerived(instance)) {
+                    Icon section = sectionIconOf(instance.getGroup());
+                    if (section != null) return section;
+                }
+                // своя іконка копії збірки (InstanceArt), кеш за картинкою: список малюється часто
+                java.awt.image.BufferedImage art = sectionRow ? null : com.gummer.launcher.manage.InstanceArt.icon(instance);
+                if (art != null) {
+                    synchronized (artIcons) {
+                        Icon cached = artIcons.get(art);
+                        if (cached == null) artIcons.put(art, cached = new CrispIcon(art, 32, 32));
+                        return cached;
+                    }
+                }
                 // 1.33 (власник 13.11): у трьох розділів завжди своя іконка, без іконки «не встановлено»:
                 // Vanilla - логотип Minecraft (MinecraftIcon.webp власника), GummerCraft і StalDayZ - іконки їхніх паків
                 if (instance.isVanilla()) {
@@ -378,9 +947,8 @@ public class InstanceTableModel extends AbstractTableModel {
                     return quiltIcon;
                 }
                 if (instance.isMrpack()) {
-                    File own = new File(instance.getContentDir(), "icon.png");
-                    return own.isFile() ? new javax.swing.ImageIcon(new javax.swing.ImageIcon(own.getAbsolutePath()).getImage()
-                            .getScaledInstance(32, 32, java.awt.Image.SCALE_SMOOTH)) : modrinthIcon;
+                    Icon own = packIcon(instance);
+                    return own != null ? own : modrinthIcon;
                 }
                 if ("main".equals(instance.getGroup())) {
                     return gummercraftIcon;
@@ -402,31 +970,79 @@ public class InstanceTableModel extends AbstractTableModel {
                 String groupTitle = groupTitleFor(instance);
                 if (groupTitle != null) {
                     // рядок групи: назва групи, під нею вибрана версія і її стан
-                    return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(groupTitle) + "</span>" + onlineBadge(instance)
+                    return "<html>" + titleLine(groupTitle, instance)
                             + groupLine(instance)
                             + "</html>"; // стан версії (встановлено, оновлення) видно у виборі версії: у вузькому списку не влазить
                 }
-                return "<html>&nbsp;" + "<span style=\"font-size:13\">" + SwingHelper.htmlEscape(instance.getTitle()) + "</span>" + onlineBadge(instance) + getAddendum(instance) + "</html>";
+                // «Встановлені»: Vanilla як у виборі версії («Pre-classic rd-132211» без «Minecraft», 17.11.2026)
+                String title = installedOnly && instance.isVanilla() ? pickerTitleOf(instance) : instance.getTitle();
+                return "<html>" + titleLine(title, instance) + getAddendum(instance) + "</html>";
             default:
                 return null;
         }
     }
 
+    /** Іконка розділу завантажувача за групою (vanilla, fabric, quilt, forge, neoforge), або null. */
+    private Icon sectionIconOf(String group) {
+        if (group == null) return null;
+        switch (group) {
+            case "vanilla":
+                return vanillaIcon;
+            case "fabric":
+                return fabricIcon;
+            case "quilt":
+                return quiltIcon;
+            case "forge":
+                return forgeIcon;
+            case "neoforge":
+                return neoforgeIcon;
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * 17.11.2026 (власник: «бейдж "є оновлення модів" на картці збірки - го»): є новіша версія модпака Modrinth чи
+     * своїх модів гравця (UpdateBadges, перевірка у фоні). Текст бейджа оновлень для вікон («є оновлення модпака 1.2», «оновлення модів: 3»), або null. */
+    public static String updatesText(Instance instance) {
+        if (instance == null || isBrowser(instance)) return null;
+        com.gummer.launcher.manage.UpdateBadges.Info u = com.gummer.launcher.manage.UpdateBadges.of(instance);
+        if (u == null || !u.any()) return null;
+        if (u.pack != null) return SharedLocale.tr("launcher.packUpdateHint", u.pack);
+        return SharedLocale.tr("launcher.modUpdatesHint", u.mods);
+    }
+
     /** Другий рядок паку без групи: стан (сірий, оновлення жовтим); онлайн у першому рядку, як у групах. */
     private String getAddendum(Instance instance) {
-        String state;
-        if (instance.isOrphaned()) {
-            state = span(GREY, SharedLocale.tr("launcher.orphanedHint"));
-        } else if (!instance.isLocal()) {
-            state = span(GREY, SharedLocale.tr("launcher.notInstalledHint"));
-        } else if (!instance.isInstalled()) {
-            state = span(AMBER, SharedLocale.tr("launcher.requiresUpdateHint"));
-        } else if (instance.isUpdatePending()) {
-            state = span(AMBER, SharedLocale.tr("launcher.updatePendingHint"));
-        } else {
-            state = null;
+        if (isAddRow(instance)) {
+            return line(part(GREY, SharedLocale.tr("launcher.addBuildSub")));
         }
-        return line(state);
+        if (isBrowser(instance)) {
+            return line(part(GREY, SharedLocale.tr("launcher.modrinthRowSub")));
+        }
+        // «Встановлені»: у копії і модпака під назвою розділ і версія гри («Forge 1.16.5»)
+        String where = null;
+        if (installedOnly && isNamed(instance)) {
+            String sec = com.gummer.launcher.manage.InstanceCopies.sectionTitle(instance.getGroup());
+            String v = derivedVersionOf(instance);
+            where = sec == null ? v : v != null ? sec + " " + v : sec;
+        }
+        String[] state;
+        if (instance.isOrphaned()) {
+            state = part(GREY, SharedLocale.tr("launcher.orphanedHint"));
+        } else if (!instance.isLocal()) {
+            state = part(GREY, SharedLocale.tr("launcher.notInstalledHint"));
+        } else if (!instance.isInstalled()) {
+            state = part(AMBER, SharedLocale.tr("launcher.requiresUpdateHint"));
+        } else if (instance.isUpdatePending()) {
+            state = part(AMBER, SharedLocale.tr("launcher.updatePendingHint"));
+        } else {
+            state = null; // оновлення показує стрілка на іконці (17.11.2026)
+        }
+        // 17.11.2026 (власник: «перевір що ніде нічого не вилазить»): у вузькому списку «Встановлені» «Fabric 26.2 ·
+        // (потрібне оновлення)» скорочувалось до «(потрібне...»; розділ і так у заголовку групи, тож лишається стан
+        if (where != null && state != null) return line(state);
+        return line(part(GREY, where), state);
     }
 
 }

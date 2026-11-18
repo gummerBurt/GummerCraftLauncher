@@ -32,7 +32,7 @@ final class SkinChip2 extends JPanel {
         super(new MigLayout("insets 0 12 0 12, gap 8", "push[][]push", "[grow,center]"));
         setOpaque(false);
         JLabel icon = new JLabel(com.skcraft.launcher.swing.CrispIcon.of(Launcher.class, "default_skin.png", 20, 20));
-        JLabel text = new JLabel(tr("serverAccount.skinChip"));
+        JLabel text = new JLabel(tr("serverAccount.skinChipShort")); // 17.11.2026: у верхньому ряду кнопок
         text.setForeground(com.gummer.launcher.ui2.Ui.TEXT);
         text.setFont(com.gummer.launcher.ui2.Ui.font(Font.BOLD, 13f));
         add(icon, "w 20!, h 20!");
@@ -48,7 +48,11 @@ final class SkinChip2 extends JPanel {
 
         addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
+            public void mouseReleased(MouseEvent e) {
+                // 18.11.2026 (власник: «інколи в повноекранному режимі, коли клацаєш по кнопці зміни дизайну, вона не
+                // спрацьовує»): mouseClicked Swing не шле, якщо миша між натисканням і відпусканням зсунулась хоч на піксель.
+                // Як у кнопки: відпускання над самою плашкою (воно приходить сюди, лише якщо натискали теж на ній)
+                if (!e.getComponent().contains(e.getPoint())) return;
                 if (!SwingUtilities.isLeftMouseButton(e)) return;
                 if (pulse.isRunning()) {
                     pulse.stop();
@@ -77,6 +81,8 @@ final class SkinChip2 extends JPanel {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         int arc = com.gummer.launcher.ui2.Ui.RADIUS;
+        g2.setColor(com.gummer.launcher.ui2.Ui.alpha(Color.BLACK, 110)); // 17.11.2026: над картинкою сцени
+        g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
         if (hover) {
             g2.setColor(com.gummer.launcher.ui2.Ui.alpha(com.gummer.launcher.ui2.Ui.ACCENT_HOVER, 45));
             g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);

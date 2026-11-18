@@ -241,6 +241,19 @@ public class ConfigurationDialogFlat extends JDialog {
         memCard.add(memorySlider, "gaptop 6, wmin 0");
         memCard.add(minMemorySpinner, "hidemode 3");
         memCard.add(maxMemorySpinner, "hidemode 3");
+        // 17.11.2026: попередження, коли більше половини пам'яті ПК
+        final JTextArea memWarn = LookUi.body(" ", true);
+        memWarn.setForeground(LookTheme.palette().warn);
+        memCard.add(memWarn, "gaptop 2, wmin 0, hidemode 3");
+        Runnable memCheck = () -> {
+            int mb = memorySlider.getValue();
+            boolean much = com.gummer.launcher.manage.MemoryAdvice.tooMuch(mb);
+            memWarn.setText(much ? SharedLocale.tr("memory.tooMuchSetting", com.gummer.launcher.manage.MemoryAdvice.gb(mb),
+                    com.gummer.launcher.manage.MemoryAdvice.gb(com.gummer.launcher.manage.MemoryAdvice.totalMb())) : " ");
+            memWarn.setVisible(much);
+        };
+        memorySlider.addChangeListener(e -> memCheck.run());
+        SwingUtilities.invokeLater(memCheck);
         memCard.add(LookUi.body(SharedLocale.tr("options.64BitJavaWarning"), true), "gaptop 2, wmin 0");
         java.add(memCard);
 

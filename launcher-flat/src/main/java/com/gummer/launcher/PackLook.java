@@ -24,7 +24,7 @@ public final class PackLook {
         return instance.isVanilla() ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
                 : instance.isFabric() ? com.gummer.launcher.fabric.FabricVersions.GROUP
                 : instance.isQuilt() ? com.gummer.launcher.quilt.QuiltVersions.GROUP
-                : instance.isMrpack() ? com.gummer.launcher.vanilla.VanillaVersions.GROUP
+                : instance.isMrpack() ? com.gummer.launcher.manage.InstanceCopies.sectionOf(instance) // 17.11.2026: оформлення свого завантажувача
                 : instance.isForgeLike() ? com.gummer.launcher.forge.ForgeVersions.kindOf(instance).group : instance.getName();
     }
 

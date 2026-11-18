@@ -24,17 +24,49 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
  */
 public class CardInstanceTable extends InstanceTable {
 
-    private static final int ROW_H = 46;
-    private static final int CAPTION_H = 22;
-    private static final int GAP = 3;
+    private static final int BASE_ROW_H = 46;
+    private static final int BASE_CAPTION_H = 22;
+    private static final int BASE_GAP = 3;
+    /** 17.11.2026: розміри з множником (розгорнуте скло, setZoom). */
+    private double zoom = 1.0;
+    private int ROW_H = BASE_ROW_H;
+    private int CAPTION_H = BASE_CAPTION_H;
+    private int GAP = BASE_GAP;
 
     private int hoverRow = -1;
 
     private static final Color TEXT = new Color(222, 222, 222);
     /** Рамки клітинок: [є підпис розділу][перша колонка]. */
-    private static final javax.swing.border.Border[][] BORDERS = {
-            {BorderFactory.createEmptyBorder(0, 0, 0, 0), BorderFactory.createEmptyBorder(0, 6, 0, 0)},
-            {BorderFactory.createEmptyBorder(CAPTION_H, 0, 0, 0), BorderFactory.createEmptyBorder(CAPTION_H, 6, 0, 0)}};
+    private javax.swing.border.Border[][] BORDERS = borders(BASE_CAPTION_H, 6);
+
+    private static javax.swing.border.Border[][] borders(int caption, int left) {
+        return new javax.swing.border.Border[][]{
+                {BorderFactory.createEmptyBorder(0, 0, 0, 0), BorderFactory.createEmptyBorder(0, left, 0, 0)},
+                {BorderFactory.createEmptyBorder(caption, 0, 0, 0), BorderFactory.createEmptyBorder(caption, left, 0, 0)}};
+    }
+
+    /**
+     * 17.11.2026 (власник: «в повноекранці масштабувати (збільшити)» список Liquid Glass): висота карток, підписи,
+     * колонка іконок, текст і іконки (модель) з множником. 1 у звичайному вікні.
+     */
+    public void setZoom(double z) {
+        if (z == zoom) return;
+        zoom = z;
+        ROW_H = (int) Math.round(BASE_ROW_H * z);
+        CAPTION_H = (int) Math.round(BASE_CAPTION_H * z);
+        GAP = Math.max(2, (int) Math.round(BASE_GAP * z));
+        BORDERS = borders(CAPTION_H, (int) Math.round(6 * z));
+        if (getColumnCount() > 0) {
+            int w = (int) Math.round(48 * z);
+            getColumnModel().getColumn(0).setMaxWidth(w);
+            getColumnModel().getColumn(0).setMinWidth(w);
+            getColumnModel().getColumn(0).setPreferredWidth(w);
+        }
+        if (getModel() instanceof InstanceTableModel) ((InstanceTableModel) getModel()).setZoom(z);
+        updateRowHeights();
+        revalidate();
+        repaint();
+    }
 
     /**
      * 16.11.2026: окрема мітка на кожен текст рядка (назва збірки в HTML). Спільна мітка розбирала HTML заново для
@@ -65,6 +97,27 @@ public class CardInstanceTable extends InstanceTable {
         addMouseListener(hover);
         addMouseMotionListener(hover);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    }
+
+    /** 17.11.2026: модель скорочує текст під ширину колонки (довге переносилось і обрізалось знизу). */
+    @Override
+    public void doLayout() {
+        super.doLayout();
+        if (getModel() instanceof InstanceTableModel && getColumnCount() > 1) {
+            int w = getColumnModel().getColumn(1).getWidth() - 6;
+            if (((InstanceTableModel) getModel()).setTextArea(getFont(), w)) repaint();
+        }
+    }
+
+    /** Повний текст скороченого рядка. */
+    @Override
+    public String getToolTipText(MouseEvent e) {
+        int row = rowAtPoint(e.getPoint());
+        if (row >= 0 && getModel() instanceof InstanceTableModel) {
+            String full = ((InstanceTableModel) getModel()).tooltipAt(convertRowIndexToModel(row));
+            if (full != null) return full;
+        }
+        return super.getToolTipText(e);
     }
 
     private void setHover(int row) {
@@ -104,7 +157,10 @@ public class CardInstanceTable extends InstanceTable {
     @Override
     public void tableChanged(TableModelEvent e) {
         super.tableChanged(e);
-        // висота рядків: над першим рядком розділу місце під підпис (після JTable, яка скидає висоти)
+        // висота рядків: над першим рядком розділу місце під підпис. JTable при повному оновленні скидає висоти, тож
+        // ставимо їх одразу, до перемальовування (17.11.2026: раніше лише через invokeLater, і один кадр список
+        // малювався з неправильною розкладкою, «блим» через секунду після старту); invokeLater лишається про запас
+        if (getModel() instanceof InstanceTableModel) updateRowHeights();
         SwingUtilities.invokeLater(this::updateRowHeights);
     }
 
@@ -128,7 +184,11 @@ public class CardInstanceTable extends InstanceTable {
     private String captionFor(int row) {
         Instance inst = instanceAt(row);
         if (inst == null) return null;
+        // 17.11.2026 (власник: «для modrinth зліва зроби категорію (напис) - Модпаки одним кліком»)
+        if (InstanceTableModel.isBrowser(inst) && !InstanceTableModel.isAddRow(inst)) return tr("launcher.section.modrinth");
         Instance prev = row > 0 ? instanceAt(row - 1) : null;
+        InstanceTableModel m = (InstanceTableModel) getModel();
+        if (m.isInstalledOnly()) return m.installedCaption(inst, prev); // 17.11.2026: розділи як в «Усі»
         boolean builtIn = inst.isBuiltIn();
         if (prev != null && prev.isBuiltIn() == builtIn) return null;
         return tr(builtIn ? "look.section.local" : "look.section.servers");
@@ -161,23 +221,24 @@ public class CardInstanceTable extends InstanceTable {
                 String caption = captionFor(row);
                 int top = r.y + (caption != null ? CAPTION_H : 0);
                 if (caption != null) {
-                    g2.setFont(getFont().deriveFont(Font.BOLD, 11f));
+                    g2.setFont(getFont().deriveFont(Font.BOLD, (float) (11 * zoom)));
                     g2.setColor(new Color(255, 255, 255, 135));
-                    g2.drawString(caption, 4, r.y + CAPTION_H - 7);
+                    g2.drawString(caption, (int) Math.round(4 * zoom), r.y + CAPTION_H - (int) Math.round(7 * zoom));
                 }
                 int x = 1, y = top + GAP / 2, w = width - 2, h = ROW_H - GAP;
+                int arc = (int) Math.round(10 * zoom), bar = (int) Math.round(7 * zoom);
                 boolean selected = isRowSelected(row);
                 Color accent = PackLook.accentOf(instanceAt(row));
                 if (selected) {
                     g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 52));
-                    g2.fillRoundRect(x, y, w, h, 10, 10);
+                    g2.fillRoundRect(x, y, w, h, arc, arc);
                     g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 150));
-                    g2.drawRoundRect(x, y, w - 1, h - 1, 10, 10);
+                    g2.drawRoundRect(x, y, w - 1, h - 1, arc, arc);
                     g2.setColor(accent);
-                    g2.fillRoundRect(x + 1, y + 7, 3, h - 14, 3, 3);
+                    g2.fillRoundRect(x + 1, y + bar, Math.max(3, (int) Math.round(3 * zoom)), h - 2 * bar, 3, 3);
                 } else {
                     g2.setColor(row == hoverRow ? new Color(255, 255, 255, 30) : new Color(255, 255, 255, 11));
-                    g2.fillRoundRect(x, y, w, h, 10, 10);
+                    g2.fillRoundRect(x, y, w, h, arc, arc);
                 }
             }
         } finally {

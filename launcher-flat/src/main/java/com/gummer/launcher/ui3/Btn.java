@@ -165,6 +165,7 @@ public class Btn extends JButton {
             // нові відповіді підтримки: червоний значок з числом у правому верхньому куті
             com.gummer.launcher.dialog.SupportUnread.paint(g2, badge, w - 2, 2, Ui.BG);
             if (isFocusOwner()) Ui.focusRing(g2, w, h, arc);
+            com.gummer.launcher.dialog.CoachMark.paintRing(g2, this, arc);
         } finally {
             g2.dispose();
         }

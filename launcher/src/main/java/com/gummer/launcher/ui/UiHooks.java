@@ -37,6 +37,10 @@ public final class UiHooks {
     public static volatile Support support;
     public static volatile InstanceAction instanceSettings;
     public static volatile InstanceAction reinstall;
+    /** 18.11.2026: вікно «Збірка» на вкладці модів (помічник при вильоті: вимкнути, оновити). */
+    public static volatile InstanceAction openMods;
+    /** 18.11.2026: «Повернути версію» модпака Modrinth з резервної копії останнього оновлення. */
+    public static volatile InstanceAction rollback;
 
     private UiHooks() {
     }

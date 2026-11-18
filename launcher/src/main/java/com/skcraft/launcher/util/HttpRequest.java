@@ -457,6 +457,11 @@ public class HttpRequest implements Closeable, ProgressObservable {
         return readBytes;
     }
 
+    /** 17.11.2026: повна довжина відповіді з заголовка, -1 поки невідома (прогрес завантаження модпака). */
+    public long getContentLength() {
+        return contentLength;
+    }
+
     @Override
     public double getProgress() {
         if (contentLength >= 0) {

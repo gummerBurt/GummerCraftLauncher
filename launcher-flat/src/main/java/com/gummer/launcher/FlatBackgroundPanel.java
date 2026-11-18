@@ -41,10 +41,35 @@ public class FlatBackgroundPanel extends JPanel {
     /** Стандартний фон малюється з X = 100 (так підібрано під bg.jpg); фон збірки - по центру тієї ж видимої зони (центр = центр логотипа), по висоті - по центру панелі. */
     private static final int DEFAULT_BG_X = 100;
     private static final int VIEW_CENTER_X = LOGO_X + LOGO_W / 2;
+    /** 17.11.2026: оформлення сторінки Modrinth (bg_modrinth.jpg, без лого збірки і написів); те саме ім'я в Класиці і Бібліотеці. */
+    public static final String BROWSER_LOOK = "modrinth";
+    /** Порожнє лого: сцена без логотипа (сторінка Modrinth). */
+    static final Image NO_LOGO = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+
+    /**
+     * 17.11.2026 (власник: «в повноекранному логотип з'їжджає вліво замість центру»): центр правої частини вікна.
+     * У найменшому вікні це {@link #VIEW_CENTER_X} (708), ширше вікно зсуває центр на половину приросту (бічна панель
+     * ліворуч не росте).
+     */
+    private int viewCenterX() {
+        // центр правої частини: (ширина + бічна панель + 16) / 2, у найменшому вікні 708
+        return Math.max(VIEW_CENTER_X, (getWidth() + sidebarW + 2 * VIEW_CENTER_X - 1180 - SIDEBAR_BASE_W) / 2);
+    }
     /** Тривалість переходу між збірками. */
     private static final int FADE_MS = 450;
     /** Дизайн 1.35: ширина бічної панелі (скляна смуга над фоном замість суцільної borders.png). */
-    private static final int SIDEBAR_W = 220;
+    private static final int SIDEBAR_BASE_W = 220;
+    /**
+     * 17.11.2026 (власник на знімку розгорнутого скла: збільшена бічна панель вилазила за матову підкладку 220 px, і
+     * текст губився на яскравому фоні): ширина підкладки дорівнює ширині бічної панелі ({@link #setSidebarWidth}).
+     */
+    private int sidebarW = SIDEBAR_BASE_W;
+
+    public void setSidebarWidth(int width) {
+        if (width == sidebarW) return;
+        sidebarW = width;
+        repaint();
+    }
     /** Висота затемнення внизу (під кнопками). */
     private static final int BOTTOM_SHADE_H = 230;
     /** Нахил сплешу, як у Minecraft. */
@@ -118,8 +143,10 @@ public class FlatBackgroundPanel extends JPanel {
     private final Map<String, Properties> layouts = new HashMap<>();
 
     public FlatBackgroundPanel() {
-        defaultBackground = read("ui/frame/bg.jpg");
-        defaultLogo = read("ui/frame/logo.png");
+        // 18.11.2026: зі спільного кешу трьох виглядів (раніше свій примірник у кожному вікні, тож кеш масштабованих
+        // фонів після перемикання вигляду не знаходив готового)
+        defaultBackground = cached("ui/frame/bg.jpg");
+        defaultLogo = cached("ui/frame/logo.png");
         current = new Scene("default", defaultBackground, false, defaultLogo, new Properties());
 
         fadeTimer = new Timer(16, e -> {
@@ -154,6 +181,73 @@ public class FlatBackgroundPanel extends JPanel {
     public void addNotify() {
         super.addNotify();
         splashTimer.start();
+        if (!prewarmHooked) {
+            prewarmHooked = true;
+            addComponentListener(new java.awt.event.ComponentAdapter() {
+                @Override
+                public void componentResized(java.awt.event.ComponentEvent e) {
+                    schedulePrewarm();
+                }
+            });
+        }
+        schedulePrewarm();
+    }
+
+    private boolean prewarmHooked;
+    private Timer prewarmTimer;
+    /** Збірки з власним фоном (look.FrameImages), Modrinth і без оформлення (GummerCraft, свої збірки). */
+    private static final String[] PREWARM_KEYS = {"staldayz", "vanilla", "fabric", "quilt", "forge", "neoforge", "modrinth", "default"};
+
+    /**
+     * 18.11.2026 (власник: «лаунчер включився на модрінті, я клацнув на сталдейз - затуп пів секунди перш ніж
+     * бекграунд підвантажило»). Сторож EdtWatch показав: перший показ кожного фону масштабував його під вікно
+     * (DevicePixels.resize) і розмивав скло (scaleBlur) прямо в потоці інтерфейсу, у малому вікні ~80 мс, у
+     * розгорнутому на великому екрані в рази більше. Тепер через 1 с після показу чи зміни розміру вікна це робиться
+     * наперед у фоновому потоці для всіх збірок з оформленням; клік бере готове з кешу.
+     */
+    private void schedulePrewarm() {
+        if (prewarmTimer == null) {
+            prewarmTimer = new Timer(1000, e -> prewarmScenes());
+            prewarmTimer.setRepeats(false);
+        }
+        prewarmTimer.restart();
+    }
+
+    private void prewarmScenes() {
+        if (!isShowing() || getWidth() <= 0 || getHeight() <= 0) return;
+        GraphicsConfiguration gc = getGraphicsConfiguration();
+        AffineTransform dt = gc != null ? gc.getDefaultTransform() : new AffineTransform();
+        final double ds = dt.getScaleX() == dt.getScaleY() && dt.getShearX() == 0 && dt.getShearY() == 0 ? dt.getScaleX() : 1.0;
+        final int w = getWidth(), h = getHeight(), side = sidebarW;
+        // розкладки (HashMap) беремо тут, картинки читаються і рахуються у фоновому потоці
+        final java.util.List<Object[]> layouts = new java.util.ArrayList<Object[]>();
+        for (String key : PREWARM_KEYS) layouts.add(new Object[]{key, layout(key)});
+        Thread t = new Thread(() -> {
+            for (Object[] kl : layouts) {
+                String key = (String) kl[0];
+                Properties layout = (Properties) kl[1];
+                try {
+                    Image bg = "default".equals(key) ? null : cached("ui/frame/bg_" + key + ".jpg");
+                    String from = layout.getProperty("background.from");
+                    if (bg == null && from != null && from.matches("[a-z0-9_.-]+")) bg = cached("ui/frame/bg_" + from + ".jpg");
+                    Scene sc = new Scene(key, bg != null ? bg : defaultBackground, bg != null, null, layout);
+                    if (sc.background == null || sc.background.getWidth(null) <= 0) continue;
+                    Rectangle r = backgroundRect(sc, sc.background);
+                    final java.util.List<Object> gkey = java.util.Arrays.<Object>asList(sc.background, sc.bgGeometry() + "," + w + "x" + h + "," + side);
+                    BufferedImage dev = com.gummer.launcher.look.DevicePixels.cached(sc.background,
+                            com.gummer.launcher.look.DevicePixels.px(r.width, ds), com.gummer.launcher.look.DevicePixels.px(r.height, ds), false);
+                    final BufferedImage glass = makeGlass(sc.background, dev, r, side, h);
+                    SwingUtilities.invokeLater(() -> {
+                        if (!glassCache.containsKey(gkey)) glassCache.put(gkey, glass);
+                    });
+                } catch (RuntimeException | OutOfMemoryError ignored) {
+                    // не вийшло: порахується при першому показі, як раніше
+                }
+            }
+        }, "Background prewarm");
+        t.setDaemon(true);
+        t.setPriority(Thread.MIN_PRIORITY);
+        t.start();
     }
 
     @Override
@@ -195,6 +289,11 @@ public class FlatBackgroundPanel extends JPanel {
 
     /** @param animate false - одразу, без переходу (старт лаунчера) */
     public void showPack(String packName, boolean animate) {
+        showPack(packName, animate, null);
+    }
+
+    /** 17.11.2026: customBackground - свій фон копії збірки (InstanceArt), замість фону типу збірки; null - звичайний. */
+    public void showPack(String packName, boolean animate, Image customBackground) {
         Image background = null;
         Image logo = null;
         String key = packName != null ? packName.toLowerCase(Locale.ROOT) : "default";
@@ -211,10 +310,16 @@ public class FlatBackgroundPanel extends JPanel {
                 }
             }
         }
+        if (customBackground != null) background = customBackground;
         currentLayout = layout;
+        boolean browser = BROWSER_LOOK.equals(key);
         pickSplashes(packName);
+        if (browser) {
+            splashes = new String[0];
+            splashIndex = -1;
+        }
         Scene next = new Scene(key, background != null ? background : defaultBackground, background != null,
-                logo != null ? logo : defaultLogo, layout);
+                browser ? NO_LOGO : logo != null ? logo : defaultLogo, layout);
         if (next.looksSame(current)) {
             repaint();
             return;
@@ -478,10 +583,11 @@ public class FlatBackgroundPanel extends JPanel {
         int w = (int) Math.ceil(iw * sc), h = (int) Math.ceil(ih * sc);
         int x, y;
         if (scene.packBackground) {
-            x = VIEW_CENTER_X - w / 2 + scene.bgDx();
+            // по центру правої частини, але без порожніх смуг з боків
+            x = Math.min(0, Math.max(pw - w, viewCenterX() - w / 2 + scene.bgDx()));
             y = (ph - h) / 2 + scene.bgDy();
         } else {
-            x = DEFAULT_BG_X - SIDEBAR_W / 2 + scene.bgDx();
+            x = DEFAULT_BG_X - SIDEBAR_BASE_W / 2 + scene.bgDx();
             y = scene.bgDy();
         }
         x = Math.max(pw - w, Math.min(0, x));
@@ -496,7 +602,7 @@ public class FlatBackgroundPanel extends JPanel {
         Rectangle r = backgroundRect(scene, image);
         // 16.11.2026: масштабується один раз під розмір вікна, кадр (напис, сяйво кнопки, перехід) лише копіює пікселі
         double ds = com.gummer.launcher.look.DevicePixels.scale(g2);
-        scene.bgDev = com.gummer.launcher.look.DevicePixels.cached(image, com.gummer.launcher.look.DevicePixels.px(r.width, ds), com.gummer.launcher.look.DevicePixels.px(r.height, ds), false);
+        scene.bgDev = com.gummer.launcher.look.DevicePixels.cachedQuick(image, com.gummer.launcher.look.DevicePixels.px(r.width, ds), com.gummer.launcher.look.DevicePixels.px(r.height, ds), false, this);
         com.gummer.launcher.look.DevicePixels.draw(g2, scene.bgDev, r.x, r.y, r.width, r.height);
     }
 
@@ -504,22 +610,23 @@ public class FlatBackgroundPanel extends JPanel {
     private void paintShades(Graphics2D g2) {
         int w = getWidth(), h = getHeight();
         g2.setPaint(new GradientPaint(0, 0, new Color(0, 0, 0, 70), 0, 150, new Color(0, 0, 0, 0)));
-        g2.fillRect(SIDEBAR_W, 0, w - SIDEBAR_W, 150);
+        g2.fillRect(sidebarW, 0, w - sidebarW, 150);
         g2.setPaint(new GradientPaint(0, h - BOTTOM_SHADE_H, new Color(0, 0, 0, 0), 0, h, new Color(0, 0, 0, 200)));
-        g2.fillRect(SIDEBAR_W, h - BOTTOM_SHADE_H, w - SIDEBAR_W, BOTTOM_SHADE_H);
+        g2.fillRect(sidebarW, h - BOTTOM_SHADE_H, w - sidebarW, BOTTOM_SHADE_H);
     }
 
-    private final Map<java.util.List<Object>, BufferedImage> glassCache = new java.util.LinkedHashMap<java.util.List<Object>, BufferedImage>(16, 0.75F, true) {
+    /** 18.11.2026: спільний для всіх вікон скла (вікно створюється наново після гри і перемикання вигляду). */
+    private static final Map<java.util.List<Object>, BufferedImage> glassCache = new java.util.LinkedHashMap<java.util.List<Object>, BufferedImage>(16, 0.75F, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<java.util.List<Object>, BufferedImage> eldest) {
-            return size() > 8;
+            return size() > 12; // 18.11.2026: 8 збірок з оформленням наперед (prewarmScenes) плюс свої фони
         }
     };
 
     private void paintGlass(Graphics2D g2, Scene scene, float alpha) {
         if (alpha <= 0.0F || getHeight() <= 0) return;
         BufferedImage glass = scene.glass;
-        String stamp = scene.bgGeometry() + "," + getWidth() + "x" + getHeight();
+        String stamp = scene.bgGeometry() + "," + getWidth() + "x" + getHeight() + "," + sidebarW;
         if (glass == null || !stamp.equals(scene.glassFor)) {
             // 16.11.2026: сцена створюється заново при кожному перемиканні, а розмите скло те саме: тримаємо кілька
             java.util.List<Object> key = java.util.Arrays.<Object>asList(scene.background, stamp);
@@ -535,16 +642,19 @@ public class FlatBackgroundPanel extends JPanel {
         g2.drawImage(glass, 0, 0, null);
     }
 
-    /** Смуга фону 0..SIDEBAR_W, розмита (зменшення і збільшення з інтерполяцією, тричі) і затемнена. */
+    /** Смуга фону 0..sidebarW, розмита (зменшення і збільшення з інтерполяцією, тричі) і затемнена. */
     private BufferedImage makeGlass(Scene scene) {
-        int h = getHeight();
-        BufferedImage strip = new BufferedImage(SIDEBAR_W, h, BufferedImage.TYPE_INT_RGB);
+        return makeGlass(scene.background, scene.bgDev, scene.background != null ? backgroundRect(scene, scene.background) : null, sidebarW, getHeight());
+    }
+
+    /** Те саме без звернень до панелі: можна в фоновому потоці (prewarmScenes). */
+    private static BufferedImage makeGlass(Image background, BufferedImage bgDev, Rectangle r, int sidebarW, int h) {
+        BufferedImage strip = new BufferedImage(sidebarW, h, BufferedImage.TYPE_INT_RGB);
         Graphics2D sg = strip.createGraphics();
         sg.setColor(new Color(22, 22, 22));
-        sg.fillRect(0, 0, SIDEBAR_W, h);
-        if (scene.background != null) {
-            Rectangle r = backgroundRect(scene, scene.background);
-            sg.drawImage(scene.bgDev != null ? scene.bgDev : scene.background, r.x, r.y, r.width, r.height, null);
+        sg.fillRect(0, 0, sidebarW, h);
+        if (background != null && r != null) {
+            sg.drawImage(bgDev != null ? bgDev : background, r.x, r.y, r.width, r.height, null);
         }
         sg.dispose();
         BufferedImage blurred = strip;
@@ -553,10 +663,10 @@ public class FlatBackgroundPanel extends JPanel {
         }
         Graphics2D bg = blurred.createGraphics();
         bg.setColor(new Color(14, 14, 16, 175));
-        bg.fillRect(0, 0, SIDEBAR_W, h);
+        bg.fillRect(0, 0, sidebarW, h);
         // ледь помітний відблиск згори скла
         bg.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, 18), 0, 260, new Color(255, 255, 255, 0)));
-        bg.fillRect(0, 0, SIDEBAR_W, 260);
+        bg.fillRect(0, 0, sidebarW, 260);
         bg.dispose();
         return blurred;
     }
@@ -581,10 +691,10 @@ public class FlatBackgroundPanel extends JPanel {
     /** Край скла: світла лінія і м'яка тінь праворуч. */
     private void paintSidebarEdge(Graphics2D g2) {
         int h = getHeight();
-        g2.setPaint(new GradientPaint(SIDEBAR_W, 0, new Color(0, 0, 0, 110), SIDEBAR_W + 14, 0, new Color(0, 0, 0, 0)));
-        g2.fillRect(SIDEBAR_W, 0, 14, h);
+        g2.setPaint(new GradientPaint(sidebarW, 0, new Color(0, 0, 0, 110), sidebarW + 14, 0, new Color(0, 0, 0, 0)));
+        g2.fillRect(sidebarW, 0, 14, h);
         g2.setColor(new Color(255, 255, 255, 34));
-        g2.fillRect(SIDEBAR_W - 1, 0, 1, h);
+        g2.fillRect(sidebarW - 1, 0, 1, h);
     }
 
     /** Де логотип видно насправді (без прозорих полів картинки), у координатах панелі. */
@@ -615,9 +725,26 @@ public class FlatBackgroundPanel extends JPanel {
     private BufferedImage splashImage;
     private String splashImageText;
 
+    private static Font splashFont;
+
+    private static Font splashFont() {
+        if (splashFont == null) {
+            try (java.io.InputStream in = Launcher.class.getResourceAsStream("ui/font/minecraftfontukr.ttf")) {
+                splashFont = Font.createFont(Font.TRUETYPE_FONT, Objects.requireNonNull(in)).deriveFont(Font.PLAIN, (float) SPLASH_FONT_PX);
+            } catch (Exception e) {
+                splashFont = new Font(Font.SANS_SERIF, Font.BOLD, SPLASH_FONT_PX); // без файлу як було
+            }
+        }
+        return splashFont;
+    }
+
+    private static final int SPLASH_FONT_PX = 40;
+
     private BufferedImage splashImage(String text) {
         if (splashImage != null && text.equals(splashImageText)) return splashImage;
-        Font font = new Font(Font.SANS_SERIF, Font.BOLD, 42); // 2x від 21
+        // 17.11.2026 (власник: «для жовтого тексту використай цей шрифт minecraftfontukr.ttf»): піксельний шрифт
+        // Minecraft з українськими літерами, 40 px (5 px на піксель шрифту), тінь на один піксель шрифту
+        Font font = splashFont();
         BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D pg = probe.createGraphics();
         FontMetrics fm = pg.getFontMetrics(font);
@@ -630,8 +757,9 @@ public class FlatBackgroundPanel extends JPanel {
         g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
         g.setFont(font);
         int y = fm.getAscent() + 2;
+        int shadow = font.getFamily().startsWith("Minecraft") ? 5 : 4;
         g.setColor(new Color(63, 63, 21));
-        g.drawString(text, 6, y + 4);
+        g.drawString(text, 2 + shadow, y + shadow);
         g.setColor(new Color(255, 255, 85));
         g.drawString(text, 2, y);
         g.dispose();
@@ -655,7 +783,7 @@ public class FlatBackgroundPanel extends JPanel {
         // як у Minecraft: розмір від висоти логотипа (шрифт ~25% його видимої висоти, 20..36 px), довгий напис менший
         Rectangle lb = visibleLogoBounds();
         double fontPx = Math.max(20, Math.min(36, lb.height * 0.25)) * doubleOf(currentLayout, "splash.size", 1.0);
-        double base = fontPx / 42.0; // картинка намальована шрифтом 42 (2x)
+        double base = fontPx / SPLASH_FONT_PX; // картинка намальована шрифтом 40 (2x)
         if (!currentLayout.containsKey("splash.size")) base = Math.min(base, lb.width * 0.55 / Math.max(1, img.getWidth()));
         double scale = base * pulse;
 
@@ -750,7 +878,7 @@ public class FlatBackgroundPanel extends JPanel {
         double scale = Math.min((double) LOGO_W / image.getWidth(null), (double) LOGO_H / image.getHeight(null)) * scene.logoScale();
         int w = (int) Math.round(image.getWidth(null) * scale);
         int h = (int) Math.round(image.getHeight(null) * scale);
-        int x = LOGO_X + (LOGO_W - w) / 2 + scene.logoDx(), y = LOGO_Y + (LOGO_H - h) / 2 + scene.logoDy();
+        int x = viewCenterX() - LOGO_W / 2 + (LOGO_W - w) / 2 + scene.logoDx(), y = LOGO_Y + (LOGO_H - h) / 2 + scene.logoDy();
         if (scene == current) {
             logoBounds.setBounds(x, y, w, h);
             logoImage = image;

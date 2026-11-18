@@ -76,8 +76,12 @@ public final class DevicePixels {
         return out;
     }
 
-    /** Спільний кеш готових картинок (найдавніше використані викидаються понад ~64 МБ). */
-    private static final long CACHE_BYTES = 64L << 20;
+    /**
+     * Спільний кеш готових картинок (найдавніше використані викидаються понад ~160 МБ, але не більше чверті пам'яті
+     * лаунчера). 18.11.2026: було 64 МБ, а це лише ~4 фони на розгорнутому вікні 1440p, тож при перемиканні збірок
+     * фони викидались і масштабувались заново (сторож EdtWatch: 60-100 мс на кожен клік).
+     */
+    private static final long CACHE_BYTES = Math.min(160L << 20, Runtime.getRuntime().maxMemory() / 4);
     private static long cacheBytes;
     private static final java.util.LinkedHashMap<java.util.List<Object>, BufferedImage> CACHE =
             new java.util.LinkedHashMap<java.util.List<Object>, BufferedImage>(32, 0.75F, true);
@@ -102,6 +106,77 @@ public final class DevicePixels {
             it.remove();
         }
         return img;
+    }
+
+    private static final java.util.concurrent.ExecutorService SCALER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "GummerCraft background scaler");
+        t.setDaemon(true);
+        t.setPriority(Thread.NORM_PRIORITY - 1);
+        return t;
+    });
+    private static final java.util.Set<java.util.List<Object>> PENDING = new java.util.HashSet<>();
+
+    /**
+     * 17.11.2026 (власник: «коли ти перемикаєш з віконного в повноекранний, воно взагалі скаче»): уся картинка до
+     * dw x dh з кешем, але якщо такого розміру ще немає, а іншого є, одразу віддає той інший (малюється розтягнутим
+     * найближчим пікселем, ~1 мс замість 35-45 мс бікубічного), а якісну рахує у фоновому потоці і перемальовує
+     * {@code repaint}. Без цього перший кадр нового розміру вікна малювався ~0.1 с, і Windows тим часом показувала
+     * старий кадр, обрізаний до нового розміру.
+     */
+    public static BufferedImage cachedQuick(Image src, int dw, int dh, boolean alpha, Component repaint) {
+        java.util.List<Object> key;
+        BufferedImage standIn = null;
+        synchronized (DevicePixels.class) {
+            key = java.util.Arrays.<Object>asList(new Identity(src), 0, 0, src.getWidth(null), src.getHeight(null), dw, dh, alpha);
+            BufferedImage img = CACHE.get(key);
+            if (img != null) return img;
+            for (java.util.Map.Entry<java.util.List<Object>, BufferedImage> e : CACHE.entrySet()) {
+                java.util.List<Object> k = e.getKey();
+                if (k.get(0).equals(key.get(0)) && k.get(1).equals(0) && k.get(2).equals(0) && k.get(3).equals(key.get(3))
+                        && k.get(4).equals(key.get(4)) && k.get(7).equals(alpha)) {
+                    standIn = e.getValue();
+                    break;
+                }
+            }
+            if (standIn != null && PENDING.add(key)) {
+                final java.util.List<Object> k = key;
+                SCALER.execute(() -> {
+                    try {
+                        cached(src, dw, dh, alpha);
+                    } finally {
+                        synchronized (DevicePixels.class) {
+                            PENDING.remove(k);
+                        }
+                        if (repaint != null) javax.swing.SwingUtilities.invokeLater(repaint::repaint);
+                    }
+                });
+            }
+        }
+        return standIn != null ? standIn : cached(src, dw, dh, alpha);
+    }
+
+    /**
+     * 18.11.2026: порахувати картинку dw x dh у фоновому потоці наперед (фони збірок під поточний розмір вікна),
+     * щоб клік по збірці брав готову з кешу. Нічого не робить, якщо вона вже є чи рахується.
+     */
+    public static void prewarm(Image src, int dw, int dh, boolean alpha) {
+        if (src == null || src.getWidth(null) <= 0 || dw <= 0 || dh <= 0) return;
+        final java.util.List<Object> key;
+        synchronized (DevicePixels.class) {
+            key = java.util.Arrays.<Object>asList(new Identity(src), 0, 0, src.getWidth(null), src.getHeight(null), dw, dh, alpha);
+            if (CACHE.containsKey(key) || !PENDING.add(key)) return;
+        }
+        SCALER.execute(() -> {
+            try {
+                cached(src, dw, dh, alpha);
+            } catch (RuntimeException | OutOfMemoryError ignored) {
+                // порахується при показі, як раніше
+            } finally {
+                synchronized (DevicePixels.class) {
+                    PENDING.remove(key);
+                }
+            }
+        });
     }
 
     /** Уся картинка до dw x dh, з кешем. */
@@ -147,6 +222,13 @@ public final class DevicePixels {
         try {
             d.setTransform(AffineTransform.getTranslateInstance(
                     Math.round(at.getTranslateX() + x * at.getScaleX()), Math.round(at.getTranslateY() + y * at.getScaleY())));
+            int dw = (int) Math.round(lw * at.getScaleX()), dh = (int) Math.round(lh * at.getScaleY());
+            if (Math.abs(img.getWidth() - dw) > 2 || Math.abs(img.getHeight() - dh) > 2) {
+                // тимчасова картинка іншого розміру (cachedQuick), поки якісна рахується: швидко, найближчим пікселем
+                d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                d.drawImage(img, 0, 0, dw, dh, null);
+                return;
+            }
             d.drawImage(img, 0, 0, null);
         } finally {
             d.dispose();

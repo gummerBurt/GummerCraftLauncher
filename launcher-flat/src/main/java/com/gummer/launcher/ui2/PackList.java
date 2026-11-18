@@ -32,6 +32,8 @@ public final class PackList {
         public String online;
         /** Підпис розділу над рядком, або null. */
         public String header;
+        /** Підказка під мишкою (17.11.2026: що є оновлення), або null. */
+        public String tooltip;
     }
 
     private PackList() {
@@ -107,6 +109,7 @@ public final class PackList {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int r, int column) {
             row = rows.apply(r);
+            setToolTipText(row != null ? row.tooltip : null);
             selected = isSelected;
             hovered = r == hover[0];
             focused = table.isFocusOwner() && isSelected;

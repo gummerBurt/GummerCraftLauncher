@@ -60,6 +60,18 @@ public final class DesignVote extends JPanel {
     private final String likeUrl;
 
     private int count = -1;
+    private JComponent likePill;
+
+    /** 17.11.2026: збільшення в розгорнутому склі (плашки малюються в масштабі, ряди і ширина лайка тут). */
+    public void setZoom(double z) {
+        MigLayout lay = (MigLayout) getLayout();
+        int r = com.gummer.launcher.look.Zoom.px(z, 28), g = com.gummer.launcher.look.Zoom.px(z, 6);
+        lay.setLayoutConstraints("insets 0, gap " + g + " " + g + ", novisualpadding");
+        lay.setRowConstraints("[" + r + "!][" + r + "!]");
+        if (likePill != null) lay.setComponentConstraints(likePill, "w " + com.gummer.launcher.look.Zoom.px(z, 58) + "!");
+        revalidate();
+        repaint();
+    }
     private boolean liked;
     private boolean busy;
 
@@ -88,7 +100,7 @@ public final class DesignVote extends JPanel {
         }
         add(new LookPill(), "span 2, growx, wrap");
         if (!likeUrl.isEmpty()) {
-            add(new LikePill(), "w 58!");
+            add(likePill = new LikePill(), "w 58!");
             NET.submit(() -> request(null));
         }
         if (support != null) {
@@ -158,7 +170,11 @@ public final class DesignVote extends JPanel {
                 }
 
                 @Override
-                public void mouseClicked(MouseEvent e) {
+                public void mouseReleased(MouseEvent e) {
+                    // 18.11.2026 (власник: «інколи в повноекранному режимі, коли клацаєш по кнопці зміни дизайну, вона не
+                    // спрацьовує»): mouseClicked Swing не шле, якщо миша між натисканням і відпусканням зсунулась хоч на піксель.
+                    // Як у кнопки: відпускання над самою плашкою (воно приходить сюди, лише якщо натискали теж на ній)
+                    if (!e.getComponent().contains(e.getPoint())) return;
                     if (SwingUtilities.isLeftMouseButton(e)) clicked();
                 }
             });
@@ -166,11 +182,30 @@ public final class DesignVote extends JPanel {
 
         abstract void clicked();
 
+        /** Розміри до масштабу (17.11.2026: у розгорнутому склі плашка малюється збільшеною через g2.scale). */
+        double z() {
+            return com.gummer.launcher.look.Zoom.of(this);
+        }
+
+        int lw() {
+            return (int) Math.round(getWidth() / z());
+        }
+
+        int lh() {
+            return (int) Math.round(getHeight() / z());
+        }
+
+        Dimension zoomed(int w, int h) {
+            double z = z();
+            return new Dimension(com.gummer.launcher.look.Zoom.px(z, w), com.gummer.launcher.look.Zoom.px(z, h));
+        }
+
         Graphics2D background(Graphics g, boolean active) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            RoundRectangle2D r = new RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, getHeight(), getHeight());
+            g2.scale(z(), z());
+            RoundRectangle2D r = new RoundRectangle2D.Float(0.5f, 0.5f, lw() - 1f, lh() - 1f, lh(), lh());
             g2.setColor(new Color(255, 255, 255, active ? 34 : hover ? 30 : 18));
             g2.fill(r);
             g2.setColor(active ? new Color(HEART.getRed(), HEART.getGreen(), HEART.getBlue(), 120) : new Color(255, 255, 255, hover ? 60 : 36));
@@ -186,7 +221,7 @@ public final class DesignVote extends JPanel {
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(58, 28);
+            return zoomed(58, 28);
         }
 
         void updateTip() {
@@ -209,7 +244,7 @@ public final class DesignVote extends JPanel {
         protected void paintComponent(Graphics g) {
             updateTip();
             Graphics2D g2 = background(g, liked);
-            int h = getHeight();
+            int h = lh();
             float s = 12f, hx = 11f, hy = (h - s) / 2f + 0.5f;
             Path2D heart = new Path2D.Float();
             heart.moveTo(hx + s / 2, hy + s * 0.92f);
@@ -243,7 +278,7 @@ public final class DesignVote extends JPanel {
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(120, 28);
+            return zoomed(120, 28);
         }
 
         /**
@@ -293,7 +328,7 @@ public final class DesignVote extends JPanel {
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = background(g, false);
-            int h = getHeight(), w = getWidth();
+            int h = lh(), w = lw();
             // три маленькі віконця: «вигляди»
             g2.setColor(hover ? TEXT : DIM);
             for (int i = 0; i < 3; i++) {
@@ -332,7 +367,7 @@ public final class DesignVote extends JPanel {
         @Override
         public Dimension getPreferredSize() {
             FontMetrics fm = getFontMetrics(getFont());
-            return new Dimension(fm.stringWidth(tr("design.feedback")) + 24, 28);
+            return zoomed(fm.stringWidth(tr("design.feedback")) + 24, 28);
         }
 
         @Override
@@ -347,7 +382,7 @@ public final class DesignVote extends JPanel {
             g2.setFont(getFont());
             String t = tr("design.feedback");
             g2.setColor(hover ? TEXT : DIM);
-            g2.drawString(t, (getWidth() - fm.stringWidth(t)) / 2, (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
+            g2.drawString(t, (lw() - fm.stringWidth(t)) / 2, (lh() - fm.getHeight()) / 2 + fm.getAscent());
             g2.dispose();
         }
     }

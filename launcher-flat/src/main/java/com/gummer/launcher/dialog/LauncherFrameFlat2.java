@@ -54,6 +54,18 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
 @Log
 public class LauncherFrameFlat2 extends JFrame {
 
+    /** 17.11.2026: розгорнуте вікно до показу розкладається з тими ж рамками, що й після (див. Zoom.settledInsets). */
+    @Override
+    public Insets getInsets() {
+        return com.gummer.launcher.look.Zoom.settledInsets(this, super.getInsets());
+    }
+
+    /** 17.11.2026: плавний перехід при розгортанні та відновленні вікна (look.MorphRootPane). */
+    @Override
+    protected JRootPane createRootPane() {
+        return new com.gummer.launcher.look.MorphRootPane(null);
+    }
+
     public final Launcher launcher;
     private final Lang lang;
     private final String langCode;
@@ -77,6 +89,8 @@ public class LauncherFrameFlat2 extends JFrame {
 
     // init bottom buttons
     private final JButton optionsButton;
+    /** 17.11.2026: «Збірка» біля «Грати»: вікно «Керування збіркою». */
+    private final Btn manageButton = new Btn(tr("ui2.manage"), Glyph.BOX, Btn.Style.TONAL).height(44);
     private final JButton wikiButton;
     /** 1.32: звернення в підтримку (null, якщо в launcher.properties немає supportInboxId). */
     private final com.gummer.launcher.support.SupportService supportService;
@@ -84,8 +98,10 @@ public class LauncherFrameFlat2 extends JFrame {
     private final JButton launchButton;
     /** 1.32: вибір версії для групи паків (наприклад Main), видимий лише коли у вибраної групи кілька версій. */
     private final JComboBox<Instance> versionBox = new JComboBox<Instance>();
+    /** 18.11.2026: готовий рядок на кожну версію, щоб HTML не розбирався заново (див. HtmlCellCache). */
+    private final HtmlCellCache versionCells = new HtmlCellCache();
     /** Редизайн 2: підпис і вибір версії в панелі запуску (панель суцільна, тож без своєї підкладки). */
-    private final JPanel versionPanel = new JPanel(new MigLayout("insets 0, wrap 1, gap 0 6", "[248!]", "[][]"));
+    private final JPanel versionPanel = new JPanel(new MigLayout("insets 0, wrap 1, gap 0 6", "[224!]", "[][]"));
     private boolean updatingVersionBox = false;
 
     // 1.32: вкладки GummerCraft (наші паки, реклама серверів) і Vanilla (чисті версії Mojang)
@@ -125,6 +141,7 @@ public class LauncherFrameFlat2 extends JFrame {
 
         this.launcher = launcher;
         instancesModel = new InstanceTableModel(launcher.getInstances(), () -> launcher.getConfig().getLastInstance());
+        instancesModel.setInstalledOnly(launcher.getConfig().isInstalledOnly());
         rootFrame = this;
         LauncherFrameFlat.rootFrame = this; // діалоги (налаштування, збірка) шукають вікно тут, хоч який вигляд вибрано
 
@@ -171,7 +188,9 @@ public class LauncherFrameFlat2 extends JFrame {
         // configure main windowFrame
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1194, 725));
-        setResizable(false);
+        // 17.11.2026 (власник: «хочу щоб лаунчер можна було відкрити на весь екран - дуже бракує»): вікно розгортається
+        // і тягнеться; менше за 1194 x 725 не стискається
+        setResizable(true);
         // редизайн 2: заголовок вікна того ж кольору, що рейка, щоб вікно було одним цілим
         getRootPane().putClientProperty("JRootPane.titleBarBackground", Ui.SURFACE);
         getRootPane().putClientProperty("JRootPane.titleBarForeground", Ui.TEXT_2);
@@ -221,7 +240,7 @@ public class LauncherFrameFlat2 extends JFrame {
         container.setLayout(new BorderLayout());
 
         // ---------------------------------------------------------------- рейка
-        JPanel rail = new JPanel(new MigLayout("insets 0, gap 0, wrap 1", "[grow,fill]", "[grow,fill][]")) {
+        JPanel rail = new JPanel(new MigLayout("insets 0, gap 0, wrap 1", "[grow,fill]", "[][grow,fill][]")) {
             @Override
             protected void paintComponent(Graphics g) {
                 g.setColor(Ui.SURFACE);
@@ -246,24 +265,27 @@ public class LauncherFrameFlat2 extends JFrame {
         listHolder.setOpaque(false);
         listHolder.add(instanceScroll, "list");
         listHolder.add(createEmptyState(), "empty");
+        rail.add(createListSwitch(), "gap 12 13 12 2, h 32!"); // 17.11.2026: «Усі / Встановлені»
         rail.add(listHolder, "grow, hmin 0");
 
         JPanel railBottom = new JPanel(new MigLayout("insets 12 16 12 16, gap 0, wrap 1", "[grow,fill]", ""));
         railBottom.setOpaque(false);
+        // 17.11.2026 (власник: «модпаки та версії мають дуже мало місця ... "змінити скін" та "аккаунт" перенести
+        // вправо зверху, але видозмінити та зробити трохи меншим»): акаунт і «Скіни» у верхньому ряду кнопок перед
+        // «Вікі», висотою 36 як вони; список збірок у рейці отримав ~100 px
+        SkinChip2 skinChip = null;
         if (!"false".equalsIgnoreCase(launcher.getProperties().getProperty("serverAccount", "true").trim())) {
             accountChip = new AccountChip2(launcher, () -> ServerAccountDialog.showFor(this, launcher, supportService,
                     this::getSelectedInstance, () -> accountChip.refresh()));
-            SkinChip2 skinChip = new SkinChip2(() -> ServerAccountDialog.showFor(this, launcher, supportService,
+            skinChip = new SkinChip2(() -> ServerAccountDialog.showFor(this, launcher, supportService,
                     this::getSelectedInstance, () -> accountChip.refresh(), true));
-            railBottom.add(accountChip, "h 56!");
-            railBottom.add(skinChip, "h 36!, gaptop 8");
         }
         JPanel community = new JPanel(new MigLayout("insets 0, gap 8", "[36!][36!][grow,fill]", "[36!]"));
         community.setOpaque(false);
         community.add(telegramButton);
         community.add(discordButton);
         if (coffeeButton != null) community.add(coffeeButton);
-        railBottom.add(community, "gaptop 16");
+        railBottom.add(community);
         // 16.11.2026: лайк вигляду (один з IP) і «Фідбек по дизайну»
         DesignVote vote = DesignVote.create(this, launcher, supportService, com.gummer.launcher.FancyLauncher.LOOK_CLASSIC);
         if (vote != null) railBottom.add(vote, "h " + DesignVote.HEIGHT + "!, gaptop 12");
@@ -276,10 +298,16 @@ public class LauncherFrameFlat2 extends JFrame {
         // ---------------------------------------------------------------- сцена: навігація вгорі
         JPanel stage = new JPanel(new BorderLayout());
         stage.setOpaque(false);
-        JPanel topBar = new JPanel(new MigLayout("insets 16 32 0 16, gap 8", "push[][][][]", "[36!]"));
+        JPanel topBar = new JPanel(new MigLayout("insets 16 32 0 16, gap 8", "push[][][][][][]", "[36!]"));
         getRootPane().putClientProperty(com.gummer.launcher.look.Toast.BELOW, topBar); // сповіщення під кнопками, не на них
         topBar.setOpaque(false);
         topBar.add(selfUpdateButton, "hidemode 3, gapright 8");
+        if (accountChip != null) {
+            topBar.add(accountChip, "h 36!, wmax 150");
+            topBar.add(skinChip, "h 36!, w pref+24!, gapright 8"); // MigLayout не додає бічні insets у pref цієї плашки
+        }
+        // 18.11.2026 (власник: «винеси перемикання мов на головну сторінку лаунчера. Просто прапорцями»)
+        topBar.add(new com.gummer.launcher.look.LangFlags(launcher), "h 32!, gapright 8");
         topBar.add(wikiButton);
         if (supportButton != null) {
             topBar.add(supportButton);
@@ -325,10 +353,10 @@ public class LauncherFrameFlat2 extends JFrame {
         newsRow.setOpaque(false);
         newsRow.setLayout(new MigLayout("insets 0 32 16 24, gap 12", "", "[]"));
         newsArea.add(newsRow, BorderLayout.SOUTH);
-        stage.add(newsArea, BorderLayout.CENTER);
+        stage.add(wrapMain(newsArea), BorderLayout.CENTER); // 17.11.2026: або сторінка Modrinth
 
         // ---------------------------------------------------------------- панель запуску
-        JPanel dock = new JPanel(new MigLayout("insets 0 32 0 20, gap 0", "[grow,fill]24[]16[]",
+        JPanel dock = new JPanel(new MigLayout("insets 0 32 0 20, gap 0", "[grow,fill]24[]10[]14[]",
                 "[" + Ui.DOCK_H + "!, center]")) {
             @Override
             protected void paintComponent(Graphics g) {
@@ -341,7 +369,12 @@ public class LauncherFrameFlat2 extends JFrame {
         dock.setOpaque(true);
         dock.add(createDockIdentity(), "wmin 0");
         setupVersionBox();
+        manageButton.setToolTipText(tr("manage.tooltip"));
+        manageButton.addActionListener(e -> openManage(getSelectedInstance(), InstanceManageDialog.GENERAL));
+        CoachMark.manageTip(this, launcher, manageButton);
+        // 17.11.2026: «Збірка» одразу ліворуч від «Грати», як у Liquid Glass; на рівні поля версії (воно внизу блоку)
         dock.add(versionPanel, "hidemode 3");
+        dock.add(manageButton, "h 44!, aligny bottom, gapbottom " + ((Ui.DOCK_H - 68) / 2 + 1));
         dock.add(launchButton, "w 232!, h 68!");
         stage.add(dock, BorderLayout.SOUTH);
 
@@ -468,7 +501,13 @@ public class LauncherFrameFlat2 extends JFrame {
 
     /** Вибрати в списку останню вибрану збірку (Configuration.lastInstance), якщо вона є в списку, інакше першу. */
     private void selectRememberedInstance() {
-        int row = Math.max(0, instancesModel.rowOf(launcher.getConfig().getLastInstance()));
+        // 17.11.2026: копія чи збірка Modrinth (щойно створена) у розділі: рядок розділу має показати саме її, а не
+        // версію, вибрану в розділі раніше
+        // 17.11.2026: свій останній вибір у кожного режиму списку («Усі» / «Встановлені»)
+        String remembered = com.gummer.launcher.manage.ListMemory.recall(launcher.getConfig(), instancesModel.isInstalledOnly());
+        if (instancesModel.chooseByName(remembered)) instancesModel.refreshChoice();
+        int row = instancesModel.rowOf(remembered);
+        if (row < 0) row = Math.max(0, instancesModel.rowOf(launcher.getConfig().getLastInstance()));
         restoringSelection = true;
         try {
             instancesTable.setRowSelectionInterval(row, row);
@@ -600,6 +639,13 @@ public class LauncherFrameFlat2 extends JFrame {
                     // «музей» Vanilla (16.11.2026) без «Minecraft»: «Pre-classic rd-20090515» і так довге, а з префіксом
                     // поле версії розпирало під кнопку запуску
                     String mc = com.gummer.launcher.vanilla.VanillaVersions.museumIndex(i) >= 0 ? "" : "Minecraft ";
+                    // 17.11.2026: копія чи збірка Modrinth: своя назва, у відкритому списку сіра версія гри перед станом
+                    boolean derived = com.skcraft.launcher.swing.InstanceTableModel.isNamed(i);
+                    String derivedVer = instancesModel.derivedVersionOf(i);
+                    if (derived) {
+                        version = instancesModel.pickerTitleOf(i);
+                        mc = "";
+                    }
                     // 1.32: стан видно не лише текстом. Встановлено - зелена крапка і білий текст, є оновлення - жовта,
                     // не встановлено - порожнє коло і приглушений текст; найновіша - синя позначка
                     boolean installed = i.isLocal() && i.isInstalled();
@@ -611,19 +657,30 @@ public class LauncherFrameFlat2 extends JFrame {
                     } else {
                         String status = !installed ? tr("launcher.versionNotInstalled")
                                 : i.isUpdatePending() ? tr("launcher.versionUpdate") : tr("launcher.versionInstalled");
+                        String updates = installed && !i.isUpdatePending() ? InstanceTableModel.updatesText(i) : null;
+                        if (updates != null) status = status + " · " + updates; // 17.11.2026: бейдж оновлень
                         String statusColor = !installed ? "#8a8f98" : dotColor;
-                        String newest = index == 0 ? "&nbsp;&nbsp;<span style=\"color:#5aa9ff;font-size:11\">"
+                        String newest = instancesModel.isNewest(i) ? "&nbsp;&nbsp;<span style=\"color:#5aa9ff;font-size:11\">"
                                 + SwingHelper.htmlEscape(tr("launcher.versionNewest")) + "</span>" : "";
+                        if (derived && derivedVer != null) status = derivedVer + " · " + status;
                         text = "<html>" + dot + "<b" + (installed ? "" : " style=\"color:#b4b8bf\"") + ">" + mc
                                 + SwingHelper.htmlEscape(version) + "</b>&nbsp;&nbsp;<span style=\"color:" + statusColor + ";font-size:11\">"
                                 + SwingHelper.htmlEscape(status) + "</span>" + newest + "</html>";
                     }
                 }
-                Component c = super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
+                Component c = versionCells.of(value, index).getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
                 if (index >= 0) {
                     // у відкритому списку шрифт менший, ніж у самому полі (18), щоб влазив стан версії
                     c.setFont(c.getFont().deriveFont(Font.BOLD, 14f));
-                    ((JComponent) c).setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+                    // 17.11.2026: встановлені вгорі списку, від решти їх відділяє тонка риска
+                    Object above = index > 0 ? list.getModel().getElementAt(index - 1) : null;
+                    boolean split = value instanceof Instance && above instanceof Instance
+                            && !(((Instance) value).isLocal() && ((Instance) value).isInstalled())
+                            && ((Instance) above).isLocal() && ((Instance) above).isInstalled();
+                    ((JComponent) c).setBorder(split
+                            ? BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(255, 255, 255, 40)),
+                            BorderFactory.createEmptyBorder(5, 10, 6, 10))
+                            : BorderFactory.createEmptyBorder(6, 10, 6, 10));
                 }
                 return c;
             }
@@ -640,6 +697,7 @@ public class LauncherFrameFlat2 extends JFrame {
             if (!e.getValueIsAdjusting()) {
                 refreshVersionBox();
                 refreshStatusRow();
+                refreshModrinthPage();
             }
         });
     }
@@ -727,18 +785,21 @@ public class LauncherFrameFlat2 extends JFrame {
                 // закрите поле міряє лише поточну версію, а не всі (16.11.2026, швидкість переходу на Vanilla)
                 versionBox.setPrototypeDisplayValue(items.isEmpty() ? null : shown);
                 versionBox.setModel(new DefaultComboBoxModel<Instance>(items.toArray(new Instance[0])));
+                HtmlCellCache.prewarm(versionBox);
             }
             if (members.size() >= 2) {
                 versionBox.setSelectedItem(shown);
             }
             versionPanel.setVisible(members.size() >= 2);
             if (members.size() >= 2) {
-                String key = shown.isVanilla() ? "launcher.versionLabelVanilla"
-                        : shown.isFabric() ? "launcher.versionLabelFabric"
-                        : shown.isQuilt() ? "launcher.versionLabelQuilt"
-                        : shown.isForgeLike() ? (com.gummer.launcher.forge.ForgeVersions.kindOf(shown) == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE
-                                ? "launcher.versionLabelForge" : "launcher.versionLabelNeoForge")
-                        : "main".equals(shown.getGroup()) ? "launcher.versionLabelGummerCraft" : "launcher.versionLabel";
+                // 17.11.2026: за розділом, а не за самою збіркою: у розділі може бути вибрана збірка Modrinth
+                String sec = shown.getGroup();
+                String key = "vanilla".equals(sec) ? "launcher.versionLabelVanilla"
+                        : "fabric".equals(sec) ? "launcher.versionLabelFabric"
+                        : "quilt".equals(sec) ? "launcher.versionLabelQuilt"
+                        : "forge".equals(sec) ? "launcher.versionLabelForge"
+                        : "neoforge".equals(sec) ? "launcher.versionLabelNeoForge"
+                        : "main".equals(sec) ? "launcher.versionLabelGummerCraft" : "launcher.versionLabel";
                 versionLabel.setText(tr(key));
                 versionLabel.setToolTipText(tr(key + "Tooltip"));
                 versionPanel.setToolTipText(tr(key + "Tooltip"));
@@ -803,6 +864,7 @@ public class LauncherFrameFlat2 extends JFrame {
                 JPanel panel = new JPanel(new MigLayout("insets 0, wrap 1", "[grow,fill]"));
                 panel.add(new JLabel(tr("loader.text", mc, current != null ? current : tr("loader.notInstalled"))));
                 panel.add(box);
+                com.gummer.launcher.look.LookUi.freeze(panel); // 18.11.2026: розкладка наперед (див. LookUi.freeze)
                 int r = JOptionPane.showConfirmDialog(LauncherFrameFlat2.this, panel, title,
                         JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
                 if (r != JOptionPane.OK_OPTION) return;
@@ -860,7 +922,9 @@ public class LauncherFrameFlat2 extends JFrame {
 
     /** Текст для Vanilla і Fabric («версія»), якщо є, інакше звичайний («модпак»). */
     private static String trFor(Instance instance, String key, Object... args) {
-        String k = instance != null && instance.isBuiltIn() ? key + ".vanilla" : key;
+        // 17.11.2026: для копій свій текст («копію»), якщо він є, інакше як для версії
+        String k = instance != null && instance.isCopy() && SharedLocale.trOr(key + ".copy", null) != null ? key + ".copy"
+                : instance != null && instance.isBuiltIn() ? key + ".vanilla" : key;
         return args.length == 0 ? tr(k) : tr(k, args);
     }
 
@@ -910,6 +974,14 @@ public class LauncherFrameFlat2 extends JFrame {
      * Панель запуску для вибраної збірки: назва, стан (онлайн сервера або встановлено чи ні), «Одразу на сервер»
      * лише в збірок з сервером, і підпис головної кнопки за тим, що вона зробить.
      */
+    /** «Forge 1.16.5»: розділ і версія гри копії чи збірки Modrinth. */
+    private String derivedSubtitle(Instance sel) {
+        String sec = com.gummer.launcher.manage.InstanceCopies.sectionTitle(sel.getGroup());
+        String v = instancesModel.derivedVersionOf(sel);
+        if (sec == null) return v;
+        return v != null ? sec + " " + v : sec;
+    }
+
     private void refreshStatusRow() {
         Instance sel = getSelectedInstance();
         PlayButton play = (PlayButton) launchButton;
@@ -926,15 +998,29 @@ public class LauncherFrameFlat2 extends JFrame {
         int row = instancesTable.getSelectedRow();
         Object icon = row >= 0 ? instancesModel.getValueAt(row, 0) : null;
         dockIcon.setIcon(icon instanceof Icon ? scaledIcon((Icon) icon, 48) : null);
-        dockTitle.setText(instancesModel.titleOf(sel));
+        // 17.11.2026 (власник: «з'їхав напис»): для копії і збірки Modrinth назва самої збірки, а під нею розділ і версія
+        // («Forge 1.16.5 · встановлено»), бо «The Pixelmon Modpack · встановлено» не влазило в рядок
+        boolean derived = com.skcraft.launcher.swing.InstanceTableModel.isNamed(sel);
+        dockTitle.setText(derived ? instancesModel.pickerTitleOf(sel) : instancesModel.titleOf(sel));
+        if (InstanceTableModel.isBrowser(sel)) {
+            // 17.11.2026: рядок Modrinth не збірка: підказка замість «не встановлено», кнопки сховані (refreshModrinthPage)
+            quickJoinBox.setVisible(false);
+            onlineLabel.setText(tr("launcher.modrinthDock"));
+            onlineLabel.setForeground(Ui.TEXT_2);
+            onlineLabel.setVisible(true);
+            dockTitle.getParent().revalidate();
+            dockTitle.getParent().repaint();
+            return;
+        }
         String address = !sel.isBuiltIn() ? sel.getServerAddress() : null;
         boolean server = address != null;
         launchButton.setToolTipText(trFor(sel, "tooltip.launch"));
         quickJoinBox.setVisible(server);
 
         boolean installed = sel.isLocal() && sel.isInstalled();
-        String version = instancesModel.getGroupMembers(sel).size() >= 2 || sel.isBuiltIn()
-                ? "Minecraft " + instancesModel.versionLabelOf(sel) : null;
+        String version = derived ? derivedSubtitle(sel)
+                : instancesModel.getGroupMembers(sel).size() >= 2 || sel.isBuiltIn()
+                ? instancesModel.pickerTitleOf(sel) : null;
         if (server) {
             com.gummer.launcher.server.ServerPing.Status st = online.get(address);
             if (st != null) {
@@ -992,22 +1078,47 @@ public class LauncherFrameFlat2 extends JFrame {
         Object icon = instancesModel.getValueAt(r, 0);
         row.icon = icon instanceof Icon ? (Icon) icon : null;
         row.title = instancesModel.titleOf(i);
+        // 17.11.2026: оновлення це зелена стрілка на іконці (InstanceTableModel), текст у підказці
+        row.tooltip = InstanceTableModel.updatesText(i);
         boolean server = !i.isBuiltIn();
         boolean prevServer = r > 0 && !instancesModel.getInstanceAt(r - 1).isBuiltIn();
         if (r == 0 || server != prevServer) row.header = tr(server ? "ui2.section.servers" : "ui2.section.minecraft");
+        if (instancesModel.isInstalledOnly()) { // 17.11.2026: у «Встановлених» розділи як в «Усі»
+            row.header = instancesModel.installedCaption(i, r > 0 ? instancesModel.getInstanceAt(r - 1) : null);
+        }
+        if (InstanceTableModel.isBrowser(i) && !InstanceTableModel.isAddRow(i)) row.header = tr("launcher.section.modrinth"); // 17.11.2026
         boolean grouped = instancesModel.getGroupMembers(i).size() >= 2;
+        if (InstanceTableModel.isBrowser(i)) {
+            row.sub = tr(InstanceTableModel.isAddRow(i) ? "launcher.addBuildSub" : "launcher.modrinthRowSub"); // 17.11.2026
+            row.subColor = Ui.TEXT_3;
+            return row;
+        }
+        if (instancesModel.isInstalledOnly() && InstanceTableModel.isNamed(i) && i.isInstalled() && !i.isUpdatePending()) {
+            row.sub = derivedSubtitle(i); // «Встановлені»: копія чи модпак окремим рядком, під назвою розділ і версія
+            return row;
+        }
         if (i.isOrphaned()) {
             row.sub = tr("ui2.state.orphaned");
             row.subColor = Ui.TEXT_3;
         } else if (!i.isLocal()) {
-            row.sub = grouped || i.isBuiltIn() ? "Minecraft " + instancesModel.versionLabelOf(i) : tr("launcher.versionNotInstalled");
+            row.sub = grouped || i.isBuiltIn() ? instancesModel.pickerTitleOf(i) : tr("launcher.versionNotInstalled");
             row.subColor = Ui.TEXT_3;
-        } else if (!i.isInstalled() || i.isUpdatePending()) {
-            // у вузькому рядку лише стан; версію видно в панелі запуску
+        } else if (grouped || i.isBuiltIn()) {
+            // 17.11.2026 ~23:15 (власник: «жовте «є оновлення» ... так, обов'язково, зводить спантелику»): рядок розділу
+            // (Vanilla, завантажувачі) показує версію, як у склі. Жовте «є оновлення» стояло тут через недовстановлену
+            // теку чи прапорець оновлення списку версій, хоча оновлювати нічого. Оновлення збірок показує зелена стрілка
+            row.sub = instancesModel.pickerTitleOf(i);
+            if (!i.isInstalled()) row.subColor = Ui.TEXT_3;
+        } else if (!i.isInstalled()) {
+            // сервер, встановлення якого не закінчене: не «є оновлення», а як є
+            row.sub = tr("launcher.versionNotInstalled");
+            row.subColor = Ui.TEXT_3;
+        } else if (i.isUpdatePending()) {
+            // справжнє оновлення модпака сервера (StalDayZ, GummerCraft)
             row.sub = tr("launcher.versionUpdate");
             row.subColor = Ui.WARN;
         } else {
-            row.sub = grouped || i.isBuiltIn() ? "Minecraft " + instancesModel.versionLabelOf(i) : tr("launcher.versionInstalled");
+            row.sub = grouped || i.isBuiltIn() ? instancesModel.pickerTitleOf(i) : tr("launcher.versionInstalled");
         }
         String address = server ? i.getServerAddress() : null;
         com.gummer.launcher.server.ServerPing.Status st = address != null ? online.get(address) : null;
@@ -1319,6 +1430,8 @@ public class LauncherFrameFlat2 extends JFrame {
                         owner != null ? owner : LauncherFrameFlat2.this, supportService, this::getSelectedInstance, topic, text);
         com.gummer.launcher.ui.UiHooks.instanceSettings = (owner, instance) -> InstanceSettingsDialogFlat.open(LauncherFrameFlat2.this, instance);
         com.gummer.launcher.ui.UiHooks.reinstall = (owner, instance) -> confirmHardUpdate(instance);
+        com.gummer.launcher.ui.UiHooks.openMods = (owner, instance) -> openManage(instance, InstanceManageDialog.MODS);
+        com.gummer.launcher.ui.UiHooks.rollback = (owner, instance) -> MrpackUpdateFlow.rollback(LauncherFrameFlat2.this, launcher, instance, null);
         com.gummer.launcher.crash.CrashDialog.driversHelpUrl = launcher.getProperties().getProperty("driversHelpUrl");
     }
 
@@ -1335,7 +1448,7 @@ public class LauncherFrameFlat2 extends JFrame {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setClip(new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth() + 16, getHeight(), 16, 16));
+            g2.clip(new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth() + 16, getHeight(), 16, 16));
             if (img == null) {
                 g2.setColor(new Color(40, 90, 35, 200));
                 g2.fillRect(0, 0, getWidth(), getHeight());
@@ -1396,7 +1509,53 @@ public class LauncherFrameFlat2 extends JFrame {
      * @param y mouse Y
      * @param selected the selected instance, possibly null
      */
+    /** 17.11.2026: вікно «Керування збіркою» для збірки (кнопка «Збірка» біля «Грати» і меню збірки). */
+    private void openManage(Instance instance, int page) {
+        if (InstanceTableModel.isBrowser(instance)) return;
+        if (instance == null) return;
+        CoachMark.manageSeen(launcher, manageButton);
+        InstanceManageDialog.open(this, launcher, instance, page, new InstanceManageDialog.Host() {
+            @Override
+            public void instanceChanged() {
+                refreshInstancesQuietly();
+            }
+
+            @Override
+            public void copyCreated(String name) {
+                launcher.getConfig().setLastInstance(name);
+                com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+                loadInstances();
+            }
+
+            @Override
+            public void deleteInstance(Instance i) {
+                confirmDelete(i);
+            }
+
+            @Override
+            public void playWorld(Instance i, String world) {
+                LauncherFrameFlat2.this.playWorld(i, world);
+            }
+
+            @Override
+            public void buildUpdated(Instance i) {
+                InstanceManageDialog.installOnly(LauncherFrameFlat2.this, launcher, i, LauncherFrameFlat2.this::refreshInstancesQuietly);
+            }
+
+            @Override
+            public void artChanged() {
+                refreshInstancesQuietly();
+                packArtChanged();
+            }
+        });
+    }
+
+    /** 17.11.2026: своя іконка чи фон копії змінились (InstanceArt); FlatLauncherFrame* перемальовує фон. */
+    protected void packArtChanged() {
+    }
+
     private void popupInstanceMenu(Component component, int x, int y, final Instance selected) {
+        if (InstanceTableModel.isBrowser(selected)) return;
         JPopupMenu popup = new JPopupMenu();
         JMenuItem menuItem;
 
@@ -1410,6 +1569,37 @@ public class LauncherFrameFlat2 extends JFrame {
                 }
             });
             popup.add(menuItem);
+
+            // 17.11.2026: вікно «Керування збіркою» (назва, копія, моди, ресурспаки, світи, скріншоти)
+            if (InstanceManageDialog.needsInstall(selected)) {
+                // 17.11.2026: встановити чи оновити без запуску гри
+                menuItem = new JMenuItem(tr(selected.isInstalled() ? "manage.install.menuUpdate" : "manage.install.menu"), widgetIcon);
+                menuItem.addActionListener(e -> InstanceManageDialog.installOnly(this, launcher, selected, this::refreshInstancesQuietly));
+                popup.add(menuItem);
+            }
+            menuItem = new JMenuItem(tr("manage.menu"), widgetIcon);
+            menuItem.addActionListener(e -> openManage(selected, InstanceManageDialog.GENERAL));
+            popup.add(menuItem);
+            // 17.11.2026 (власник: «пкм -> дублювати (зробити копію прямо там, швидко). Але не для сталдейзу»)
+            if (InstanceManageDialog.canQuickCopy(selected)) {
+                menuItem = new JMenuItem(tr("manage.copy.quick"), widgetIcon);
+                menuItem.addActionListener(e -> InstanceManageDialog.quickCopy(this, launcher, selected, this::showNewBuild));
+                popup.add(menuItem);
+            }
+            // 17.11.2026 (власник: «"Продовжити останній світ" - ок, го»): одразу в останній зіграний світ (1.20+)
+            final java.io.File lastWorld = com.gummer.launcher.manage.Worlds.canQuickPlay(selected)
+                    ? com.gummer.launcher.manage.Worlds.last(selected) : null;
+            if (lastWorld != null) {
+                menuItem = new JMenuItem(tr("launcher.continueWorld", lastWorld.getName()), widgetIcon);
+                menuItem.addActionListener(e -> playWorld(selected, lastWorld.getName()));
+                popup.add(menuItem);
+            }
+            // 17.11.2026: у StalDayZ розділу «Моди» немає (набір модів лише наш)
+            if (!selected.isVanilla() && !com.gummer.launcher.manage.InstanceMods.packModsLocked(selected)) {
+                menuItem = new JMenuItem(tr("manage.menuMods"), widgetIcon);
+                menuItem.addActionListener(e -> openManage(selected, InstanceManageDialog.MODS));
+                popup.add(menuItem);
+            }
 
             if (selected.isLoaderPack()) {
                 // 1.33: версія завантажувача (закріплена в fabric-loader.txt, forge-loader.txt, neoforge-loader.txt)
@@ -1463,10 +1653,13 @@ public class LauncherFrameFlat2 extends JFrame {
                         LauncherFrameFlat2.this, selected.getContentDir(), true));
                 popup.add(menuItem);
 
-                menuItem = new JMenuItem(SharedLocale.tr("instance.openResourcePacks"), widgetIcon);
-                menuItem.addActionListener(ActionListeners.browseDir(
-                        LauncherFrameFlat2.this, new File(selected.getContentDir(), "resourcepacks"), true));
-                popup.add(menuItem);
+                if (!com.gummer.launcher.manage.InstanceMods.packModsLocked(selected)) { // StalDayZ: сторонні ресурспаки заборонені
+                    menuItem = new JMenuItem(SharedLocale.tr("instance.openResourcePacks"), widgetIcon);
+                    menuItem.addActionListener(ActionListeners.browseDir(
+                            LauncherFrameFlat2.this, new File(selected.getContentDir(), "resourcepacks"), true));
+                    popup.add(menuItem);
+
+                }
 
                 menuItem = new JMenuItem(SharedLocale.tr("instance.openScreenshots"), imageIcon);
                 menuItem.addActionListener(ActionListeners.browseDir(
@@ -1480,7 +1673,7 @@ public class LauncherFrameFlat2 extends JFrame {
 
                 popup.addSeparator();
 
-                if (!selected.isMrpack()) { // збірка з Modrinth: перевстановлення стерло б моди, скачані при імпорті
+                if (!selected.isMrpack() && !selected.isCopy()) { // Modrinth і копії: перевстановлення стерло б моди гравця
                     menuItem = new JMenuItem(trFor(selected, "instance.hardForceUpdate"), reinstallIcon);
                     menuItem.addActionListener(new ActionListener() {
                         @Override
@@ -1518,7 +1711,7 @@ public class LauncherFrameFlat2 extends JFrame {
     private void importMrpack() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle(tr("mrpack.chooseTitle"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth (.mrpack)", "mrpack"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth (.mrpack, .zip)", "mrpack", "zip"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         final File file = chooser.getSelectedFile();
         final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
@@ -1603,6 +1796,7 @@ public class LauncherFrameFlat2 extends JFrame {
         requestFocus();
         startOnlinePolling();
         loadNews();
+        com.gummer.launcher.manage.UpdateBadges.refresh(launcher, this::badgesChanged);
     }
 
     /** Швидкий перший показ: список збірок лише з кешів на диску (мілісекунди, без мережі). false - кешу немає. */
@@ -1624,16 +1818,103 @@ public class LauncherFrameFlat2 extends JFrame {
             Instance current = getSelectedInstance();
             String keep = current != null ? current.getName() : null;
         instancesLoadedOnce = true;
-        instancesModel.update();
-        if (instancesTable.getRowCount() > 0) {
+        // ті самі рядки: без повного оновлення таблиці (воно скидає вибір, і список «блимав»), лише нові дані версій
+        if (instancesModel.updateKeepingRows()) {
+            refreshVersionBox();
+            refreshStatusRow();
+        } else if (instancesTable.getRowCount() > 0) {
             reselect(keep);
         }
         refreshListLayout();
         }, SwingExecutor.INSTANCE);
     }
 
+
+    // ---------------------------------------------------------------- 17.11.2026: «Усі / Встановлені» і сторінка Modrinth
+    /** Головна область: «main» (як завжди) або «modrinth» (сторінка модпаків, коли зліва вибрано рядок Modrinth). */
+    private final CardLayout mainCards = new CardLayout();
+    private final JPanel mainHolder = new JPanel(mainCards);
+    private ModrinthPage modrinthPage;
+
+    private com.gummer.launcher.look.ListModeSwitch listSwitchRef;
+
+    /** Перемикач над списком збірок: «Усі» або «Встановлені» (запам'ятовується в config.json). */
+    private JComponent createListSwitch() {
+        return listSwitchRef = new com.gummer.launcher.look.ListModeSwitch(tr("launcher.listAll"), tr("launcher.listInstalled"),
+                launcher.getConfig().isInstalledOnly(), this::setInstalledOnly);
+    }
+
+    private JPanel wrapMain(JComponent main) {
+        mainHolder.setOpaque(false);
+        mainHolder.add(main, "main");
+        modrinthPage = new ModrinthPage(launcher, name -> {
+            // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,
+            // збірка вибирається і одразу ставляться гра і завантажувач, без ще одного натискання «Встановити»
+            Instance added = showNewBuild(name);
+            if (added != null) InstanceManageDialog.installOnly(this, launcher, added, this::refreshInstancesQuietly);
+        }, this::playBuild);
+        mainHolder.add(modrinthPage, "modrinth");
+        return mainHolder;
+    }
+
+    /**
+     * 17.11.2026: нова збірка (модпак Modrinth, «Дублювати»): список перечитується лише з диска (мілісекунди, без мережі
+     * і без вікна перевірки модпаків) і вибирається вона. null, якщо її не знайдено (тоді звичайне перечитування).
+     */
+    private Instance showNewBuild(String name) {
+        launcher.getConfig().setLastInstance(name);
+        com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+        if (loadInstancesFromCache()) {
+            instancesModel.update();
+            reselect(name);
+            for (Instance i : launcher.getInstances().getInstances()) {
+                if (i.getName().equals(name)) return i;
+            }
+        }
+        loadInstances();
+        return null;
+    }
+
+    private void setInstalledOnly(boolean on) {
+        launcher.getConfig().setInstalledOnly(on);
+        com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+        // 17.11.2026 (власник: «пам'ять має працювати як "що було відкрите останнє у встановлених" та "що було останнє
+        // вибране в усіх"»): кожен режим повертає свій вибір. «+ Додати збірку» відкриває «Усі» на сторінці Modrinth
+        // (раніше Modrinth мигав і вибір стрибав на останню збірку)
+        if (!on && InstanceTableModel.isAddRow(getSelectedInstance())) launcher.getConfig().setLastInstanceAll(InstanceTableModel.MODRINTH.getName());
+        String keep = com.gummer.launcher.manage.ListMemory.recall(launcher.getConfig(), on);
+        instancesModel.setInstalledOnly(on);
+        instancesModel.update();
+        if (instancesTable.getRowCount() > 0) reselect(keep);
+        refreshListLayout();
+        refreshModrinthPage();
+    }
+
+    /** Показати сторінку Modrinth, якщо зліва вибрано її рядок, інакше звичайну головну область. */
+    private void refreshModrinthPage() {
+        if (InstanceTableModel.isAddRow(getSelectedInstance())) {
+            // 17.11.2026: «+ Додати збірку» у «Встановлених»: показати «Усі» (усі версії і модпаки)
+            if (listSwitchRef != null) SwingUtilities.invokeLater(() -> listSwitchRef.setInstalledOnly(false));
+            return;
+        }
+        if (modrinthPage == null) return;
+        boolean browse = InstanceTableModel.isBrowser(getSelectedInstance());
+        mainCards.show(mainHolder, browse ? "modrinth" : "main");
+        if (browse) {
+            launchButton.setEnabled(false);
+            manageButton.setEnabled(false);
+        } else {
+            manageButton.setEnabled(true);
+        }
+        // 17.11.2026 (власник: «що таке "Modrinth - не встановлено"... ми ж не встановлюємо модрінт»)
+        launchButton.setVisible(!browse);
+        manageButton.setVisible(!browse);
+        if (browse) modrinthPage.shown();
+    }
+
     /** Знову вибрати збірку на ім'я (або запам'ятовану), не записуючи це як вибір гравця. */
     private void reselect(String name) {
+        if (instancesModel.chooseByName(name)) instancesModel.refreshChoice(); // копія чи збірка Modrinth у розділі: рядок показує саме її
         int row = name != null ? instancesModel.rowOf(name) : -1;
         if (row < 0) {
             selectRememberedInstance();
@@ -1653,10 +1934,34 @@ public class LauncherFrameFlat2 extends JFrame {
         configDialog.setVisible(true);
     }
 
+    /** 17.11.2026: «Грати» на сторінці Modrinth (встановлений модпак): вибрати збірку і запустити. */
+    private void playBuild(String name) {
+        Instance i = showNewBuild(name);
+        if (i != null && !InstanceTableModel.isBrowser(getSelectedInstance())) launch();
+    }
+
+    /**
+     * 17.11.2026 (власник: «"Продовжити останній світ" - ок, го»): одразу в цей світ (--quickPlaySingleplayer, 1.20+;
+     * разовий запит, див. Worlds і Runner.addQuickJoin).
+     */
+    private void playWorld(Instance instance, String world) {
+        com.gummer.launcher.manage.Worlds.requestQuickPlay(instance, world);
+        playBuild(instance.getName());
+    }
+
+    /** 17.11.2026: бейджі оновлень (UpdateBadges) змінились: перемалювати список, не скидаючи вибір. */
+    private void badgesChanged() {
+        if (instancesModel.getRowCount() > 0) instancesModel.refreshChoice();
+        refreshListLayout();
+        repaint();
+    }
+
     private void launch() {
         boolean permitUpdate = updateCheck.isSelected();
         Instance instance = getSelectedInstance();
+        if (InstanceTableModel.isBrowser(instance)) return; // рядок Modrinth: сторінка модпаків, не збірка
         if (instance == null) return;
+        InstanceManageDialog.warnMemory(this, launcher, instance); // 17.11.2026: більше половини пам'яті ПК
 
         LaunchOptions options = new LaunchOptions.Builder()
                 .setInstance(instance)

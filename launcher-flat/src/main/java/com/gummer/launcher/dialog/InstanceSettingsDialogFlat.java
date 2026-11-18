@@ -127,6 +127,10 @@ public class InstanceSettingsDialogFlat extends JDialog {
         SwingExtras.configureMemorySlider(memorySlider, minMemorySpinner, maxMemorySpinner);
         memorySlider.setOpaque(false);
         memCard.add(memorySlider, "hidemode 3, wmin 0");
+        // 17.11.2026: порада за кількістю модів і попередження, коли більше половини пам'яті ПК
+        memAdvice = LookUi.body(" ", true);
+        memCard.add(memAdvice, "hidemode 3, wmin 0");
+        memorySlider.addChangeListener(e -> updateMemAdvice());
         JTextArea warn = LookUi.body(SharedLocale.tr("options.64BitJavaWarning"), true);
         jvmWarningArea = warn;
         memCard.add(warn, "hidemode 3, wmin 0");
@@ -314,8 +318,27 @@ public class InstanceSettingsDialogFlat extends JDialog {
         saved = true;
     }
 
+    private JTextArea memAdvice;
+    private Instance adviceFor;
+
+    /** Порада щодо пам'яті під повзунком (оновлюється при русі повзунка). */
+    private void updateMemAdvice() {
+        if (memAdvice == null) return;
+        int mb = memorySlider.getValue();
+        if (com.gummer.launcher.manage.MemoryAdvice.tooMuch(mb)) {
+            memAdvice.setText(SharedLocale.tr("memory.tooMuchSetting", com.gummer.launcher.manage.MemoryAdvice.gb(mb),
+                    com.gummer.launcher.manage.MemoryAdvice.gb(com.gummer.launcher.manage.MemoryAdvice.totalMb())));
+            memAdvice.setForeground(LookTheme.palette().warn);
+        } else {
+            memAdvice.setText(adviceFor != null && !adviceFor.isVanilla() ? InstanceManageDialog.memoryAdvice(adviceFor) : " ");
+            memAdvice.setForeground(LookTheme.palette().text3);
+        }
+    }
+
     public static boolean open(Window parent, Instance instance) {
         InstanceSettingsDialogFlat dialog = new InstanceSettingsDialogFlat(parent, instance.getSettings());
+        dialog.adviceFor = instance;
+        dialog.updateMemAdvice();
         dialog.setVisible(true);
 
         if (dialog.saved) {

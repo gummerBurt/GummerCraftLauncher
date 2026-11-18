@@ -194,12 +194,28 @@ public class InstanceList {
                     if (!com.gummer.launcher.modrinth.MrpackPacks.ENABLED
                             && com.gummer.launcher.modrinth.MrpackPacks.isMrpackName(dir.getName())) continue; // до 1.34
                     File file = new File(dir, "instance.json");
+                    // 17.11.2026 ~23:15: «примарна» тека (без instance.json, лише порожні теки і updates-check.json) лишилась
+                    // від перевірки «чи вже є мод» у ще не встановленій версії; це не збірка, версія лишається не встановленою
+                    if (!file.exists() && isPhantom(dir)) continue;
                     Instance instance = Persistence.load(file, Instance.class);
                     instance.setDir(dir);
                     instance.setName(dir.getName());
                     instance.setSelected(true);
                     instance.setLocal(true);
-                    if (instance.isVanilla()) {
+                    if (instance.isCopy() || (instance.isMrpack() && com.gummer.launcher.manage.InstanceCopies.sectionOf(instance) != null)) {
+                        // 17.11.2026 (власник: «модпаки та копії модпаків мають потрапляти не в ліве меню, а в список
+                        // збірок, під оригінальною, чистою версією»): копія і збірка Modrinth стоять у виборі версії
+                        // розділу свого завантажувача (копія Forge 1.16.5 у Forge одразу під 1.16.5), зі своєю назвою.
+                        // Копія модпака GummerCraft це Fabric, тож вона у Fabric. Розділи зліва лише StalDayZ,
+                        // GummerCraft, Vanilla і завантажувачі.
+                        if (instance.isMrpack() && !com.gummer.launcher.modrinth.MrpackPacks.ENABLED) continue; // до 1.34
+                        String section = com.gummer.launcher.manage.InstanceCopies.sectionOf(instance);
+                        instance.setGroup(section != null ? section : instance.getName());
+                        instance.setTitle(instance.isCopy() ? com.gummer.launcher.manage.InstanceCopies.defaultTitleOf(instance)
+                                : com.gummer.launcher.modrinth.MrpackPacks.titleOf(instance));
+                        instance.setPriority(com.gummer.launcher.manage.InstanceCopies.sectionPriority(section));
+                        instance.setSortVersion(com.gummer.launcher.manage.InstanceCopies.minecraftVersionOf(instance));
+                    } else if (instance.isVanilla()) {
                         // вкладка Vanilla: група і назва відомі з назви теки, навіть без інтернету
                         instance.setGroup(com.gummer.launcher.vanilla.VanillaVersions.GROUP);
                         instance.setTitle(com.gummer.launcher.vanilla.VanillaVersions.titleOf(
@@ -237,22 +253,26 @@ public class InstanceList {
             // і навпаки. Без інтернету: збережений список (vanilla_versions.json) або лише встановлені версії.
             Set<String> vanillaNames = new HashSet<String>();
             List<com.gummer.launcher.vanilla.VanillaVersions.Release> releases = new ArrayList<com.gummer.launcher.vanilla.VanillaVersions.Release>();
+            // з «музеєм»: копія може бути зроблена і зі старої версії Vanilla (17.11.2026)
+            List<com.gummer.launcher.vanilla.VanillaVersions.Release> allReleases = new ArrayList<com.gummer.launcher.vanilla.VanillaVersions.Release>();
             try {
                 List<com.gummer.launcher.vanilla.VanillaVersions.Release> all = com.gummer.launcher.vanilla.VanillaVersions.releases(launcher);
+                allReleases.addAll(all);
                 // завантажувачі (Fabric, Quilt, Forge, NeoForge, mrpack) лише з 1.7.10, «музей» тільки у Vanilla
                 for (com.gummer.launcher.vanilla.VanillaVersions.Release r : all) {
-                    if (!r.museum) releases.add(r);
+                    if (!r.museum && !r.snapshot) releases.add(r); // снапшоти лише у Vanilla (17.11.2026)
                 }
                 for (com.gummer.launcher.vanilla.VanillaVersions.Release r : all) {
                     String vname = com.gummer.launcher.vanilla.VanillaVersions.nameOf(r.id);
-                    vanillaNames.add(vname.toLowerCase(Locale.ROOT));
                     Instance found = null;
                     for (Instance instance : local) {
                         if (instance.getName().equalsIgnoreCase(vname)) found = instance;
                     }
                     URL vurl = new URL(r.url);
                     if (found != null) {
-                        found.setManifestURL(vurl);
+                        found.setManifestURL(vurl); // і старий снапшот, якщо стоїть: без адреси не оновився б
+                    } else if (!r.listed) {
+                        continue; // снапшот старший за останній реліз: у списку його немає
                     } else {
                         File dir = new File(launcher.getInstancesDir(), vname);
                         // через Persistence.load, як і паки з CDN: інакше Updater не може записати instance.json
@@ -269,8 +289,9 @@ public class InstanceList {
                         instance.setLocal(false);
                         remote.add(instance);
                     }
+                    if (r.listed) vanillaNames.add(vname.toLowerCase(Locale.ROOT));
                 }
-                log.info(vanillaNames.size() + " vanilla release(s) listed");
+                log.info(vanillaNames.size() + " vanilla version(s) listed");
             } catch (Exception e) {
                 log.log(java.util.logging.Level.WARNING, "The vanilla version list is unavailable", e);
             }
@@ -347,11 +368,11 @@ public class InstanceList {
                 log.log(java.util.logging.Level.WARNING, "The Quilt version list is unavailable", e);
             }
 
-            // 1.33: збірки .mrpack: адреса JSON версії Mojang за версією з mrpack.json
+            // 1.33: збірки .mrpack: адреса JSON версії Mojang за версією з mrpack.json; 17.11.2026: так само копії збірок
             for (Instance instance : local) {
-                if (!instance.isMrpack()) continue;
-                String mc = com.gummer.launcher.modrinth.MrpackPacks.mcOf(instance);
-                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : releases) {
+                if (!instance.isMrpack() && !instance.isCopy()) continue;
+                String mc = com.gummer.launcher.manage.InstanceCopies.minecraftVersionOf(instance);
+                for (com.gummer.launcher.vanilla.VanillaVersions.Release r : allReleases) {
                     if (r.id.equals(mc)) {
                         try {
                             instance.setManifestURL(new URL(r.url));
@@ -567,6 +588,12 @@ public class InstanceList {
             } catch (IOException e) {
                 throw new IOException("The list of modpacks could not be downloaded.", e);
             } finally {
+                // 17.11.2026: назва, яку дав гравець, поверх назви зі списку модпаків чи версій
+                for (Instance instance : local) {
+                    if (instance.getCustomTitle() != null && !instance.getCustomTitle().trim().isEmpty()) {
+                        instance.setTitle(instance.getCustomTitle().trim());
+                    }
+                }
                 synchronized (InstanceList.this) {
                     instances.clear();
                     instances.addAll(local);
@@ -630,5 +657,19 @@ public class InstanceList {
         public String getStatus() {
             return progress.getStatus();
         }
+    }
+
+    /** Тека, у якій немає нічого, крім порожніх тек і updates-check.json (див. виклик у переліку збірок). */
+    static boolean isPhantom(File dir) {
+        File[] fs = dir.listFiles();
+        if (fs == null) return false;
+        for (File f : fs) {
+            if (f.isDirectory()) {
+                if (!isPhantom(f)) return false;
+            } else if (!com.gummer.launcher.manage.UpdateBadges.FILE.equals(f.getName())) {
+                return false;
+            }
+        }
+        return true;
     }
 }

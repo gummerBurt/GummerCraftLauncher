@@ -34,26 +34,20 @@ public final class LookUi {
     }
 
     /** Картка розділу: у склі напівпрозора з тонкою світлою рамкою, у Класиці поверхня з лінією, у Бібліотеці без рамки. */
+    private static final Color GLASS_FILL = new Color(255, 255, 255, 14), GLASS_LINE = new Color(255, 255, 255, 30);
+
     public static JPanel card(String layout, String cols, String rows) {
         JPanel c = new JPanel(new MigLayout(layout, cols, rows)) {
             @Override
             protected void paintComponent(Graphics g) {
                 LookTheme.Palette p = LookTheme.palette();
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 int r = p.radius * 2 > getHeight() ? getHeight() / 2 : p.radius;
+                // 17.11.2026: готова картинка замість згладженої фігури на кожен кадр (RoundBg)
                 if (p.glass()) {
-                    g2.setColor(new Color(255, 255, 255, 14));
-                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, r * 2, r * 2);
-                    g2.setColor(new Color(255, 255, 255, 30));
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, r * 2, r * 2);
+                    RoundBg.paint(g2, getWidth(), getHeight(), r * 2, GLASS_FILL, GLASS_LINE, 1);
                 } else {
-                    g2.setColor(p.surface);
-                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, r * 2, r * 2);
-                    if (!p.library()) {
-                        g2.setColor(p.line);
-                        g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, r * 2, r * 2);
-                    }
+                    RoundBg.paint(g2, getWidth(), getHeight(), r * 2, p.surface, p.library() ? null : p.line, 1);
                 }
                 g2.dispose();
             }
@@ -69,18 +63,62 @@ public final class LookUi {
         return l;
     }
 
+    /**
+     * 18.11.2026 (власник: «Нова збірка з цим модом» не спрацьовує; лог: NullPointerException «this.xTotal is null» у
+     * BoxLayout вікна JOptionPane). Панель MigLayout з текстом, що переноситься, рахує розмір у два проходи, і між ними
+     * MigLayout.adjustWindowSize переміряв усе вікно JOptionPane посеред його ж розрахунку. Перед показом у JOptionPane
+     * розмір такої панелі рахується тут, поки вона ще без вікна, і фіксується.
+     */
+    public static <T extends JComponent> T freeze(T c) {
+        for (int i = 0; i < 3; i++) {
+            Dimension d = c.getPreferredSize();
+            c.setSize(d);
+            c.doLayout();
+            for (Component k : c.getComponents()) if (k instanceof Container) ((Container) k).doLayout();
+        }
+        c.setPreferredSize(c.getPreferredSize());
+        return c;
+    }
+
     /** Текст, що переноситься по ширині (JLabel з html ламався при масштабі Windows). */
     public static JTextArea body(String text, boolean dim) {
-        JTextArea a = new JTextArea(stripHtml(text));
+        // 17.11.2026: текст лише для читання не прокручує сторінку до своєї каретки (інакше сторінка «Моди» і пошук
+        // Modrinth, що наповнюються у фоні, відкривались прокрученими на середину)
+        JTextArea a = new JTextArea(plainText(stripHtml(text))) {
+            @Override
+            public void scrollRectToVisible(Rectangle r) {
+            }
+        };
         a.setLineWrap(true);
         a.setWrapStyleWord(true);
         a.setEditable(false);
         a.setFocusable(false);
         a.setOpaque(false);
         a.setBorder(null);
+        // 17.11.2026: каретка тексту, доданого у фоні (список модів, Modrinth), не прокручує сторінку до себе
+        if (a.getCaret() instanceof javax.swing.text.DefaultCaret) {
+            ((javax.swing.text.DefaultCaret) a.getCaret()).setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
+        }
         a.setFont(UIManager.getFont("Label.font").deriveFont(dim ? 12.5f : 13.5f));
         a.setForeground(dim ? LookTheme.palette().text3 : LookTheme.palette().text2);
         return a;
+    }
+
+    /**
+     * 17.11.2026: без емодзі та інших символів поза основною площиною Unicode. Один такий символ (часто в описах з
+     * Modrinth) перемикає JTextArea у повільну «складну» розкладку тексту, і кожен перерахунок сторінки займав сотні
+     * мілісекунд процесора (вікно підвисало). Шрифт лаунчера їх однаково не малює.
+     */
+    public static String plainText(String s) {
+        if (s == null) return "";
+        StringBuilder b = null;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean drop = Character.isSurrogate(c) || c == 0x200D || (c >= 0xFE00 && c <= 0xFE0F); // ZWJ, варіанти вигляду
+            if (drop && b == null) b = new StringBuilder(s.length()).append(s, 0, i);
+            else if (!drop && b != null) b.append(c);
+        }
+        return b == null ? s : b.toString().replaceAll("  +", " ").trim();
     }
 
     public static String stripHtml(String s) {
@@ -170,6 +208,18 @@ public final class LookUi {
                 setToolTipText(null);
             }
 
+            // 17.11.2026: без власного розміру JComponent бере за мінімум свій поточний розмір, і пункт міг лишитись
+            // ширшим за колонку меню (права рамка вибраного пункту обрізалась). Ширину задає лише колонка.
+            @Override
+            public Dimension getMinimumSize() {
+                return new Dimension(0, 38);
+            }
+
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(0, 38);
+            }
+
             @Override
             protected void paintComponent(Graphics g) {
                 LookTheme.Palette p = LookTheme.palette();
@@ -181,10 +231,13 @@ public final class LookUi {
                 int arc = p.library() ? h : p.glass() ? 12 : 6;
                 if (on) {
                     if (p.glass()) {
+                        // 17.11.2026: рамка на півпікселя всередині, щоб на 125% і 150% жоден її край не падав за межу пункту
+                        java.awt.geom.RoundRectangle2D.Float rr = new java.awt.geom.RoundRectangle2D.Float(0.5f, 0.5f, w - 1.5f, h - 1.5f, arc, arc);
                         g2.setColor(new Color(255, 255, 255, 30));
-                        g2.fillRoundRect(0, 0, w, h, arc, arc);
+                        g2.fill(rr);
                         g2.setColor(new Color(255, 255, 255, 46));
-                        g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
+                        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+                        g2.draw(rr);
                     } else if (p.library()) {
                         g2.setColor(p.surface3);
                         g2.fillRoundRect(0, 0, w, h, arc, arc);

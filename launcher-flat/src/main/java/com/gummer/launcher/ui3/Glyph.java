@@ -18,7 +18,7 @@ import java.io.InputStream;
  * це знаки сервісів: вирізані з наявних кнопок у {@code ui/icon/v3/*.png}.
  */
 public enum Glyph {
-    SETTINGS, WIKI, SUPPORT, UPDATE, PLAY, COFFEE, REFRESH, CHEVRON, MORE, TELEGRAM, DISCORD;
+    SETTINGS, WIKI, SUPPORT, UPDATE, PLAY, COFFEE, REFRESH, CHEVRON, BOX, MORE, TELEGRAM, DISCORD;
 
     private BufferedImage image;
     private boolean imageLoaded;
@@ -99,6 +99,12 @@ public enum Glyph {
                     g2.drawLine(15, 13, 12, 13);
                     g2.drawLine(5, 1, 5, 4);
                     g2.drawLine(9, 1, 9, 4);
+                    break;
+                case BOX:
+                    // скринька: «Збірка» (17.11.2026, вікно «Керування збіркою»)
+                    g2.drawRect(2, 4, 14, 12);
+                    g2.drawLine(2, 8, 16, 8);
+                    g2.fillRect(8, 6, 3, 5);
                     break;
                 case REFRESH: {
                     g2.drawArc(3, 3, 12, 12, 30, 270);

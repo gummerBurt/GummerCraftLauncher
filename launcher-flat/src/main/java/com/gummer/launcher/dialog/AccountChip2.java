@@ -24,12 +24,12 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
  */
 final class AccountChip2 extends JPanel {
 
-    private static final int HEAD = 32;
+    private static final int HEAD = 22;
 
     private final Launcher launcher;
     private final JLabel icon = new JLabel();
     private final JLabel text = new JLabel();
-    private final JLabel caption = new JLabel(tr("serverAccount.chip"));
+    private final JLabel caption = new JLabel(tr("serverAccount.chipShort"));
     private final Icon userIcon;
     private boolean hover;
     private int refreshId;
@@ -40,20 +40,21 @@ final class AccountChip2 extends JPanel {
 
     AccountChip2(Launcher launcher, Runnable onClick) {
         // редизайн 2: картка профілю в рейці, 232x56: голова 32, підпис і нік (стрілка «>» не влазила разом з підписом)
-        super(new MigLayout("insets 0 12 0 12, gap 12 0", "[][grow]", "[grow,center]"));
+        // 17.11.2026: у верхньому ряду кнопок, висота 36: голова 22, дрібний підпис «Акаунт ГК» і нік
+        super(new MigLayout("insets 0 10 0 12, gap 8 0", "[][grow]", "[grow,center]"));
         this.launcher = launcher;
         setOpaque(false);
         userIcon = com.skcraft.launcher.swing.CrispIcon.of(Launcher.class, "ui/icon/light/user.png", HEAD - 6, HEAD - 6);
         text.setForeground(com.gummer.launcher.ui2.Ui.TEXT);
-        text.setFont(com.gummer.launcher.ui2.Ui.font(Font.BOLD, 14f));
+        text.setFont(com.gummer.launcher.ui2.Ui.font(Font.BOLD, 12.5f));
         caption.setForeground(com.gummer.launcher.ui2.Ui.TEXT_3);
-        caption.setFont(com.gummer.launcher.ui2.Ui.font(Font.PLAIN, 12f)); // на 11 px у Segoe UI губиться крапка «і»
+        caption.setFont(com.gummer.launcher.ui2.Ui.font(Font.PLAIN, 11f));
         icon.setHorizontalAlignment(SwingConstants.CENTER);
-        add(icon, "w 32!, h 32!");
+        add(icon, "w 22!, h 22!");
         JPanel lines = new JPanel(new MigLayout("insets 0, gap 0, wrap 1", "[grow,fill]", "[]0[]"));
         lines.setOpaque(false);
-        lines.add(caption);
-        lines.add(text);
+        lines.add(caption, "wmin 0");
+        lines.add(text, "wmin 0");
         add(lines, "growx, wmin 0");
         // клавіатура: Tab доходить сюди, пробіл чи Enter відкриває акаунт
         setFocusable(true);
@@ -82,7 +83,11 @@ final class AccountChip2 extends JPanel {
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
+            public void mouseReleased(MouseEvent e) {
+                // 18.11.2026 (власник: «інколи в повноекранному режимі, коли клацаєш по кнопці зміни дизайну, вона не
+                // спрацьовує»): mouseClicked Swing не шле, якщо миша між натисканням і відпусканням зсунулась хоч на піксель.
+                // Як у кнопки: відпускання над самою плашкою (воно приходить сюди, лише якщо натискали теж на ній)
+                if (!e.getComponent().contains(e.getPoint())) return;
                 if (SwingUtilities.isLeftMouseButton(e)) onClick.run();
             }
 
@@ -153,8 +158,13 @@ final class AccountChip2 extends JPanel {
         // редизайн 2: поверхня рейки на тон світліша, при наведенні ще світліша, фокус зеленою рамкою
         Graphics2D g2 = com.gummer.launcher.ui2.Ui.smooth(g);
         int arc = com.gummer.launcher.ui2.Ui.RADIUS;
-        g2.setColor(hover ? com.gummer.launcher.ui2.Ui.SURFACE_3 : com.gummer.launcher.ui2.Ui.SURFACE_2);
+        // 17.11.2026: над картинкою сцени, як кнопки «Вікі» і «Підтримка» (Btn GHOST onScene)
+        g2.setColor(com.gummer.launcher.ui2.Ui.alpha(Color.BLACK, 110));
         g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
+        if (hover) {
+            g2.setColor(com.gummer.launcher.ui2.Ui.alpha(Color.WHITE, 28));
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
+        }
         if (isFocusOwner()) com.gummer.launcher.ui2.Ui.focusRing(g2, getWidth(), getHeight(), arc);
         g2.dispose();
         super.paintComponent(g);

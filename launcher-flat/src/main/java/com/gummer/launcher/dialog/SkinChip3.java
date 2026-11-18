@@ -48,7 +48,11 @@ final class SkinChip3 extends JPanel {
 
         addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
+            public void mouseReleased(MouseEvent e) {
+                // 18.11.2026 (власник: «інколи в повноекранному режимі, коли клацаєш по кнопці зміни дизайну, вона не
+                // спрацьовує»): mouseClicked Swing не шле, якщо миша між натисканням і відпусканням зсунулась хоч на піксель.
+                // Як у кнопки: відпускання над самою плашкою (воно приходить сюди, лише якщо натискали теж на ній)
+                if (!e.getComponent().contains(e.getPoint())) return;
                 if (!SwingUtilities.isLeftMouseButton(e)) return;
                 if (pulse.isRunning()) {
                     pulse.stop();

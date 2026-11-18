@@ -110,6 +110,18 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
         // 1.32.1: Vanilla одразу українською і з сервером GummerCraft у списку (лише перший раз, див. VanillaDefaults)
         com.gummer.launcher.vanilla.VanillaDefaults.apply(instance);
+        // 17.11.2026: моди модпаку, які гравець вимкнув у вікні «Збірка», оновлення паку качає знову: вимкнути ще раз
+        com.gummer.launcher.manage.InstanceMods.reapplyDisabled(instance);
+        // 17.11.2026: мод вимагає новішу версію іншого мода, ніж стоїть (The Pixelmon Modpack 9.1.13 кладе byg 1.1.6, а
+        // Pixelmon вимагає 1.3.4+): поставити потрібну з Modrinth до запуску, інакше гра стає на «only supports ... or above»
+        long fixStart = System.nanoTime();
+        java.util.List<String> fixedMods = com.gummer.launcher.manage.ModVersionFix.fixBeforeLaunch(instance);
+        if (!fixedMods.isEmpty() || System.nanoTime() - fixStart > 300000000L) {
+            log.info("Mod version check: " + fixedMods + " in " + (System.nanoTime() - fixStart) / 1000000 + " ms");
+        }
+
+        // 17.11.2026 ~23:30: дублікати модів, мод не під завантажувач, бракує обов'язкового мода: спитати до запуску
+        com.gummer.launcher.manage.PreLaunchDialog.ask(instance);
 
         config = launcher.getConfig();
         builder = new JavaProcessBuilder();
@@ -307,6 +319,20 @@ public class Runner implements Callable<Process>, ProgressObservable {
             if (raised > maxMemory) {
                 log.info("Max memory raised from " + maxMemory + " to " + raised + " MB (recommended by the modpack list)");
                 maxMemory = raised;
+            }
+        }
+
+        // 17.11.2026 (власник: «пам'ять під модпак ... радити об'єм за кількістю модів»): збірка без своїх налаштувань
+        // пам'яті з багатьма модами отримує стільки, скільки радить MemoryAdvice (не більше половини пам'яті ПК), якщо
+        // загальне налаштування менше. Менше за загальне налаштування не ставимо.
+        // 18.11.2026 (власник: «чому для модпаків з модрінта дається всього 2 гб ... вже другий модпак мені впав»): раніше
+        // лише розділи завантажувачів; тепер і збірки Modrinth та копії (у них найбільше модів)
+        if (!memorySettings.isPresent() && (instance.isBuiltIn() || instance.isMrpack() || instance.isCopy()) && !instance.isVanilla()) {
+            int advice = com.gummer.launcher.manage.MemoryAdvice.recommended(instance);
+            if (advice > maxMemory) {
+                log.info("Max memory raised from " + maxMemory + " to " + advice + " MB ("
+                        + com.gummer.launcher.manage.MemoryAdvice.modCount(instance) + " mods)");
+                maxMemory = advice;
             }
         }
 
@@ -548,6 +574,18 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
     /** Адреса для «Запуск одразу на сервер» (1.32): null, якщо цього разу не треба. */
     private String quickJoinAddress;
+    private String quickWorld;
+
+    /** Чи є в аргументах гри з JSON версії такий (наприклад quickPlaySingleplayer). */
+    private boolean versionHasArg(String name) {
+        if (versionManifest.getArguments() == null || versionManifest.getArguments().getGameArguments() == null) return false;
+        for (GameArgument arg : versionManifest.getArguments().getGameArguments()) {
+            for (String v : arg.getValues()) {
+                if (v.contains(name)) return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * 1.32: «Запуск одразу на сервер» для паків вкладки GummerCraft з адресою сервера (список v2, serverAddress).
@@ -556,20 +594,26 @@ public class Runner implements Callable<Process>, ProgressObservable {
      * (addServerArgs) має перевагу.
      */
     private void addQuickJoin() {
+        // 17.11.2026 (власник: «Продовжити останній світ» через --quickPlaySingleplayer): гравець вибрав світ, гра
+        // одразу відкриває його (1.20+, ознака is_quick_play_singleplayer у JSON версії). Разовий запит: наступний
+        // звичайний «Запуск» відкриває меню
+        String world = com.gummer.launcher.manage.Worlds.takeQuickPlay(instance);
+        if (world != null) {
+            if (versionHasArg("quickPlaySingleplayer")) {
+                quickWorld = world;
+                featureList.addFeature("is_quick_play_singleplayer", true);
+                log.info("Quick play into the world " + world);
+                return;
+            }
+            log.info("This version has no --quickPlaySingleplayer, opening the menu instead of " + world);
+        }
         String address = instance.getServerAddress();
         if (address == null || address.trim().isEmpty() || instance.isBuiltIn() || config.isServerEnabled()
                 || !com.gummer.launcher.prefs.LauncherPrefs.getBoolean(com.gummer.launcher.prefs.LauncherPrefs.QUICK_JOIN, true)) {
             return;
         }
         address = address.trim();
-        boolean quickPlay = false;
-        if (versionManifest.getArguments() != null && versionManifest.getArguments().getGameArguments() != null) {
-            for (GameArgument arg : versionManifest.getArguments().getGameArguments()) {
-                for (String v : arg.getValues()) {
-                    if (v.contains("quickPlayMultiplayer")) quickPlay = true;
-                }
-            }
-        }
+        boolean quickPlay = versionHasArg("quickPlayMultiplayer");
         if (quickPlay) {
             quickJoinAddress = address;
             featureList.addFeature("is_quick_play_multiplayer", true);
@@ -676,6 +720,9 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
         if (quickJoinAddress != null) {
             map.put("quickPlayMultiplayer", quickJoinAddress);
+        }
+        if (quickWorld != null) {
+            map.put("quickPlaySingleplayer", quickWorld);
         }
 
         map.put("resolution_width", String.valueOf(config.getWindowWidth()));

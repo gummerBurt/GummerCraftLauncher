@@ -46,16 +46,14 @@ public final class LaunchStats {
     }
 
     /** Гра стартувала: надіслати подію у фоні. Ніколи не кидає винятків. */
-    public static void gameStarted(Launcher launcher, Instance instance) {
+    public static void gameStarted(final Launcher launcher, final Instance instance) {
         try {
-            final URL url = buildUrl(launcher, instance);
-            if (url == null) {
-                return;
-            }
+            // 17.11.2026: адреса будується у фоні: число своїх модів читає теку mods і опис паку
             Thread thread = new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    send(url);
+                    URL url = buildUrl(launcher, instance);
+                    if (url != null) send(url);
                 }
             }, "launch-stats");
             thread.setDaemon(true);
@@ -70,7 +68,41 @@ public final class LaunchStats {
         if (instance == null) {
             return null;
         }
-        return eventUrl(launcher, "e=launch&p=" + packOf(instance));
+        return eventUrl(launcher, "e=launch&p=" + packOf(instance) + "&m=" + ownMods(instance));
+    }
+
+    /**
+     * 17.11.2026: скільки увімкнених модів гравець додав сам (не з модпаку), лише число до 99. Назв модів немає. Щоб
+     * бачити, чи користуються керуванням модами і пошуком Modrinth.
+     */
+    static int ownMods(Instance instance) {
+        try {
+            int n = 0;
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+                if (m.enabled && m.source == com.gummer.launcher.manage.InstanceMods.Source.OWN) n++;
+            }
+            return Math.min(n, 99);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /**
+     * 17.11.2026: анонімна подія «встановлено з пошуку Modrinth» ({@code e=add}): лише тип ({@code mod},
+     * {@code shader}, {@code resourcepack}, {@code modpack}), без назви проєкту, збірки чи файлу. Ніколи не кидає.
+     */
+    public static void added(final Launcher launcher, final String kind) {
+        try {
+            if (kind == null || !SAFE.matcher(kind).matches()) return;
+            Thread thread = new Thread(() -> {
+                URL url = eventUrl(launcher, "e=add&k=" + kind);
+                if (url != null) send(url);
+            }, "launch-stats");
+            thread.setDaemon(true);
+            thread.start();
+        } catch (Throwable t) {
+            log.log(Level.FINE, "Add statistics are unavailable", t);
+        }
     }
 
     /**
@@ -101,7 +133,7 @@ public final class LaunchStats {
 
     /** Що піде в параметр {@code p}: назва нашої збірки, тип і версія для Vanilla та завантажувачів, інакше загальне слово. */
     static String packOf(Instance instance) {
-        String name = instance.getName();
+        String name = instance.getKindName(); // копія збірки (17.11.2026): тип і версія оригіналу, не випадкова тека copy-...
         if (name == null) {
             return OTHER;
         }

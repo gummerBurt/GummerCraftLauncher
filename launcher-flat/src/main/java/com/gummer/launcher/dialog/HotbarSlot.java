@@ -28,6 +28,11 @@ public class HotbarSlot extends JButton {
     private int badge;
 
     public HotbarSlot(String iconPath, String caption, String tooltip) {
+        this(iconPath, caption, tooltip, WIDTH);
+    }
+
+    /** 17.11.2026: вужчий слот (кнопка «Збірка» біля «Запуску», де місця мало). */
+    public HotbarSlot(String iconPath, String caption, String tooltip, int width) {
         this.icon = readIcon(iconPath);
         this.caption = caption;
         setToolTipText(tooltip);
@@ -38,7 +43,7 @@ public class HotbarSlot extends JButton {
         setOpaque(false);
         setRolloverEnabled(true);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        Dimension d = new Dimension(WIDTH, HEIGHT);
+        Dimension d = new Dimension(width, HEIGHT);
         setPreferredSize(d);
         setMinimumSize(d);
         setMaximumSize(d);
@@ -127,6 +132,7 @@ public class HotbarSlot extends JButton {
                 g2.drawRect(3, 3, w - 7, h - 7);
             }
 
+            if (!hover) CoachMark.paintRing(g2, this, 4); // 17.11.2026: увага на кнопку «Збірка», поки її не відкривали
             SupportUnread.paint(g2, badge, w - 7, 7, new Color(0x1A, 0x1A, 0x1A));
         } finally {
             g2.dispose();

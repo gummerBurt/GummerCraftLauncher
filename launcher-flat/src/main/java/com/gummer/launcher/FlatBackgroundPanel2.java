@@ -87,13 +87,6 @@ public class FlatBackgroundPanel2 extends JPanel {
     /** Вже перевірені файли: шлях -> зображення (null - файлу нема). */
     private final Map<String, Properties> layouts = new HashMap<>();
     private final Map<Image, Rectangle> logoBounds = new HashMap<>();
-    /** Фон, уже масштабований у фізичні пікселі: (картинка, ширина, висота) -> зображення. */
-    private final Map<List<Object>, BufferedImage> scaled = new LinkedHashMap<List<Object>, BufferedImage>(16, 0.75F, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<List<Object>, BufferedImage> eldest) {
-            return size() > 10;
-        }
-    };
 
     // редактор
     private File editDir;
@@ -102,9 +95,11 @@ public class FlatBackgroundPanel2 extends JPanel {
     private FrameEditor editor;
 
     public FlatBackgroundPanel2() {
-        defaultBackground = read("ui/frame/bg.jpg");
-        defaultLogo = read("ui/frame/logo.png");
+        defaultBackground = cached("ui/frame/bg.jpg"); // 18.11.2026: спільний кеш трьох виглядів
+        defaultLogo = cached("ui/frame/logo.png");
         current = new Scene(null, defaultBackground, defaultLogo);
+        // 18.11.2026: фони всіх збірок під розмір вікна наперед (PackPrewarm)
+        com.gummer.launcher.look.PackPrewarm.hook(this, this::prewarmBackgrounds);
 
         fadeTimer = new javax.swing.Timer(15, e -> {
             fade = Math.min(1.0F, (System.currentTimeMillis() - fadeStart) / (float) FADE_MS);
@@ -134,6 +129,11 @@ public class FlatBackgroundPanel2 extends JPanel {
 
     /** @param animate false - одразу, без переходу (старт лаунчера) */
     public void showPack(String packName, boolean animate) {
+        showPack(packName, animate, null);
+    }
+
+    /** 17.11.2026: customBackground - свій фон копії збірки (InstanceArt), замість фону типу збірки; null - звичайний. */
+    public void showPack(String packName, boolean animate, Image customBackground) {
         Image background = null;
         Image logo = null;
         String key = null;
@@ -152,8 +152,11 @@ public class FlatBackgroundPanel2 extends JPanel {
                 }
             }
         }
+        if (customBackground != null) background = customBackground;
         currentLayout = layout;
-        Scene next = new Scene(key, background != null ? background : defaultBackground, logo != null ? logo : defaultLogo);
+        // 17.11.2026: сторінка Modrinth без лого збірки
+        Scene next = new Scene(key, background != null ? background : defaultBackground,
+                FlatBackgroundPanel.BROWSER_LOOK.equals(key) ? FlatBackgroundPanel.NO_LOGO : logo != null ? logo : defaultLogo);
         applyValues(next);
         if (next.looksSame(current)) {
             current = next;
@@ -186,6 +189,33 @@ public class FlatBackgroundPanel2 extends JPanel {
         value = value.trim();
         if (name.endsWith(".url") && !(value.startsWith("https://") || value.startsWith("http://"))) return null;
         return value;
+    }
+
+    /**
+     * 18.11.2026 (сторож EdtWatch: клік по збірці в Класиці масштабував її фон під вікно прямо в потоці інтерфейсу,
+     * 60-90 мс): ті самі розміри, що порахує paintContent, рахуються наперед у фоні. false - якісь картинки ще
+     * розпаковуються, спробувати пізніше.
+     */
+    private boolean prewarmBackgrounds(double ds) {
+        Rectangle scene = sceneRect();
+        if (scene.width <= 0 || scene.height <= 0) return true;
+        boolean all = true;
+        for (String k : com.gummer.launcher.look.PackPrewarm.KEYS) {
+            Image bg = "default".equals(k) ? defaultBackground : com.gummer.launcher.look.FrameImages.peek("ui/frame/bg_" + k + ".jpg");
+            if (bg == null && !"default".equals(k)) {
+                String from = layout(k).getProperty("background.from");
+                if (from != null && from.matches("[a-z0-9_.-]+")) bg = com.gummer.launcher.look.FrameImages.peek("ui/frame/bg_" + from + ".jpg");
+            }
+            if (bg == null) {
+                all &= com.gummer.launcher.look.FrameImages.warmedUp();
+                continue;
+            }
+            Scene s = new Scene("default".equals(k) ? null : k, bg, defaultLogo);
+            applyValues(s);
+            Rectangle b = bgRect(scene, s);
+            com.gummer.launcher.look.DevicePixels.prewarm(bg, Math.max(1, (int) Math.round(b.width * ds)), Math.max(1, (int) Math.round(b.height * ds)), false);
+        }
+        return all;
     }
 
     /** Лишився для сумісності з LauncherFrameFlat2: логотип стоїть нижче за навігацію, межа не потрібна. */
@@ -273,7 +303,9 @@ public class FlatBackgroundPanel2 extends JPanel {
         double k = Math.min(1.0, Math.min(maxW / (double) r.width, maxH / (double) r.height)) * s.logoScale / 100.0;
         int w = Math.max(1, (int) Math.round(r.width * k)), h = Math.max(1, (int) Math.round(r.height * k));
         int cx = scene.x + scene.width / 2 + s.logoX;
-        int cy = scene.y + (int) Math.round(scene.height * LOGO_CENTER_Y) + s.logoY;
+        // 17.11.2026 (власник: «в класиці проблеми тільки з логотипами - їх треба в повноекранці попіднімати»): у
+        // найменшому вікні центр лого ~150 px від верху сцени; вище вікно лого вже не опускає
+        int cy = scene.y + (int) Math.min(Math.round(scene.height * LOGO_CENTER_Y), 150) + s.logoY;
         return new Rectangle(cx - w / 2, cy - h / 2, w, h);
     }
 
@@ -347,13 +379,8 @@ public class FlatBackgroundPanel2 extends JPanel {
     /** Фон у фізичних пікселях (на екрані 125% малюється 1:1, без другого розтягування). */
     private BufferedImage scaledBackground(Image image, int w, int h, double ds) {
         int pw = Math.max(1, (int) Math.round(w * ds)), ph = Math.max(1, (int) Math.round(h * ds));
-        List<Object> key = Arrays.asList(image, pw, ph);
-        BufferedImage img = scaled.get(key);
-        if (img == null) {
-            img = com.gummer.launcher.look.DevicePixels.resize(image, pw, ph, false);
-            scaled.put(key, img);
-        }
-        return img;
+        // 17.11.2026: спільний кеш з тимчасовою картинкою, поки якісна рахується у фоні (DevicePixels.cachedQuick)
+        return com.gummer.launcher.look.DevicePixels.cachedQuick(image, pw, ph, false, this);
     }
 
     private static double deviceScale(Graphics2D g2) {
