@@ -88,6 +88,22 @@ public final class LookUi {
             @Override
             public void scrollRectToVisible(Rectangle r) {
             }
+
+            // 19.11.2026 (власник: «якщо швидко перемикатись в "збірка" між кнопками ресурспаки шейдери моди -
+            // залагує на пів секунди», Pixelmon): MigLayout на кожній розкладці питає базову лінію кожного тексту, а
+            // JTextArea з переносом рядків щоразу наново розкладає весь свій текст (BoxView.setSize). 20 описів з
+            // Modrinth давали ~1,7 с у потоці інтерфейсу. Текст тут завжди зверху, тож базова лінія це базова лінія
+            // першого рядка: відступ плюс висота шрифту над лінією, без розкладки (вирівнювання те саме, що і було)
+            @Override
+            public int getBaseline(int width, int height) {
+                if (width < 0 || height < 0) return super.getBaseline(width, height);
+                return getInsets().top + getFontMetrics(getFont()).getAscent();
+            }
+
+            @Override
+            public Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+                return Component.BaselineResizeBehavior.CONSTANT_ASCENT;
+            }
         };
         a.setLineWrap(true);
         a.setWrapStyleWord(true);
@@ -133,6 +149,36 @@ public final class LookUi {
                 + hex(p.accentHover) + "; pressedBackground: " + hex(p.accentPressed) + "; borderColor: " + hex(p.accent)
                 + "; hoverBorderColor: " + hex(p.accentHover) + "; focusedBorderColor: " + hex(p.accentText)
                 + "; font: bold; arc: " + p.buttonArc);
+        return b;
+    }
+
+    /** Небезпечна дія (видалення): червоний контур, червона заливка лише при наведенні. */
+    public static JButton danger(JButton b) {
+        LookTheme.Palette p = LookTheme.palette();
+        b.putClientProperty("FlatLaf.style", "foreground: " + hex(p.danger) + "; borderColor: " + hex(p.danger)
+                + "; hoverBorderColor: " + hex(p.danger) + "; focusedBorderColor: " + hex(p.danger)
+                + "; hoverBackground: " + hex(p.danger) + "; pressedBackground: " + hex(p.danger.darker())
+                + "; font: bold; arc: " + p.buttonArc);
+        b.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                if (b.isEnabled()) b.setForeground(Color.WHITE);
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                b.setForeground(p.danger);
+            }
+        });
+        return b;
+    }
+
+    /** Підтвердження небезпечної дії: суцільна червона кнопка. */
+    public static JButton dangerSolid(JButton b) {
+        LookTheme.Palette p = LookTheme.palette();
+        b.putClientProperty("FlatLaf.style", "background: " + hex(p.danger) + "; foreground: #FFFFFF; borderColor: "
+                + hex(p.danger) + "; hoverBackground: " + hex(p.danger.darker()) + "; pressedBackground: "
+                + hex(p.danger.darker().darker()) + "; disabledText: #FFFFFF99; font: bold; arc: " + p.buttonArc);
         return b;
     }
 

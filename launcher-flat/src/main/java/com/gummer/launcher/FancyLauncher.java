@@ -153,6 +153,12 @@ public class FancyLauncher {
         // 18.11.2026: сторож EdtWatch показав, що це ~0,28 с у потоці інтерфейсу через 2,5 с після старту, якраз коли
         // гравець уже клацає. Тепер чекає тиші: 1,5 с без руху миші і клавіш (перевірка раз на 0,5 с, до 60 с).
         final long started = System.currentTimeMillis();
+        // 19.11.2026: список Java для налаштувань рахується у фоні (раніше ~0,24 с з цих ~0,28 с у потоці інтерфейсу)
+        com.skcraft.launcher.launch.runtime.JavaRuntimeFinder.prefetch();
+        // 19.11.2026: список відеокарт (картка «Відеокарта» у вікні «Збірка» і запуск гри), PowerShell ~1 с
+        Thread gpus = new Thread(com.gummer.launcher.util.Gpu::adapters, "GPU list");
+        gpus.setDaemon(true);
+        gpus.start();
         Timer t = new Timer(500, null);
         t.setInitialDelay(2500);
         t.addActionListener(e -> {
@@ -240,7 +246,9 @@ public class FancyLauncher {
             System.setProperty( "flatlaf.menuBarEmbedded", "true" );
             System.setProperty( "JRootPane.menuBarEmbedded", "true" );
         }
-        if( SystemInfo.isLinux ) {
+        // 19.11.2026: у спрощеному режимі (look.LookTheme.LITE) рамка вікна на Linux системна: намальована лаунчером
+        // перемальовує все вікно при перетягуванні і на частині Wayland/XWayland та Steam Deck поводиться дивно
+        if( SystemInfo.isLinux && !com.gummer.launcher.look.LookTheme.LITE ) {
             JFrame.setDefaultLookAndFeelDecorated( true );
             JDialog.setDefaultLookAndFeelDecorated( true );
         }

@@ -72,7 +72,7 @@ final class SkinChip extends JPanel {
             phase += 0.08f;
             repaint();
         });
-        if (!LauncherPrefs.getBoolean(SEEN, false)) pulse.start();
+        if (!LauncherPrefs.getBoolean(SEEN, false) && !com.gummer.launcher.look.LookTheme.LITE) pulse.start();
 
         addMouseListener(new MouseAdapter() {
             @Override

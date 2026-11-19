@@ -43,12 +43,18 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
 /**
  * 17.11.2026: вікно «Керування збіркою» (кнопка «Збірка» біля «Грати» у всіх трьох виглядах і пункт меню збірки).
  * Одне спільне вікно в стилі поточного вигляду ({@link LookTheme}), щоб не множити код у трьох копіях головного вікна.
- * Розділи: Загальне (назва, копія, теки, Java і пам'ять), Моди (вкл/викл, необов'язкові моди модпаку), Ресурспаки,
- * Шейдери, Світи, Скріншоти. Файли можна перетягнути у вікно: вони копіюються в теку відкритого розділу.
+ * Розділи: Загальне (назва, копія, теки, Java і пам'ять), Імпорт/Експорт (19.11.2026: файл збірки .mrpack чи .zip,
+ * імпорт з інших лаунчерів), Моди (вкл/викл, необов'язкові моди модпаку), Ресурспаки, Шейдери, Світи, Скріншоти. Файли можна перетягнути у вікно: вони копіюються в теку відкритого розділу.
  */
 public class InstanceManageDialog extends JDialog {
 
     public static final int GENERAL = 0, MODS = 1, RESOURCEPACKS = 2, SHADERS = 3, WORLDS = 4, SCREENSHOTS = 5;
+    /** 19.11.2026 (власник: «Збірка - під загальне зроби вкладку "Імпорт/Експорт" і туди перенеси все з
+     *  імпортом/експортом»): номер новий, а в меню вона одразу під «Загальне» ({@link #NAV_ORDER}). */
+    public static final int IMPEX = 6;
+    private static final int LAST = IMPEX;
+    /** Порядок розділів у меню зліва. */
+    private static final int[] NAV_ORDER = {GENERAL, IMPEX, MODS, RESOURCEPACKS, SHADERS, WORLDS, SCREENSHOTS};
 
     /** Що вікно просить у головного вікна (воно в трьох варіантах). */
     public interface Host {
@@ -129,7 +135,7 @@ public class InstanceManageDialog extends JDialog {
         pageHost.setOpaque(false);
         // 17.11.2026: сторінка будується, лише коли її вперше відкривають (ensurePage); раніше вікно при кожному
         // відкритті будувало всі шість, хоча показує одну
-        for (int i = GENERAL; i <= SCREENSHOTS; i++) {
+        for (int i = GENERAL; i <= LAST; i++) {
             JPanel holder = new JPanel(new BorderLayout());
             holder.setOpaque(false);
             pageHolders[i] = holder;
@@ -139,9 +145,9 @@ public class InstanceManageDialog extends JDialog {
         // 17.11.2026: StalDayZ закритий: набір модів лише наш, сторонні ресурспаки заборонені, одиночної гри немає,
         // тож розділів «Моди», «Ресурспаки», «Світи» в ньому немає (сторінки зібрано, але в меню їх не видно)
         String[] all = {tr("manage.nav.general"), tr("manage.nav.mods"), tr("manage.nav.packs"),
-                tr("manage.nav.shaders"), tr("manage.nav.worlds"), tr("manage.nav.screenshots")};
+                tr("manage.nav.shaders"), tr("manage.nav.worlds"), tr("manage.nav.screenshots"), tr("manage.nav.impex")};
         navPages.clear();
-        for (int i = GENERAL; i <= SCREENSHOTS; i++) {
+        for (int i : NAV_ORDER) {
             if (closedPack() && (i == MODS || i == RESOURCEPACKS || i == WORLDS)) continue;
             // 17.11.2026: Vanilla шейдерів не вміє взагалі, а ресурспаки в грі лише з 1.6 (rd-132211, альфа, бета їх не мають)
             if (instance.isVanilla() && (i == SHADERS || i == RESOURCEPACKS && !vanillaHasResourcePacks())) continue;
@@ -213,7 +219,7 @@ public class InstanceManageDialog extends JDialog {
     }
 
     private void select(int page) {
-        int i = navPages.indexOf(Math.max(GENERAL, Math.min(SCREENSHOTS, page)));
+        int i = navPages.indexOf(Math.max(GENERAL, Math.min(LAST, page)));
         nav.select(Math.max(0, i)); // схованого в цій збірці розділу немає: «Загальне»
     }
 
@@ -242,7 +248,7 @@ public class InstanceManageDialog extends JDialog {
         return InstanceMods.packModsLocked(instance);
     }
 
-    private final JPanel[] pageHolders = new JPanel[SCREENSHOTS + 1];
+    private final JPanel[] pageHolders = new JPanel[LAST + 1];
 
     /** Побудувати сторінку, якщо її ще не будували. */
     private void ensurePage(int page) {
@@ -268,6 +274,9 @@ public class InstanceManageDialog extends JDialog {
             case SCREENSHOTS:
                 p = screenshotsPage();
                 break;
+            case IMPEX:
+                p = impexPage();
+                break;
             default:
                 p = generalPage();
         }
@@ -283,9 +292,12 @@ public class InstanceManageDialog extends JDialog {
         // сторінка завжди з початку (інакше фокус у полі назви прокручував «Загальне» донизу)
         Component sp = pageHolders[page].getComponent(0);
         if (sp instanceof JScrollPane) SwingUtilities.invokeLater(() -> ((JScrollPane) sp).getVerticalScrollBar().setValue(0));
-        if (page == MODS) fillMods();
-        if (page == RESOURCEPACKS) fillFiles(packsList, new File(instance.getContentDir(), "resourcepacks"), "zip");
-        if (page == SHADERS) fillFiles(shadersList, new File(instance.getContentDir(), "shaderpacks"), "zip");
+        // 19.11.2026 (власник: «якщо швидко перемикатись в "збірка" між кнопками ресурспаки шейдери моди - залагує на
+        // пів секунди», Pixelmon): списки перебудовуються, лише якщо файли в теці змінились (назви, розмір, дата). Раніше
+        // кожне повернення на «Моди» наново будувало сотні рядків і знову питало Modrinth про сторони та оновлення
+        if (page == MODS) fillModsIfChanged();
+        if (page == RESOURCEPACKS) fillFilesIfChanged(packsList, new File(instance.getContentDir(), "resourcepacks"), "zip");
+        if (page == SHADERS) fillFilesIfChanged(shadersList, new File(instance.getContentDir(), "shaderpacks"), "zip");
         // пошук Modrinth вантажиться, лише коли відкрита підвкладка «Знайти»
         if (subTabs[page] != null) subTabs[page].shown();
         if (page == WORLDS) fillWorlds();
@@ -361,6 +373,10 @@ public class InstanceManageDialog extends JDialog {
         // 17.11.2026: своя іконка і фон копії (InstanceArt)
         if (com.gummer.launcher.manage.InstanceArt.supported(instance)) p.add(artCard());
 
+        // 19.11.2026 (власник: «Гра на вбудованій відеокарті ... в ідеалі перемикач в "збірка"»): лише на ПК з двома
+        // відеокартами; список відеокарт у фоні (перший раз ~1 с), картка з'являється, коли він готовий
+        p.add(gpuCard(), "hidemode 3");
+
         // копія
         JPanel copyCard = card();
         copyCard.add(LookUi.title(tr("manage.copy.title"), 15f));
@@ -413,7 +429,6 @@ public class InstanceManageDialog extends JDialog {
         p.add(fpsCard());
 
         // 17.11.2026: поділитися збіркою (файл .mrpack) і поставити чужу
-        p.add(shareCard());
 
         // теки і Java
         JPanel foldersCard = card();
@@ -951,6 +966,26 @@ public class InstanceManageDialog extends JDialog {
     private final List<ModRow> modRows = new ArrayList<ModRow>();
     private SwingWorker<?, ?> modsLoader;
 
+    /** Підпис вмісту списку модів: файли (назва, розмір, дата) і вибір необов'язкових модів. */
+    private String modsSignature(List<InstanceMods.Mod> mods, List<InstanceMods.Optional> optionals) {
+        StringBuilder b = new StringBuilder();
+        for (InstanceMods.Mod m : mods) {
+            b.append(m.file.getName()).append('|').append(m.file.length()).append('|').append(m.file.lastModified())
+                    .append('|').append(m.source).append('\n');
+        }
+        for (InstanceMods.Optional o : optionals) b.append(o.name).append('=').append(o.selected).append('\n');
+        return b.toString();
+    }
+
+    private String modsShown;
+
+    /** Повернення на «Моди»: перебудувати список, лише якщо щось змінилось (див. {@link #show}). */
+    private void fillModsIfChanged() {
+        if (instance.isVanilla()) return;
+        if (modsShown != null && modsShown.equals(modsSignature(InstanceMods.list(instance), InstanceMods.optionals(instance)))) return;
+        fillMods();
+    }
+
     private void fillMods() {
         if (instance.isVanilla()) return;
         optionalList.removeAll();
@@ -981,6 +1016,7 @@ public class InstanceManageDialog extends JDialog {
         // моди: файли одразу, назви, описи й іконки з jar у фоні (200 модів читаються секунду-дві)
         if (modsLoader != null) modsLoader.cancel(true);
         final List<InstanceMods.Mod> mods = InstanceMods.list(instance);
+        modsShown = modsSignature(mods, optionals);
         modsList.removeAll();
         modRows.clear();
         pendingUpdates.clear();
@@ -1025,6 +1061,7 @@ public class InstanceManageDialog extends JDialog {
                     loadSides();
                     loadUpdates(); // 17.11.2026: паралельно з позначками сторін, а не після них (кнопка «Оновити все» на ~1 с раніше)
                 } catch (Exception e) {
+                    modsShown = null; // наступне повернення на вкладку спробує ще раз
                     modsList.removeAll();
                     modsList.add(small(String.valueOf(e.getMessage())), "wmin 0");
                 }
@@ -1774,7 +1811,7 @@ public class InstanceManageDialog extends JDialog {
 
     // 17.11.2026: підвкладки «Мої ... / Знайти ...» на сторінках модів, ресурспаків і шейдерів, щоб своє і пошук
     // Modrinth не були змішані на одній сторінці
-    private final SubTabs[] subTabs = new SubTabs[SCREENSHOTS + 1];
+    private final SubTabs[] subTabs = new SubTabs[LAST + 1];
 
     /** Сторінка з підвкладками: зверху перемикач, під ним або своє (mine), або пошук (find). find null: лише своє. */
     private JPanel tabbed(int page, JPanel mine, Browse find, String mineKey, String findKey) {
@@ -2242,9 +2279,28 @@ public class InstanceManageDialog extends JDialog {
         return String.valueOf(n);
     }
 
+    /** Що зараз показано в списку файлів (ресурспаки, шейдери): підпис теки. */
+    private final java.util.Map<JPanel, String> filesShown = new java.util.HashMap<JPanel, String>();
+
+    private static String filesSignature(File[] files) {
+        if (files == null) return "";
+        StringBuilder b = new StringBuilder();
+        for (File f : files) b.append(f.getName()).append('|').append(f.length()).append('|').append(f.lastModified()).append('\n');
+        return b.toString();
+    }
+
+    /** Повернення на вкладку: перебудувати, лише якщо файли змінились. */
+    private void fillFilesIfChanged(JPanel list, File dir, String ext) {
+        File[] files = dir.listFiles(f -> f.isDirectory() || f.getName().toLowerCase(Locale.ROOT).endsWith("." + ext));
+        String sig = filesSignature(files);
+        if (sig.equals(filesShown.get(list))) return;
+        fillFiles(list, dir, ext);
+    }
+
     private void fillFiles(JPanel list, File dir, String ext) {
         list.removeAll();
         File[] files = dir.listFiles(f -> f.isDirectory() || f.getName().toLowerCase(Locale.ROOT).endsWith("." + ext));
+        filesShown.put(list, filesSignature(files));
         JTextArea emptyText = emptyTexts.get(list);
         if (emptyText != null) emptyText.setVisible(false);
         if (files == null || files.length == 0) {
@@ -2280,7 +2336,7 @@ public class InstanceManageDialog extends JDialog {
      * запам'ятовує розміри з першого проходу: картка лишалась вищою, ніж треба. Після розкладу скинути збережене
      * в усій сторінці і розкласти ще раз.
      */
-    private static void relayoutLater(final Component c) {
+    static void relayoutLater(final Component c) {
         SwingUtilities.invokeLater(() -> {
             Container sp = SwingUtilities.getAncestorOfClass(JScrollPane.class, c);
             Component root = sp != null ? ((JScrollPane) sp).getViewport().getView() : c;
@@ -2772,6 +2828,39 @@ public class InstanceManageDialog extends JDialog {
 
     // ------------------------------------------------------------------ дрібниці
 
+    // ------------------------------------------------------------------ Імпорт/Експорт
+
+    /** 19.11.2026: усе про файли збірок і чужі лаунчери в одному розділі (раніше «Поділитися» було в «Загальне»). */
+    private JPanel impexPage() {
+        JPanel p = page();
+        p.add(shareCard());
+        p.add(otherLaunchersCard());
+        return p;
+    }
+
+    /** Імпорт збірок з Prism, CurseForge, ATLauncher, Modrinth App, офіційного лаунчера і TLauncher (ImportOtherDialog). */
+    private JPanel otherLaunchersCard() {
+        JPanel c = card();
+        c.add(LookUi.title(tr("import.title"), 15f));
+        c.add(LookUi.body(tr("import.hint"), true), "wmin 0");
+        JButton open = LookUi.secondary(new JButton(tr("import.open")));
+        open.putClientProperty("FlatLaf.styleClass", null);
+        open.addActionListener(e -> ImportOtherDialog.show(this, launcher, name -> {
+            if (host == null) return;
+            if (name != null) {
+                host.copyCreated(name); // головне вікно вибере нову збірку
+                toast(tr("manage.share.imported"));
+            } else {
+                host.instanceChanged();
+            }
+        }));
+        JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[]push", "[34!]"));
+        row.setOpaque(false);
+        row.add(open, "h 34!");
+        c.add(row, "gaptop 6");
+        return c;
+    }
+
     /** 17.11.2026: «Поділитися збіркою»: зберегти .mrpack (моди посиланнями на Modrinth) і відкрити чужий. */
     private JPanel shareCard() {
         JPanel c = card();
@@ -2867,6 +2956,115 @@ public class InstanceManageDialog extends JDialog {
             dir.mkdirs();
             SwingHelper.browseDir(dir, this);
         });
+        return b;
+    }
+
+    /** Картка «Відеокарта»: як самому дати грі потужну відеокарту (Gpu), видно лише на ПК з двома відеокартами. */
+    private JPanel gpuCard() {
+        final JPanel c = card();
+        c.setVisible(false);
+        new SwingWorker<String[], Void>() {
+            @Override
+            protected String[] doInBackground() {
+                String d = com.gummer.launcher.util.Gpu.discreteOfHybrid();
+                return d == null ? null : new String[]{d, String.valueOf(com.gummer.launcher.util.Gpu.integratedOfHybrid())};
+            }
+
+            @Override
+            protected void done() {
+                String[] gpus;
+                try {
+                    gpus = get();
+                } catch (Exception e) {
+                    gpus = null;
+                }
+                if (gpus == null || !com.gummer.launcher.util.Gpu.choiceSupported()) return;
+                boolean win = com.skcraft.launcher.util.Environment.getInstance().getPlatform()
+                        == com.skcraft.launcher.util.Platform.WINDOWS;
+                c.add(LookUi.title(tr("manage.gpu.title"), 15f));
+                c.add(LookUi.body(tr("manage.gpu.pick"), true), "wmin 0");
+                // 19.11.2026 (власник: «показувати гравцю які в нього є відеокарти щоб він між ними міг перемикатись?
+                // І в дужках "... (інтегрована) / ... (дискретна)"», і раніше: «прозоро і чесно»): три варіанти,
+                // що саме робить вибір, написано під ними
+                final int current = com.gummer.launcher.util.Gpu.choice(instance);
+                final ButtonGroup group = new ButtonGroup();
+                String integratedName = "null".equals(gpus[1]) ? tr("manage.gpu.integratedUnknown") : gpus[1];
+                String[] labels = {tr("manage.gpu.auto"), tr("manage.gpu.integrated", integratedName),
+                        tr("manage.gpu.discrete", gpus[0])};
+                int[] values = {com.gummer.launcher.util.Gpu.AUTO, com.gummer.launcher.util.Gpu.INTEGRATED_GPU,
+                        com.gummer.launcher.util.Gpu.DISCRETE_GPU};
+                for (int k = 0; k < labels.length; k++) {
+                    final int value = values[k];
+                    final JRadioButton rb = radio(labels[k], value == current);
+                    group.add(rb);
+                    c.add(rb, (k == 0 ? "gaptop 6, " : "") + "wmin 0");
+                    rb.addActionListener(e -> {
+                        if (com.gummer.launcher.util.Gpu.choice(instance) == value) return;
+                        com.gummer.launcher.util.Gpu.setChoice(instance, value);
+                        Persistence.commitAndForget(instance);
+                        toast(tr("manage.gpu.saved"));
+                        // «Як вирішить система»: записане лаунчером прибрати одразу, не чекаючи запуску
+                        if (value == com.gummer.launcher.util.Gpu.AUTO) launcher.getExecutor().submit(
+                                () -> com.gummer.launcher.util.Gpu.forget(launcher.getBaseDir(), instance));
+                    });
+                }
+                c.add(LookUi.body(tr(win ? "manage.gpu.howWin" : "manage.gpu.howLinux"), true), "wmin 0, gaptop 4");
+                if (!win) {
+                    c.setVisible(true);
+                    c.revalidate();
+                    return;
+                }
+                c.add(LookUi.body(tr("manage.gpu.manual"), true), "wmin 0, gaptop 6");
+                JButton open = LookUi.secondary(new JButton(tr("manage.gpu.open")));
+                open.putClientProperty("FlatLaf.styleClass", null);
+                JButton copy = LookUi.secondary(new JButton(tr("manage.gpu.copy")));
+                copy.putClientProperty("FlatLaf.styleClass", null);
+                final JTextArea note = LookUi.body(" ", true);
+                note.setVisible(false);
+                open.addActionListener(e -> {
+                    if (!com.gummer.launcher.util.Gpu.openGraphicsSettings()) {
+                        note.setText(tr("manage.gpu.openFailed"));
+                        note.setVisible(true);
+                        c.revalidate();
+                    }
+                });
+                copy.addActionListener(e -> {
+                    File exe = com.gummer.launcher.util.Gpu.lastJava(instance);
+                    if (exe == null) {
+                        note.setText(tr("manage.gpu.notYet"));
+                    } else {
+                        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+                                new java.awt.datatransfer.StringSelection(exe.getAbsolutePath()), null);
+                        note.setText(tr("manage.gpu.copied", exe.getAbsolutePath()));
+                    }
+                    note.setVisible(true);
+                    c.revalidate();
+                });
+                JPanel row = new JPanel(new MigLayout("insets 0, gap 8", "[][]push", "[32!]"));
+                row.setOpaque(false);
+                row.add(open, "h 32!");
+                row.add(copy, "h 32!");
+                c.add(row, "gaptop 6");
+                c.add(note, "wmin 0, hidemode 3");
+                c.setVisible(true);
+                c.revalidate();
+            }
+        }.execute();
+        return c;
+    }
+
+    /** 19.11.2026: перемикач з таким самим видом кружечка, як квадратик {@link #check} (ті самі ключі FlatLaf). */
+    private JRadioButton radio(String text, boolean selected) {
+        JRadioButton b = new JRadioButton(text, selected);
+        b.setOpaque(false);
+        b.setForeground(pal.text);
+        b.setFocusPainted(false);
+        b.putClientProperty("FlatLaf.style", "icon.borderWidth: 1; icon.borderColor: " + LookUi.hex(pal.text3)
+                + "; icon.background: " + LookUi.hex(pal.surface2)
+                + "; icon.selectedBorderColor: " + LookUi.hex(pal.accent)
+                + "; icon.selectedBackground: " + LookUi.hex(pal.accent)
+                + "; icon.centerDiameter: 7; icon.checkmarkColor: #FFFFFF"
+                + "; disabledText: " + LookUi.hex(pal.text3));
         return b;
     }
 

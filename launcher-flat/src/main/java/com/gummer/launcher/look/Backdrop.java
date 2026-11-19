@@ -115,7 +115,7 @@ public final class Backdrop extends JPanel {
             double ds = DevicePixels.scale(g2);
             int pw = DevicePixels.px(w, ds), ph = DevicePixels.px(h, ds);
             int dx = 0, dy = 0;
-            boolean withBlur = blur != null && ownerAt != null && isShowing();
+            boolean withBlur = !LookTheme.LITE && blur != null && ownerAt != null && isShowing();
             if (withBlur) {
                 Point me = getLocationOnScreen();
                 dx = ownerAt.x - me.x;

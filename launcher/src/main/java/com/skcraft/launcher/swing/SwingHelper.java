@@ -221,12 +221,13 @@ public final class SwingHelper {
 
         // 1.32: зрозуміле вікно помилки (причина людською мовою, деталі під кнопкою, звернення в підтримку)
         final String why = throwable != null ? com.gummer.launcher.crash.ErrorExplainer.explain(throwable) : null;
+        final String whyText = why != null ? com.gummer.launcher.crash.ErrorExplainer.text(why, throwable) : null;
         final String details = detailsText;
         if (SwingUtilities.isEventDispatchThread()) {
-            showFriendlyError(parentComponent, message, title, details, why);
+            showFriendlyError(parentComponent, message, title, details, why, whyText);
         } else {
             try {
-                SwingUtilities.invokeAndWait(() -> showFriendlyError(parentComponent, message, title, details, why));
+                SwingUtilities.invokeAndWait(() -> showFriendlyError(parentComponent, message, title, details, why, whyText));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (InvocationTargetException e) {
@@ -254,12 +255,13 @@ public final class SwingHelper {
      * (стек) сховані під кнопкою «Показати деталі», кнопки «Скопіювати деталі» і «Написати в підтримку»
      * (деталі вже вписано в текст звернення). Раніше тут була велика стіна стеку і порада зробити скріншот.
      */
-    private static void showFriendlyError(Component parent, String message, String title, String details, String why) {
+    private static void showFriendlyError(Component parent, String message, String title, String details, String why,
+                                          String whyText) {
         final JPanel panel = new JPanel(new BorderLayout(0, 12));
         StringBuilder html = new StringBuilder("<html><div style=\"width: 440px\">");
         if (why != null) {
             html.append("<b>").append(htmlEscape(tr("errors.why." + why + ".title"))).append("</b><br>")
-                    .append(htmlEscape(tr("errors.why." + why))).append("<br><br>")
+                    .append(htmlEscape(whyText)).append("<br><br>")
                     .append("<span style=\"color:#8a8f98\">").append(htmlEscape(tr("errors.technical"))).append(" ")
                     .append(htmlEscape(message)).append("</span>");
         } else {

@@ -162,7 +162,7 @@ public class FlatBackgroundPanel2 extends JPanel {
             current = next;
             return;
         }
-        boolean canAnimate = animate && isShowing() && getWidth() > 0 && getHeight() > 0;
+        boolean canAnimate = animate && !com.gummer.launcher.look.LookTheme.LITE && isShowing() && getWidth() > 0 && getHeight() > 0;
         if (!canAnimate) {
             fadeTimer.stop();
             fromFrame = toFrame = null;

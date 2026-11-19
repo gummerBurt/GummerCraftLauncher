@@ -783,6 +783,8 @@ public class LauncherFrameFlat extends JFrame {
             if (chosen == null || chosen == shown) return;
             showPack(chosen);
         });
+        // 19.11.2026: рядок «Імпорт збірки» не вибирається (InstanceTable), а відкриває вікно імпорту
+        instancesTable.onImportRow = this::importOther;
         instancesTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 refreshVersionBox();
@@ -1367,6 +1369,7 @@ public class LauncherFrameFlat extends JFrame {
         com.gummer.launcher.ui.UiHooks.instanceSettings = (owner, instance) -> InstanceSettingsDialogFlat.open(LauncherFrameFlat.this, instance);
         com.gummer.launcher.ui.UiHooks.reinstall = (owner, instance) -> confirmHardUpdate(instance);
         com.gummer.launcher.ui.UiHooks.openMods = (owner, instance) -> openManage(instance, InstanceManageDialog.MODS);
+        com.gummer.launcher.ui.UiHooks.openWorlds = (owner, instance) -> openManage(instance, InstanceManageDialog.WORLDS);
         com.gummer.launcher.ui.UiHooks.rollback = (owner, instance) -> MrpackUpdateFlow.rollback(LauncherFrameFlat.this, launcher, instance, null);
         com.gummer.launcher.crash.CrashDialog.driversHelpUrl = launcher.getProperties().getProperty("driversHelpUrl");
     }
@@ -1659,12 +1662,34 @@ public class LauncherFrameFlat extends JFrame {
             menuItem = new JMenuItem(tr("mrpack.importMenu"), downloadIcon);
             menuItem.addActionListener(e -> importMrpack());
             popup.add(menuItem);
+            // 19.11.2026: збірки з Prism, CurseForge, ATLauncher, Modrinth App, офіційного лаунчера, TLauncher
+            menuItem = new JMenuItem(tr("import.menu"), downloadIcon);
+            menuItem.addActionListener(e -> importOther());
+            popup.add(menuItem);
         }
 
         popup.show(component, x, y);
     }
 
     /** 1.33: вибрати .mrpack, імпортувати (моди качаються одразу), оновити список і вибрати нову збірку. */
+    /** 19.11.2026: імпорт збірок з інших лаунчерів (ImportOtherDialog), потім показати останню імпортовану. */
+    private void importOther() {
+        ImportOtherDialog.show(this, launcher, name -> {
+            if (name == null) {
+                loadInstances();
+                return;
+            }
+            // 19.11.2026: як модпак Modrinth: збірка вибирається, одразу ставляться гра і завантажувач, і список
+            // перемикається на «Встановлені», де вона тепер є
+            Instance added = showNewBuild(name);
+            if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> {
+                refreshInstancesQuietly();
+                if (listSwitchRef != null) listSwitchRef.setInstalledOnly(true);
+                SwingUtilities.invokeLater(() -> reselect(name));
+            });
+        });
+    }
+
     private void importMrpack() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle(tr("mrpack.chooseTitle"));
@@ -1899,6 +1924,9 @@ public class LauncherFrameFlat extends JFrame {
     private JPanel wrapMain(JComponent main) {
         mainHolder.setOpaque(false);
         mainHolder.add(main, "main");
+        mainHolder.add(new com.gummer.launcher.look.EmptyInstalled(() -> {
+            if (listSwitchRef != null) listSwitchRef.setInstalledOnly(false);
+        }, this::importOther), "empty");
         modrinthPage = new ModrinthPage(launcher, name -> {
             // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,
             // збірка вибирається і одразу ставляться гра і завантажувач, без ще одного натискання «Встановити»
@@ -1945,6 +1973,15 @@ public class LauncherFrameFlat extends JFrame {
     /** Показати сторінку Modrinth, якщо зліва вибрано її рядок, інакше звичайну головну область. */
     private void refreshModrinthPage() {
         if (InstanceTableModel.isAddRow(getSelectedInstance())) {
+            // 19.11.2026: жодної встановленої збірки (у списку лише «+ Додати збірку»): «Встановлені» лишаються
+            // відкритими з поясненням (look.EmptyInstalled), раніше список одразу перескакував назад на «Усі»
+            if (instancesModel.isInstalledOnly() && instancesModel.getRowCount() <= 1) {
+                mainCards.show(mainHolder, "empty");
+                launchButton.setEnabled(false);
+                manageButton.setEnabled(false);
+                if (launchGroupRef != null) launchGroupRef.setVisible(false);
+                return;
+            }
             // 17.11.2026: «+ Додати збірку» у «Встановлених»: показати «Усі» (усі версії і модпаки)
             if (listSwitchRef != null) SwingUtilities.invokeLater(() -> listSwitchRef.setInstalledOnly(false));
             return;

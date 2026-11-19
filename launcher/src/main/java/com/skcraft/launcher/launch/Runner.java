@@ -177,7 +177,14 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
         verifyJavaRuntime();
 
-        ProcessBuilder processBuilder = new ProcessBuilder(builder.buildCommand());
+        java.util.List<String> command = builder.buildCommand();
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        // 19.11.2026: картка «Відеокарта» у вікні «Збірка»: запам'ятати Java збірки для кнопки «Скопіювати шлях до
+        // Java» і, лише якщо гравець поставив галочку «на дискретній відеокарті», попросити систему дати її грі
+        // (Windows: те саме значення, що пише сторінка «Параметри графіки»; Linux: змінні PRIME лише для цього
+        // процесу). Що саме і чому: опис класу Gpu
+        com.gummer.launcher.util.Gpu.beforeLaunch(launcher.getBaseDir(), instance, command.isEmpty() ? null : command.get(0),
+                processBuilder.environment());
         processBuilder.directory(instance.getContentDir());
         // 1.32: токен входу не в лог (лог йде у «Завантажити лог» і у звернення в підтримку)
         String launching = builder.toString();

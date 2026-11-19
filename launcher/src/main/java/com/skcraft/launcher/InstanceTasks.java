@@ -28,9 +28,14 @@ public class InstanceTasks {
 
     public ObservableFuture<Instance> delete(Window window, Instance instance) {
         // Execute the deleter
-        Remover resetter = new Remover(instance);
+        final Remover resetter = new Remover(instance);
+        // GummerCraft 19.11.2026: вибір відеокарти, який лаунчер записав у Windows для Java цієї збірки, прибрати
+        // разом зі збіркою (якщо ця Java не потрібна іншій збірці з вибраною відеокартою), див. Gpu
         ObservableFuture<Instance> future = new ObservableFuture<Instance>(
-                launcher.getExecutor().submit(resetter), resetter);
+                launcher.getExecutor().submit(() -> {
+                    com.gummer.launcher.util.Gpu.forget(launcher.getBaseDir(), instance);
+                    return resetter.call();
+                }), resetter);
 
         // Show progress
         ProgressDialog.showProgress(

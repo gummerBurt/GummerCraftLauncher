@@ -61,6 +61,8 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
     public ProcessConsoleFrame apply(final Process process) {
         log.info("Watching process " + process);
         final long startedAt = System.currentTimeMillis();
+        // 1.36.3: поки гра йде, кнопки видалення в налаштуваннях відмовляють
+        com.gummer.launcher.util.Uninstall.RUNNING_GAMES.incrementAndGet();
 
         try {
             SwingUtilities.invokeAndWait(new Runnable() {
@@ -93,6 +95,7 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
             log.log(Level.WARNING, "Unexpected failure", e);
         }
 
+        com.gummer.launcher.util.Uninstall.RUNNING_GAMES.decrementAndGet();
         log.info("Process ended, re-showing launcher...");
         // 1.36.2: мова чи розмір інтерфейсу, змінені гравцем у грі, стають уподобанням для нових збірок
         if (instance != null) com.gummer.launcher.vanilla.GamePrefs.afterGame(launcher.getBaseDir(), instance);
@@ -131,6 +134,7 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
                         final ProcessConsoleFrame frame = consoleFrame;
                         // 14.11.2026: власник = вікно лаунчера. Лаунчер з'являється після цього вікна (gameClosed іде
                         // слідом), і без власника перекривав його; вікно з власником Windows тримає над ним
+                        com.gummer.launcher.crash.CrashDialog.launcher = launcher;
                         com.gummer.launcher.crash.CrashDialog.show(owner, instance, crash, () -> {
                             frame.setVisible(true);
                             frame.setTitle(tr("splash.client.crashed"));

@@ -86,6 +86,8 @@ public final class JavaSecurity {
             if (id == null) return false;
             File dir = BundledJava.getJavaDir(launcher, instance.getJavaRuntime(), os);
             if (!BundledJava.hasJavaBinary(dir)) return false; // Java немає зовсім: це звичайне встановлення, не тут
+            // 1.36.3: автооновлення вимкнено в налаштуваннях або гравець відкотив цю Java
+            if (JavaUpdates.keepInstalled(launcher, instance.getJavaRuntime(), os)) return false;
             File marker = new File(dir, MARKER);
             String have = marker.isFile() ? new String(Files.readAllBytes(marker.toPath()), StandardCharsets.UTF_8).trim() : "";
             if (id.equals(have)) return false;

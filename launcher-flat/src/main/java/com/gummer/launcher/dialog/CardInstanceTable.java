@@ -185,6 +185,7 @@ public class CardInstanceTable extends InstanceTable {
         Instance inst = instanceAt(row);
         if (inst == null) return null;
         // 17.11.2026 (власник: «для modrinth зліва зроби категорію (напис) - Модпаки одним кліком»)
+        if (InstanceTableModel.isImportRow(inst)) return null; // 19.11.2026: під Modrinth, у тому ж розділі
         if (InstanceTableModel.isBrowser(inst) && !InstanceTableModel.isAddRow(inst)) return tr("launcher.section.modrinth");
         Instance prev = row > 0 ? instanceAt(row - 1) : null;
         InstanceTableModel m = (InstanceTableModel) getModel();

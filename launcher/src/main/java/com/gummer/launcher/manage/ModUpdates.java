@@ -162,12 +162,18 @@ public final class ModUpdates {
         try {
             HttpRequest.get(url).execute().expectResponseCode(200).saveContent(part);
             if (!ModrinthBrowse.sha(part, "SHA-512").equalsIgnoreCase(sha512)) throw new IOException("sha512 mismatch for " + fileName);
+            // 19.11.2026 (власник: «Відкат моду після оновлення ... давай»): стара версія не видаляється, а йде в
+            // .gummer/mod-prev (ModRollback): після вильоту через цей мод помічник запропонує повернути її
             if (!target.equals(u.file) && target.exists()) {
                 // нова версія вже лежить поруч (поставили руками): лишаємо її, прибираємо стару
-                Files.delete(u.file.toPath());
+                if (!ModRollback.keep(u.file, target.getName(), u.currentNumber, u.projectId)) Files.delete(u.file.toPath());
+            } else if (target.equals(u.file)) {
+                // та сама назва файлу: стару спершу в сховище, інакше нова її перезапише
+                ModRollback.keep(u.file, target.getName(), u.currentNumber, u.projectId);
+                Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
             } else {
                 Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                if (!target.equals(u.file)) Files.deleteIfExists(u.file.toPath());
+                if (!ModRollback.keep(u.file, target.getName(), u.currentNumber, u.projectId)) Files.deleteIfExists(u.file.toPath());
             }
         } finally {
             part.delete();

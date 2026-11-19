@@ -110,6 +110,11 @@ public final class Toast extends JComponent {
     }
 
     private void start() {
+        if (LookTheme.LITE) { // спрощений режим: одразу на місці, без появи
+            alpha = 1f;
+            slide = 0;
+            layoutAll(root);
+        }
         Timer in = new Timer(16, null);
         final long t0 = System.currentTimeMillis();
         in.addActionListener(e -> {
@@ -119,7 +124,7 @@ public final class Toast extends JComponent {
             layoutAll(root);
             if (f >= 1f) in.stop();
         });
-        in.start();
+        if (!LookTheme.LITE) in.start();
         int ms = text.getText().length() > 90 ? 9000 : 6000;
         life = new Timer(ms, e -> {
             if (hover) {
@@ -139,7 +144,7 @@ public final class Toast extends JComponent {
         Timer out = new Timer(16, null);
         final long t0 = System.currentTimeMillis();
         out.addActionListener(e -> {
-            float f = Math.min(1f, (System.currentTimeMillis() - t0) / 160f);
+            float f = LookTheme.LITE ? 1f : Math.min(1f, (System.currentTimeMillis() - t0) / 160f);
             alpha = 1 - f;
             repaint();
             if (f >= 1f) {

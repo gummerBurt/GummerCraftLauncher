@@ -29,6 +29,18 @@ public final class ErrorExplainer {
     public static String explain(Throwable t) {
         for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
             String m = String.valueOf(c.getMessage()).toLowerCase(Locale.ROOT);
+            // 19.11.2026: перевірка місця до завантаження знає, скільки треба і скільки є
+            if (c instanceof com.gummer.launcher.install.DiskSpaceException) {
+                return "diskNeed";
+            }
+            // 19.11.2026 (власник: «Антивірус заблокував файл. -- го»): Windows прямо каже, що антивірус заблокував
+            // файл (ERROR_VIRUS_INFECTED 225, ERROR_VIRUS_DELETED 226): при записі, відкритті чи запуску Java
+            // («CreateProcess error=225»). Лише за цими текстами, без вгадування за зниклими файлами
+            if (m.contains("error=225") || m.contains("error=226") || m.contains("contains a virus")
+                    || m.contains("potentially unwanted software") || m.contains("містить вірус")
+                    || m.contains("потенційно небажане")) {
+                return "virus";
+            }
             if (m.contains("not enough space") || m.contains("no space left") || m.contains("disk full")) {
                 return "disk";
             }
@@ -57,6 +69,23 @@ public final class ErrorExplainer {
             }
         }
         return null;
+    }
+
+    /** Текст пояснення: для «diskNeed» з числами (скільки треба, скільки вільно, диск), решта як є. */
+    public static String text(String why, Throwable t) {
+        if ("diskNeed".equals(why)) {
+            for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
+                if (c instanceof com.gummer.launcher.install.DiskSpaceException) {
+                    com.gummer.launcher.install.DiskSpaceException d = (com.gummer.launcher.install.DiskSpaceException) c;
+                    String gb = com.skcraft.launcher.util.SharedLocale.tr("settings.danger.gb");
+                    String mb = com.skcraft.launcher.util.SharedLocale.tr("settings.danger.mb");
+                    return com.skcraft.launcher.util.SharedLocale.tr("errors.why.diskNeed",
+                            com.gummer.launcher.install.DiskSpaceException.human(d.getNeed(), gb, mb),
+                            com.gummer.launcher.install.DiskSpaceException.human(d.getFree(), gb, mb), d.getDrive());
+                }
+            }
+        }
+        return com.skcraft.launcher.util.SharedLocale.tr("errors.why." + why);
     }
 
     /** Чи є в повідомленні вже людський текст від лаунчера (LauncherException), тоді пояснення не потрібне. */

@@ -315,6 +315,10 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
                 throw new LauncherException("No Java runtime \"" + instance.getJavaRuntime() + "\" for this platform",
                         SharedLocale.tr("errors.javaRuntimeUnavailable", instance.getJavaRuntime()));
             }
+        } else if (BundledJava.hasJavaBinary(jvmDir)
+                && com.gummer.launcher.util.JavaUpdates.keepInstalled(launcher, instance.getJavaRuntime(), runtimeOs)) {
+            // 1.36.3: автооновлення Java вимкнено або гравець відкотив цю Java: наявну не чіпаємо
+            log.info("Java auto-update off or runtime pinned, keeping " + jvmDir.getAbsolutePath());
         } else {
             JavaFile[] files = readJavaManifest(javaManifest);
 
@@ -371,6 +375,7 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         installer.executeLate(launcher);
         if (runtimeMarkerDir != null) {
             com.gummer.launcher.util.JavaSecurity.writeMarker(runtimeMarkerDir, javaManifest);
+            com.gummer.launcher.util.JavaUpdates.writeVersion(runtimeMarkerDir, javaManifest);
         }
 
         log.info("Completing...");

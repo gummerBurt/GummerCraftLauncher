@@ -27,6 +27,34 @@ public final class JavaRuntimeFinder {
      * Get all available Java runtimes on the system
      * @return List of available Java runtimes sorted by newest first
      */
+    private static volatile List<JavaRuntime> cached;
+
+    /**
+     * 19.11.2026 (чекап оптимізації, сторож EdtWatch): пошук Java (реєстр Windows, теки лаунчерів) займав ~0,24 с у
+     * потоці інтерфейсу щоразу, коли будувалось вікно налаштувань, зокрема під час прогріву через кілька секунд після
+     * старту. Тепер список рахується у фоні ({@link #prefetch}), вікно бере готовий і оновлює його у фоні для
+     * наступного відкриття. Немає готового: рахує одразу, як раніше.
+     */
+    public static List<JavaRuntime> getAvailableRuntimesCached() {
+        List<JavaRuntime> c = cached;
+        if (c == null) return cached = getAvailableRuntimes();
+        prefetch();
+        return c;
+    }
+
+    /** Порахувати список Java у фоновому потоці. */
+    public static void prefetch() {
+        Thread t = new Thread(() -> {
+            try {
+                cached = getAvailableRuntimes();
+            } catch (RuntimeException e) {
+                log.log(java.util.logging.Level.FINE, "Java runtime scan failed", e);
+            }
+        }, "Java runtime scan");
+        t.setDaemon(true);
+        t.start();
+    }
+
     public static List<JavaRuntime> getAvailableRuntimes() {
         Environment env = Environment.getInstance();
         PlatformRuntimeFinder runtimeFinder = getRuntimeFinder(env);

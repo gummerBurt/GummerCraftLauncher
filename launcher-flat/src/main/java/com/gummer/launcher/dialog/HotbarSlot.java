@@ -195,7 +195,7 @@ public class HotbarSlot extends JButton {
             @Override
             public void addNotify() {
                 super.addNotify();
-                timer.start();
+                if (!com.gummer.launcher.look.LookTheme.LITE) timer.start(); // спрощений режим: кнопка без «дихання»
             }
 
             @Override

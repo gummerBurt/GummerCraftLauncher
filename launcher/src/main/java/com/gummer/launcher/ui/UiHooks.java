@@ -41,6 +41,8 @@ public final class UiHooks {
     public static volatile InstanceAction openMods;
     /** 18.11.2026: «Повернути версію» модпака Modrinth з резервної копії останнього оновлення. */
     public static volatile InstanceAction rollback;
+    /** 19.11.2026: вікно «Збірка» на вкладці «Світи» (помічник при вильоті у світі: бекапи). */
+    public static volatile InstanceAction openWorlds;
 
     private UiHooks() {
     }

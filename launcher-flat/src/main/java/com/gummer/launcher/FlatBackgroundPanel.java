@@ -180,7 +180,7 @@ public class FlatBackgroundPanel extends JPanel {
     @Override
     public void addNotify() {
         super.addNotify();
-        splashTimer.start();
+        if (!com.gummer.launcher.look.LookTheme.LITE) splashTimer.start(); // спрощений режим: сплеш без пульсації
         if (!prewarmHooked) {
             prewarmHooked = true;
             addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -325,7 +325,7 @@ public class FlatBackgroundPanel extends JPanel {
             return;
         }
 
-        if (!animate) {
+        if (!animate || com.gummer.launcher.look.LookTheme.LITE) {
             fadeTimer.stop();
             previous = null;
             current = next;

@@ -165,6 +165,59 @@ public class InstanceTableModel extends AbstractTableModel {
         return instance instanceof AddRow;
     }
 
+    /**
+     * 19.11.2026 (власник: «під Modrinth додай "Імпорт збірки", малим текстом ... "З іншого лаунчера" --> відкриває
+     * вікно імпорту»): рядок під Modrinth у «Усі». Як і Modrinth, не збірка ({@link #isBrowser} true): вибрати його
+     * не можна, вікна одразу повертають попередній вибір і відкривають ImportOtherDialog.
+     */
+    public static final class ImportRow extends BrowserRow {
+        ImportRow() {
+            super("gc-import-other", "Import");
+        }
+
+        @Override
+        public String getTitle() {
+            return SharedLocale.tr("launcher.importRow");
+        }
+    }
+
+    public static final ImportRow IMPORT = new ImportRow();
+
+    /** Рядок «Імпорт збірки». */
+    public static boolean isImportRow(Instance instance) {
+        return instance instanceof ImportRow;
+    }
+
+    /** Іконка рядка «Імпорт збірки»: стрілка вниз у лоток, у колі, без файлу картинки. */
+    private static final Icon IMPORT_ICON = new Icon() {
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new java.awt.Color(124, 207, 106, 60));
+            g2.fillOval(x + 1, y + 1, 30, 30);
+            g2.setColor(new java.awt.Color(124, 207, 106));
+            g2.setStroke(new java.awt.BasicStroke(2.6f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+            g2.drawLine(x + 16, y + 8, x + 16, y + 18);
+            g2.drawLine(x + 12, y + 14, x + 16, y + 18);
+            g2.drawLine(x + 20, y + 14, x + 16, y + 18);
+            g2.drawLine(x + 9, y + 18, x + 9, y + 23);
+            g2.drawLine(x + 9, y + 23, x + 23, y + 23);
+            g2.drawLine(x + 23, y + 23, x + 23, y + 18);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return 32;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return 32;
+        }
+    };
+
     /** Іконка рядка «+ Додати збірку»: плюс у колі, без файлу картинки. */
     private static final Icon ADD_ICON = new Icon() {
         @Override
@@ -394,6 +447,7 @@ public class InstanceTableModel extends AbstractTableModel {
         }
         if (filter == null) {
             rows.add(MODRINTH);
+            rows.add(IMPORT); // 19.11.2026: під Modrinth
         }
     }
 
@@ -912,6 +966,7 @@ public class InstanceTableModel extends AbstractTableModel {
             case 0:
                 instance = getInstanceAt(rowIndex);
                 if (isAddRow(instance)) return ADD_ICON;
+                if (isImportRow(instance)) return IMPORT_ICON;
                 if (isBrowser(instance)) {
                     return modrinthIcon;
                 }
@@ -1016,6 +1071,9 @@ public class InstanceTableModel extends AbstractTableModel {
     private String getAddendum(Instance instance) {
         if (isAddRow(instance)) {
             return line(part(GREY, SharedLocale.tr("launcher.addBuildSub")));
+        }
+        if (isImportRow(instance)) {
+            return line(part(GREY, SharedLocale.tr("launcher.importRowSub")));
         }
         if (isBrowser(instance)) {
             return line(part(GREY, SharedLocale.tr("launcher.modrinthRowSub")));

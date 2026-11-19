@@ -20,7 +20,42 @@ public class InstanceTable extends DefaultTable {
         setTableHeader(null);
         setShowVerticalLines(false);
         setRowHeight(48);
-        setFocusable(false); // don't highlight single cell or row        
+        setFocusable(false); // don't highlight single cell or row
+        // GummerCraft 19.11.2026 (власник: «Коли я тисну "імпорт збірки" ... на мілісекунду показується бекграунд
+        // модрінта»): рядок «Імпорт збірки» не вибирається взагалі, тож ні фон, ні сторінка Modrinth, ні кнопки не
+        // встигають змінитись; замість вибору викликається onImportRow
+        setSelectionModel(new javax.swing.DefaultListSelectionModel() {
+            @Override
+            public void setSelectionInterval(int index0, int index1) {
+                if (importRowAt(index1)) return;
+                super.setSelectionInterval(index0, index1);
+            }
+
+            @Override
+            public void addSelectionInterval(int index0, int index1) {
+                if (importRowAt(index1)) return;
+                super.addSelectionInterval(index0, index1);
+            }
+        });
+        setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION); // як у DefaultTable, для нової моделі
+    }
+
+    /** 19.11.2026: що робити, коли гравець натиснув рядок «Імпорт збірки» (вікно імпорту). */
+    public Runnable onImportRow;
+
+    private boolean importRowAt(int viewRow) {
+        if (viewRow < 0 || !(getModel() instanceof InstanceTableModel)) return false;
+        int row;
+        try {
+            row = convertRowIndexToModel(viewRow);
+        } catch (IndexOutOfBoundsException e) {
+            return false;
+        }
+        InstanceTableModel m = (InstanceTableModel) getModel();
+        if (row >= m.getRowCount() || !InstanceTableModel.isImportRow(m.getInstanceAt(row))) return false;
+        Runnable r = onImportRow;
+        if (r != null) javax.swing.SwingUtilities.invokeLater(r);
+        return true;
     }
 
     /**

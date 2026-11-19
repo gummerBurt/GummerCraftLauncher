@@ -30,6 +30,10 @@ public final class CrashAnalyzer {
         DRIVERS,
         /** 17.11.2026: вимкнути мод, який звалив гру ({@link Diagnosis#modFile}). */
         DISABLE_MOD,
+        /** 19.11.2026: скинути пошкоджений конфіг мода ({@link Diagnosis#configFile}). */
+        RESET_CONFIG,
+        /** 19.11.2026: прибрати параметр Java, якого Java не знає ({@link Diagnosis#detail}). */
+        JVM_ARG,
         /** Без особливої дії: лише підтримка. */
         NONE
     }
@@ -50,6 +54,8 @@ public final class CrashAnalyzer {
         public String depId;
         /** 18.11.2026: jar цієї залежності в збірці (depTooOld: його кнопка «Оновити»), або null. */
         public File depFile;
+        /** 19.11.2026: пошкоджений файл конфігу (brokenConfig), або null: тоді лише порада. */
+        public File configFile;
 
         Diagnosis(String key, Action action, String detail, File source) {
             this(key, action, detail, source, null);
@@ -97,7 +103,11 @@ public final class CrashAnalyzer {
         String t = text.toString();
         File source = crash != null ? crash : hsErr;
 
+        // 19.11.2026: старий Minecraft і кирилиця в шляху: першим, бо такий виліт інакше схожий на пошкоджені файли
+        Diagnosis path = oldGamePath(instance, t, source);
+        if (path != null) return path;
         Diagnosis d = match(t, source);
+        if (d != null && "brokenConfig".equals(d.key)) return withConfig(instance, d);
         if (d != null) return withMod(instance, d);
         // відомі коди виходу Windows: 0xC0000005 (-1073741819) доступ до пам'яті, найчастіше драйвер відеокарти
         if (exitCode == -1073741819 || exitCode == -1073740791) {
@@ -114,6 +124,14 @@ public final class CrashAnalyzer {
         // лозі є й інші помилки (текстури, моделі), але гру зупинила саме ця перевірка
         if (t.contains("Unsupported launcher") || t.contains("unsupported launcher")) {
             return new Diagnosis("launcherLocked", Action.NONE, null, source);
+        }
+        // 19.11.2026 (власник: «Неправильні аргументи JVM. -- го»): Java не знає параметра запуску і навіть не стартує.
+        // Текст самої Java, точний; кнопка «Прибрати» буде, лише якщо цей параметр вписано в налаштуваннях гравцем
+        Matcher jvm = Pattern.compile("Unrecognized VM option '([^'\n]+)'|Improperly specified VM option '([^'\n]+)'"
+                + "|Missing \\+/- setting for VM option '([^'\n]+)'|VM option '([^'\n]+)' is (?:experimental|diagnostic) and must be enabled"
+                + "|Unrecognized option: (\\S+)").matcher(t);
+        if (jvm.find()) {
+            return new Diagnosis("jvmArg", Action.JVM_ARG, firstGroup(jvm), source);
         }
         if (t.contains("java.lang.OutOfMemoryError") || t.contains("Java heap space")
                 || t.contains("GC overhead limit exceeded")) {
@@ -185,6 +203,15 @@ public final class CrashAnalyzer {
         if (t.contains("There is not enough space on the disk") || t.contains("No space left on device")) {
             return new Diagnosis("disk", Action.NONE, null, source);
         }
+        // 19.11.2026 (власник: «Зламаний конфіг моду. -- імба, давай»): Forge не зміг прочитати файл конфігу (часто
+        // порожній після вимкнення світла чи вильоту під час збереження). Лише фатальний ConfigLoadingException: якщо
+        // завантажувач сам пересоздав файл, цього рядка немає. Fabric-моди пишуть такі помилки по-різному, їх не чіпаємо
+        Matcher cfg = Pattern.compile("ConfigLoadingException: Failed loading config file (\\S+?\\.toml) of type \\w+ for modid ([A-Za-z0-9_\\-]+)").matcher(t);
+        if (cfg.find()) {
+            Diagnosis c = new Diagnosis("brokenConfig", Action.RESET_CONFIG, cfg.group(1), source);
+            c.depId = cfg.group(2);
+            return c;
+        }
         // 17.11.2026: хто звалив гру. Forge і NeoForge пишуть у звіті «Suspected Mod(s): Назва (modid)», у Fabric
         // помилка в коді мода видна як «... from mod modid» у стеку
         Matcher suspected = Pattern.compile("Suspected Mods?:\\s*([^\\n(]+?)\\s*\\(([a-z0-9_\\-]+)\\)").matcher(t);
@@ -195,7 +222,55 @@ public final class CrashAnalyzer {
         while (fromMod.find()) {
             if (!BUILTIN.contains(fromMod.group(1))) return new Diagnosis("modCrash", Action.NONE, fromMod.group(1), source);
         }
+        // 19.11.2026 (власник: «Пошкоджений світ. -- ок»): гра падає на конкретній істоті чи блоці у світі, а винного мода
+        // звіт не назвав. Координати зі звіту; бекап світу (якщо є) повертається у вікні «Збірка», «Світи»
+        if (t.contains("Description: Ticking entity") || t.contains("Description: Ticking block entity")
+                || t.contains("Description: Exception ticking world")) {
+            Matcher at = Pattern.compile("(?:Entity's Exact location|Block location): (?:World: )?\\(?(-?[0-9]+)(?:\\.[0-9]+)?,\\s*(-?[0-9]+)(?:\\.[0-9]+)?,\\s*(-?[0-9]+)").matcher(t);
+            return new Diagnosis("worldTick", Action.NONE, at.find() ? at.group(1) + " " + at.group(2) + " " + at.group(3) : null, source);
+        }
         return null;
+    }
+
+    /**
+     * 19.11.2026 (власник: «Старий Forge і кирилиця в шляху. -- хороша ідея з порадою. Були такі гравці»): Minecraft
+     * 1.12.2 і старіші (LaunchWrapper, LWJGL 2) не запускаються з теки, у шляху до якої є не латинські літери (часто
+     * ім'я користувача Windows). Лише якщо в шляху справді такі літери і в лозі одна з помилок, якою це закінчується.
+     */
+    private static Diagnosis oldGamePath(Instance instance, String t, File source) {
+        try {
+            int[] game = com.gummer.launcher.manage.McRange.parse(com.gummer.launcher.manage.ModrinthBrowse.gameVersionOf(instance));
+            if (game == null || com.gummer.launcher.manage.McRange.cmp(game, new int[]{1, 12, 2}) > 0) return null;
+            String path = instance.getContentDir().getAbsolutePath();
+            boolean ascii = true;
+            for (int i = 0; i < path.length(); i++) if (path.charAt(i) > 127) ascii = false;
+            if (ascii) return null;
+            if (t.contains("UnsatisfiedLinkError") || t.contains("Illegal character in path") || t.contains("URISyntaxException")
+                    || t.contains("Could not find or load main class") || t.contains("ClassNotFoundException: net.minecraft.launchwrapper")) {
+                return new Diagnosis("oldPath", Action.NONE, path, source);
+            }
+        } catch (RuntimeException ignored) {
+            // без цієї поради
+        }
+        return null;
+    }
+
+    /** Знайти пошкоджений конфіг у теці config збірки (за назвою файлу, до трьох рівнів углиб); один збіг: кнопка. */
+    private static Diagnosis withConfig(Instance instance, Diagnosis d) {
+        File cfgDir = new File(instance.getContentDir(), "config");
+        java.util.List<File> found = new java.util.ArrayList<File>();
+        findByName(cfgDir, d.detail, 0, found);
+        if (found.size() == 1) d.configFile = found.get(0);
+        return d;
+    }
+
+    private static void findByName(File dir, String name, int depth, java.util.List<File> out) {
+        File[] files = dir.listFiles();
+        if (files == null || depth > 3 || out.size() > 1) return;
+        for (File f : files) {
+            if (f.isFile() && f.getName().equals(name)) out.add(f);
+            else if (f.isDirectory()) findByName(f, name, depth + 1, out);
+        }
     }
 
     /** id, які не є «винним модом»: сама гра і завантажувачі. */

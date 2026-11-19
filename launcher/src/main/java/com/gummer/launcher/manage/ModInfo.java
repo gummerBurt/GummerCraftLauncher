@@ -63,6 +63,21 @@ public final class ModInfo {
      */
     public final java.util.Set<String> loaders = new java.util.TreeSet<String>();
 
+    /**
+     * 19.11.2026: умови версії Minecraft з опису мода для {@link PreLaunchCheck}. Fabric: {@code depends.minecraft} (рядок
+     * або масив, досить будь-якої з умов). Forge і NeoForge: {@code versionRange} залежності {@code minecraft} (кожна з
+     * них має виконатись). Перевіряє {@link McRange} за правилами самих завантажувачів.
+     */
+    public final java.util.List<String> mcFabric = new java.util.ArrayList<String>();
+    public final java.util.List<String> mcMaven = new java.util.ArrayList<String>();
+    /**
+     * 19.11.2026: з якими модами цей мод сам себе оголосив несумісним (id -> умова версії): Fabric {@code breaks} (будь-яка
+     * з умов масиву), NeoForge {@code type = "incompatible"} (Maven-діапазон, «*» будь-яка версія). Завантажувач з
+     * такою парою гру не запускає.
+     */
+    public final Map<String, java.util.List<String>> breaksFabric = new java.util.TreeMap<String, java.util.List<String>>();
+    public final Map<String, String> breaksMaven = new java.util.TreeMap<String, String>();
+
     private ModInfo(String id, String name, String version, String description, String url, String iconPath) {
         this.id = blankToNull(id);
         this.name = name;
@@ -150,6 +165,8 @@ public final class ModInfo {
                 if (zip.getEntry("META-INF/neoforge.mods.toml") != null) m.loaders.add("neoforge");
                 // старий опис 1.12 і раніше: id там ненадійні (шаблонний «examplemod», чужий id в бібліотеці), див. PreLaunchCheck
                 if (zip.getEntry("mcmod.info") != null) m.loaders.add("mcmod");
+                // 19.11.2026: OptiFine (у новіших jar є mods.toml з id optifine, у старих лише класи встановлювача)
+                if (zip.getEntry("optifine/Installer.class") != null || zip.getEntry("optifine/OptiFineClassTransformer.class") != null) m.provide("optifine");
             }
             return m;
         }
@@ -183,10 +200,25 @@ public final class ModInfo {
             Map.Entry<String, JsonNode> d = it.next();
             m.depend(d.getKey());
             m.needs(d.getKey(), fabricMin(d.getValue()));
+            if ("minecraft".equalsIgnoreCase(d.getKey().trim())) m.mcFabric.addAll(strings(d.getValue()));
+        }
+        for (Iterator<Map.Entry<String, JsonNode>> it = n.path("breaks").fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> d = it.next();
+            java.util.List<String> cond = strings(d.getValue());
+            if (!d.getKey().trim().isEmpty() && !cond.isEmpty()) m.breaksFabric.put(d.getKey().trim().toLowerCase(Locale.ROOT), cond);
         }
         // вкладені моди (Fabric API: fabric-api-base, fabric-lifecycle-events-v1...): інші моди залежать саме від них
         for (JsonNode j : n.path("jars")) nested(zip, j.path("file").asText(null), m);
         return m;
+    }
+
+    /** Рядок або масив рядків з JSON (умови версій Fabric). */
+    private static java.util.List<String> strings(JsonNode v) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        if (v == null) return out;
+        if (v.isTextual()) out.add(v.asText());
+        else if (v.isArray()) for (JsonNode x : v) if (x.isTextual()) out.add(x.asText());
+        return out;
     }
 
     private static void fabricIds(JsonNode n, ModInfo m) {
@@ -368,6 +400,10 @@ public final class ModInfo {
             boolean required = "true".equalsIgnoreCase(d.get("mandatory")) || "required".equalsIgnoreCase(d.get("type"));
             if (required && !"SERVER".equalsIgnoreCase(d.get("side"))) m.depend(d.get("modId"));
             if (!"SERVER".equalsIgnoreCase(d.get("side"))) m.needs(d.get("modId"), mavenMin(d.get("versionRange")));
+            String depId = d.get("modId") == null ? "" : d.get("modId").trim().toLowerCase(Locale.ROOT);
+            // 19.11.2026: діапазон версій гри Forge перевіряє і для необов'язкової залежності (minecraft є завжди)
+            if ("minecraft".equals(depId) && d.get("versionRange") != null && !"SERVER".equalsIgnoreCase(d.get("side"))) m.mcMaven.add(d.get("versionRange"));
+            if ("incompatible".equalsIgnoreCase(d.get("type")) && !depId.isEmpty()) m.breaksMaven.put(depId, d.get("versionRange") == null ? "*" : d.get("versionRange"));
         }
         return m;
     }

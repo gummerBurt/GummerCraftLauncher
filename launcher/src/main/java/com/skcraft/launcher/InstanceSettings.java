@@ -11,4 +11,7 @@ public class InstanceSettings {
 	private JavaRuntime runtime;
 	private MemorySettings memorySettings;
 	private String customJvmArgs;
+	/** 19.11.2026: галочка «Запускати цю збірку на дискретній відеокарті» (картка «Відеокарта»), див. Gpu.
+	 *  null і false: вимкнено (так за замовчуванням). */
+	private Boolean highPerformanceGpu;
 }

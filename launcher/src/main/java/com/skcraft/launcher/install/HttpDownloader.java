@@ -167,6 +167,10 @@ public class HttpDownloader implements Downloader {
     public void execute() throws InterruptedException, IOException {
         synchronized (this) {
             queue = Collections.unmodifiableList(queue);
+            // 19.11.2026: місця не вистачить, тож краще сказати до початку, а не на середині завантаження
+            long bytes = 0;
+            for (HttpDownloadJob job : queue) if (job.size > 0) bytes += job.size;
+            com.gummer.launcher.install.DiskSpaceException.check(tempDir, bytes);
         }
 
         ListeningExecutorService executor = MoreExecutors.listeningDecorator(

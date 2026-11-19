@@ -59,6 +59,13 @@ public class Configuration {
     private String lastInstanceInstalled = null;
     private String launcherLook = "glass"; // вигляд головного вікна (16.11.2026): glass = Liquid Glass, classic = Класика, library = Бібліотека
     private boolean manageTipSeen = false; // 17.11.2026: вікно «Збірка» вже відкривали, підказку і рамку на кнопці не показувати
+    /**
+     * 1.36.3: Java оновлюється сама (Java гри перед запуском і при оновленні збірки, Java лаунчера новим exe). Вимкнено:
+     * наявну Java лаунчер не чіпає, оновлення лише кнопкою в налаштуваннях («Оновлення Java»).
+     */
+    private boolean javaAutoUpdate = true;
+    /** 1.36.3: Java гри, відкочені гравцем («17/windows-x64»): не оновлюються самі, доки гравець не натисне «Оновити». */
+    private java.util.Set<String> javaPinned = new java.util.LinkedHashSet<String>();
     private String autoUpdatedTo = null; // версія, яку лаунчер уже ставив автоматично (запобіжник від циклу оновлення-перезапуску)
 
     // social links

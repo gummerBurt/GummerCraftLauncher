@@ -57,13 +57,43 @@ public final class LauncherJreUpdate {
     public static void start(final Launcher launcher, final Window window) {
         final File app = appDir();
         if (app == null) return;
+        // 1.36.3: гравець може вимкнути автооновлення Java в налаштуваннях («Оновлення Java»)
+        if (!launcher.getConfig().isJavaAutoUpdate()) {
+            log.info("Launcher Java auto-update is off in settings");
+            return;
+        }
         launcher.getExecutor().submit(() -> {
             try {
-                check(launcher, window, app);
+                check(launcher, window, app, false);
             } catch (Exception e) {
                 log.log(Level.INFO, "Launcher Java update check skipped: " + e);
             }
         });
+    }
+
+    /**
+     * 1.36.3: кнопка «Оновити» в плитці «Оновлення Java» (не з потоку Swing). Діє і при вимкненому автооновленні та без
+     * ліміту двох спроб. false: оновлювати нічого (не установка, Java не старша за minJava, немає мережі).
+     */
+    public static boolean startNow(Launcher launcher, Window window) throws Exception {
+        File app = appDir();
+        return app != null && check(launcher, window, app, true);
+    }
+
+    /** installer.json з CDN або null (немає мережі). */
+    static JsonNode fetchInfo() {
+        for (String u : INFO_URLS) {
+            try {
+                return Json.newMapper().readTree(HttpRequest.get(new URL(u)).execute().expectResponseCode(200)
+                        .returnContent().asString("UTF-8"));
+            } catch (IOException e) {
+                log.info("installer.json unavailable at " + u + ": " + e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        return null;
     }
 
     /** Тека установки (там {@code jre}, {@code version.txt}, {@code GummerCraft.exe}) або null: оновлювати нічого. */
@@ -82,39 +112,30 @@ public final class LauncherJreUpdate {
         }
     }
 
-    private static void check(final Launcher launcher, final Window window, final File app) throws Exception {
-        JsonNode info = null;
-        for (String u : INFO_URLS) {
-            try {
-                info = Json.newMapper().readTree(HttpRequest.get(new URL(u)).execute().expectResponseCode(200)
-                        .returnContent().asString("UTF-8"));
-                break;
-            } catch (IOException e) {
-                log.info("installer.json unavailable at " + u + ": " + e);
-            }
-        }
-        if (info == null) return;
+    private static boolean check(final Launcher launcher, final Window window, final File app, boolean manual) throws Exception {
+        JsonNode info = fetchInfo();
+        if (info == null) return false;
         String minJava = info.path("minJava").asText("");
         final String url = info.path("url").asText("");
         final String sha256 = info.path("sha256").asText("");
         String have = System.getProperty("java.version", "");
-        if (minJava.isEmpty() || compare(have, minJava) >= 0) return;
+        if (minJava.isEmpty() || compare(have, minJava) >= 0) return false;
         URL u = new URL(url);
         if (!"https".equals(u.getProtocol()) || !u.getHost().toLowerCase(Locale.ROOT).endsWith("gummercraft.fun")
                 && !u.getHost().toLowerCase(Locale.ROOT).endsWith("gummer.cc")) {
             log.warning("installer.json: unexpected host " + u.getHost());
-            return;
+            return false;
         }
-        if (!sha256.matches("[0-9a-fA-F]{64}")) return;
+        if (!sha256.matches("[0-9a-fA-F]{64}")) return false;
         final File tried = new File(launcher.getBaseDir(), TRIED);
         int attempts = 0;
         if (tried.isFile()) {
             String[] p = new String(Files.readAllBytes(tried.toPath()), StandardCharsets.UTF_8).trim().split("\\|");
             if (p.length == 2 && p[0].equals(url)) attempts = Integer.parseInt(p[1].trim());
         }
-        if (attempts >= 2) {
+        if (attempts >= 2 && !manual) {
             log.info("Launcher Java " + have + " < " + minJava + ", but " + url + " was already tried twice");
-            return;
+            return false;
         }
         Files.write(tried.toPath(), (url + "|" + (attempts + 1)).getBytes(StandardCharsets.UTF_8));
         log.info("Launcher Java " + have + " < " + minJava + ", updating the launcher install from " + url);
@@ -159,6 +180,7 @@ public final class LauncherJreUpdate {
                 log.info("Launcher Java update failed: " + t);
             }
         }, SwingExecutor.INSTANCE);
+        return true;
     }
 
     /** Порівняння версій Java за числами: 17.0.21 < 17.0.21.1 < 17.0.22. */

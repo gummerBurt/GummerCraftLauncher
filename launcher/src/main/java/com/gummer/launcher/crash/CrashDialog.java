@@ -22,6 +22,8 @@ public final class CrashDialog {
 
     /** Куди веде «Як оновити драйвер» (launcher.properties driversHelpUrl); порожньо: кнопки немає. */
     public static volatile String driversHelpUrl;
+    /** 19.11.2026: лаунчер (загальні параметри Java для «Прибрати параметр»), ставить LaunchProcessHandler. */
+    public static volatile com.skcraft.launcher.Launcher launcher;
 
     private CrashDialog() {
     }
@@ -101,6 +103,63 @@ public final class CrashDialog {
         }.execute();
     }
 
+    /**
+     * 19.11.2026: параметр Java з налаштувань гравця, якого Java не знає. Шукається в параметрах збірки, потім у
+     * загальних; прибирається лише цей параметр, решта рядка лишається як була.
+     */
+    static final class JvmArg {
+        final String token;
+        final com.skcraft.launcher.Launcher launcher;
+        final Instance instance;
+        final boolean inInstance;
+
+        private JvmArg(String token, com.skcraft.launcher.Launcher launcher, Instance instance, boolean inInstance) {
+            this.token = token;
+            this.launcher = launcher;
+            this.instance = instance;
+            this.inInstance = inInstance;
+        }
+
+        static JvmArg find(com.skcraft.launcher.Launcher launcher, Instance instance, String option) {
+            if (option == null || option.isEmpty()) return null;
+            String own = instance.getSettings() == null ? null : instance.getSettings().getCustomJvmArgs();
+            String t = match(own, option);
+            if (t != null) return new JvmArg(t, launcher, instance, true);
+            String global = launcher == null ? null : launcher.getConfig().getJvmArgs();
+            t = match(global, option);
+            return t != null ? new JvmArg(t, launcher, instance, false) : null;
+        }
+
+        /** Параметр у рядку: «-XX:+Opt», «-XX:Opt=1» для «Opt», або точний збіг («-foo» з «Unrecognized option»). */
+        private static String match(String raw, String option) {
+            if (raw == null || raw.trim().isEmpty()) return null;
+            String opt = option.replaceFirst("^-XX:[+-]?", "");
+            int eq = opt.indexOf('=');
+            if (eq > 0) opt = opt.substring(0, eq);
+            for (String a : com.skcraft.launcher.launch.JavaProcessBuilder.splitArgs(raw)) {
+                if (a.equals(option)) return a;
+                if (a.matches("-XX:[+-]?" + java.util.regex.Pattern.quote(opt) + "(=.*)?")) return a;
+            }
+            return null;
+        }
+
+        void remove() {
+            if (inInstance) {
+                instance.getSettings().setCustomJvmArgs(cut(instance.getSettings().getCustomJvmArgs()));
+                com.skcraft.launcher.persistence.Persistence.commitAndForget(instance);
+            } else {
+                launcher.getConfig().setJvmArgs(cut(launcher.getConfig().getJvmArgs()));
+                com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+            }
+        }
+
+        private String cut(String raw) {
+            int i = raw.indexOf(token);
+            if (i < 0) return raw;
+            return (raw.substring(0, i) + raw.substring(i + token.length())).replaceAll("\\s{2,}", " ").trim();
+        }
+    }
+
     /** Причини в модах: для них кнопка «Моди збірки». */
     private static final java.util.Set<String> MOD_KEYS = new java.util.HashSet<String>(java.util.Arrays.asList(
             "duplicateMod", "modConflict", "mixin", "missingDep", "depTooOld", "modCrash"));
@@ -171,6 +230,38 @@ public final class CrashDialog {
                     });
                 }
                 break;
+            case RESET_CONFIG:
+                // 19.11.2026: конфіг переноситься в .gummer/broken-config (не видаляється), мод створить новий
+                if (d.configFile != null && d.configFile.isFile()) {
+                    final String cfgName = d.configFile.getName();
+                    primary = new JButton(tr("crash.action.resetConfig", cfgName));
+                    primary.setToolTipText(tr("crash.action.resetConfigTip"));
+                    primary.addActionListener(e -> {
+                        try {
+                            java.io.File dir = new java.io.File(new java.io.File(instance.getContentDir(), ".gummer"), "broken-config");
+                            dir.mkdirs();
+                            java.nio.file.Files.move(d.configFile.toPath(), new java.io.File(dir, System.currentTimeMillis() + "-" + cfgName).toPath());
+                            dialog.dispose();
+                            JOptionPane.showMessageDialog(owner, tr("crash.configReset", cfgName), tr("crash.windowTitle"), JOptionPane.INFORMATION_MESSAGE);
+                        } catch (java.io.IOException ex) {
+                            SwingHelper.showErrorDialog(dialog, tr("crash.configResetFailed", cfgName), tr("errorTitle"), ex);
+                        }
+                    });
+                }
+                break;
+            case JVM_ARG: {
+                // 19.11.2026: кнопка лише якщо параметр вписав гравець (у збірці чи в загальних налаштуваннях)
+                final JvmArg arg = JvmArg.find(launcher, instance, d.detail);
+                if (arg != null) {
+                    primary = new JButton(tr("crash.action.removeArg", arg.token));
+                    primary.addActionListener(e -> {
+                        arg.remove();
+                        dialog.dispose();
+                        JOptionPane.showMessageDialog(owner, tr("crash.argRemoved", arg.token), tr("crash.windowTitle"), JOptionPane.INFORMATION_MESSAGE);
+                    });
+                }
+                break;
+            }
             case DRIVERS:
                 final String url = driversHelpUrl;
                 if (url != null && !url.isEmpty()) {
@@ -201,6 +292,39 @@ public final class CrashDialog {
             } else {
                 buttons.add(upd);
             }
+        }
+        // 19.11.2026 (власник: «Відкат моду після оновлення ... давай»): винний мод оновлено нещодавно, а стара версія
+        // збережена (ModRollback): повернути її головною дією, бо до оновлення гра працювала
+        final com.gummer.launcher.manage.ModRollback.Entry prev = ownMods && ("modCrash".equals(d.key) || "mixin".equals(d.key))
+                ? com.gummer.launcher.manage.ModRollback.recentFor(d.modFile) : null;
+        if (prev != null) {
+            final String name = d.modName != null ? d.modName : d.modFile.getName();
+            final String ver = prev.prevVersion == null || prev.prevVersion.isEmpty() || "?".equals(prev.prevVersion) ? "" : " " + prev.prevVersion;
+            JButton back = new JButton(tr("crash.action.modBack", name, ver));
+            back.setToolTipText(tr("crash.action.modBackTip"));
+            back.addActionListener(e -> {
+                try {
+                    com.gummer.launcher.manage.ModRollback.rollback(prev);
+                    dialog.dispose();
+                    JOptionPane.showMessageDialog(owner, tr("crash.modBackDone", name, ver), tr("crash.windowTitle"), JOptionPane.INFORMATION_MESSAGE);
+                } catch (java.io.IOException ex) {
+                    SwingHelper.showErrorDialog(dialog, tr("crash.modBackFailed", name), tr("errorTitle"), ex);
+                }
+            });
+            if (primary != null) buttons.add(primary);
+            primary = back;
+        }
+        // 19.11.2026: виліт на істоті чи блоці у світі: «Світи збірки», якщо є бекап світів цієї збірки
+        final UiHooks.InstanceAction worlds = UiHooks.openWorlds;
+        if ("worldTick".equals(d.key) && worlds != null && launcher != null
+                && !com.gummer.launcher.manage.Worlds.backups(launcher, instance).isEmpty()) {
+            JButton b = new JButton(tr("crash.action.worlds"));
+            b.setToolTipText(tr("crash.action.worldsTip"));
+            b.addActionListener(e -> {
+                dialog.dispose();
+                worlds.run(owner, instance);
+            });
+            buttons.add(b);
         }
         // 18.11.2026: «Моди збірки» (там оновлення і вимкнення) і «Повернути версію» модпака після його оновлення
         final UiHooks.InstanceAction mods = UiHooks.openMods;

@@ -28,6 +28,22 @@ import java.awt.*;
  */
 public final class LookTheme {
 
+    /**
+     * 19.11.2026 (власник: «зроби спрощені версії лаунчера для мак та лінукс - я охуїв як на маку наш лаунчер глючить»):
+     * спрощений режим на macOS і Linux. Без розмиття під вікнами, плавних переходів фону, пульсацій кнопки запуску,
+     * сплешу і скіна, анімації перебудови вікна та появи сповіщень; на Linux рамка вікна системна, а не намальована
+     * лаунчером. Вигляди, кольори і всі функції ті самі. На Retina кожен кадр анімації це вчетверо більше пікселів, а
+     * Java на Mac і драйвери на Linux малюють Swing помітно повільніше за Windows. {@code -Dgummer.lite=true|false}
+     * вмикає чи вимикає режим примусово (для перевірки на Windows).
+     */
+    public static final boolean LITE = detectLite();
+
+    private static boolean detectLite() {
+        String forced = System.getProperty("gummer.lite");
+        if (forced != null && !forced.trim().isEmpty()) return Boolean.parseBoolean(forced.trim());
+        return !System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows");
+    }
+
     /** Кольори і форми одного вигляду. */
     public static final class Palette {
         public final String look;

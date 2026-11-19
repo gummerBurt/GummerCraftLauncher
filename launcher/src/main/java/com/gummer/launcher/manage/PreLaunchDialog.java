@@ -52,7 +52,8 @@ public final class PreLaunchDialog {
             // 1.36.1 (власник: «Шукати відповідники модів з неофордж в форджі та заміняти їх»): спершу заміна модів не під
             // той завантажувач, бо в нових версій можуть бути інші залежності
             for (PreLaunchCheck.Issue is : issues) {
-                if (is.kind != PreLaunchCheck.Kind.WRONG_LOADER || is.disable.isEmpty()) continue;
+                // 19.11.2026: і мод не під ту версію гри (та сама заміна: версія проекту під гру і завантажувач збірки)
+                if ((is.kind != PreLaunchCheck.Kind.WRONG_LOADER && is.kind != PreLaunchCheck.Kind.WRONG_GAME) || is.disable.isEmpty()) continue;
                 File f = is.disable.get(0).file;
                 try {
                     LoaderSwap.replace(instance, f, ModInfo.of(f), missing);
@@ -112,7 +113,7 @@ public final class PreLaunchDialog {
     }
 
     private static boolean hasWrongLoader(List<PreLaunchCheck.Issue> issues) {
-        for (PreLaunchCheck.Issue is : issues) if (is.kind == PreLaunchCheck.Kind.WRONG_LOADER) return true;
+        for (PreLaunchCheck.Issue is : issues) if (is.kind == PreLaunchCheck.Kind.WRONG_LOADER || is.kind == PreLaunchCheck.Kind.WRONG_GAME) return true;
         return false;
     }
 
@@ -127,8 +128,10 @@ public final class PreLaunchDialog {
                 break;
             }
             String key = is.kind == PreLaunchCheck.Kind.DUPLICATE ? "prelaunch.duplicate"
-                    : is.kind == PreLaunchCheck.Kind.WRONG_LOADER ? "prelaunch.wrongLoader" : "prelaunch.missing";
-            html.append("&#8226; ").append(esc(SharedLocale.tr(key, is.mod, is.detail))).append("<br>");
+                    : is.kind == PreLaunchCheck.Kind.WRONG_LOADER ? "prelaunch.wrongLoader"
+                    : is.kind == PreLaunchCheck.Kind.WRONG_GAME ? "prelaunch.wrongGame"
+                    : is.kind == PreLaunchCheck.Kind.INCOMPATIBLE ? "prelaunch.incompatible" : "prelaunch.missing";
+            html.append("&#8226; ").append(esc(SharedLocale.tr(key, is.mod, is.detail, is.extra))).append("<br>");
         }
         boolean swap = canFetch && hasWrongLoader(issues);
         if (swap) html.append("<br>").append(esc(SharedLocale.tr("prelaunch.swapHint")));

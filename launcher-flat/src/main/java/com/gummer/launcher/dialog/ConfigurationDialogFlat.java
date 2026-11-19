@@ -63,6 +63,7 @@ public class ConfigurationDialogFlat extends JDialog {
     private final JSpinner maxMemorySpinner = new JSpinner();
     private final JSpinner permGenSpinner = new JSpinner();
     private final JCheckBox enforceRuntimeCheck = new JCheckBox(SharedLocale.tr("options.enforceRuntime"));
+    private final JCheckBox javaAutoUpdateCheck = new JCheckBox(SharedLocale.tr("settings.javaUpd.auto"));
     private final FormPanel gameSettingsPanel = new FormPanel();
     private final JCheckBox consoleUseColorsCheck = new JCheckBox(SharedLocale.tr("options.consoleUseColors"));
     private final JCheckBox showLauncherConsoleCheck = new JCheckBox(SharedLocale.tr("options.showLauncherConsole"));
@@ -135,7 +136,7 @@ public class ConfigurationDialogFlat extends JDialog {
         this.config = launcher.getConfig();
         mapper = new ObjectSwingMapper(config);
 
-        JavaRuntime[] javaRuntimes = JavaRuntimeFinder.getAvailableRuntimes().toArray(new JavaRuntime[0]);
+        JavaRuntime[] javaRuntimes = JavaRuntimeFinder.getAvailableRuntimesCached().toArray(new JavaRuntime[0]);
         DefaultComboBoxModel<JavaRuntime> model = new DefaultComboBoxModel<>(javaRuntimes);
 
         // Put the runtime from the config in the model if it isn't
@@ -167,6 +168,7 @@ public class ConfigurationDialogFlat extends JDialog {
         mapper.map(memorySlider, "maxMemory");
         mapper.map(permGenSpinner, "permGen");
         mapper.map(enforceRuntimeCheck, "enforceRuntime");
+        mapper.map(javaAutoUpdateCheck, "javaAutoUpdate");
         mapper.map(consoleUseColorsCheck, "consoleUseColors");
         mapper.map(showLauncherConsoleCheck, "showLauncherConsole");
         mapper.map(showConsoleCheck, "showConsole");
@@ -269,6 +271,7 @@ public class ConfigurationDialogFlat extends JDialog {
         enforceRuntimeCheck.setOpaque(false);
         jvmCard.add(enforceRuntimeCheck, "gaptop 4");
         java.add(jvmCard);
+        java.add(createJavaUpdatesCard());
 
         // ---------------------------------------------------------- Додатково
         JPanel adv = page();
@@ -303,6 +306,7 @@ public class ConfigurationDialogFlat extends JDialog {
         }
         aboutCard.add(about, "gaptop 4, wmin 0");
         adv.add(aboutCard);
+        adv.add(createDangerCard());
 
         // ---------------------------------------------------------- каркас
         final CardLayout pages = new CardLayout();
@@ -313,7 +317,13 @@ public class ConfigurationDialogFlat extends JDialog {
         pageHost.add(scroll(adv), "2");
         LookUi.Nav nav = new LookUi.Nav(new String[]{SharedLocale.tr("settings.nav.general"),
                 SharedLocale.tr("settings.nav.java"), SharedLocale.tr("settings.nav.advanced")},
-                i -> pages.show(pageHost, String.valueOf(i)));
+                i -> {
+                    pages.show(pageHost, String.valueOf(i));
+                    // 19.11.2026: прихована сторінка рахувала висоту текстів з нульовою шириною (порожнє місце під
+                    // списком Java); після показу розкласти її ще раз
+                    Component shown = pageHost.getComponent(i);
+                    if (shown instanceof JScrollPane) InstanceManageDialog.relayoutLater(((JScrollPane) shown).getViewport().getView());
+                });
 
         JPanel body = new JPanel(new MigLayout("insets 14 14 0 14, gap 14 0, fill", "[170!][grow,fill]", "[grow,fill]"));
         body.setOpaque(false);
@@ -432,6 +442,150 @@ public class ConfigurationDialogFlat extends JDialog {
         });
     }
 
+    /**
+     * 1.36.3 (19.11.2026, власник): плитка «Оновлення Java». Перемикач автооновлення (зберігається кнопкою «Зберегти»)
+     * і список Java: лаунчера та кожна встановлена Java гри, версія, чи є нова, «Оновити» / «Відкатити» (діють одразу).
+     * Логіка: {@link com.gummer.launcher.util.JavaUpdates}.
+     */
+    private JPanel createJavaUpdatesCard() {
+        JPanel card = section(SharedLocale.tr("settings.javaUpd.title"), SharedLocale.tr("settings.javaUpd.desc"));
+        javaAutoUpdateCheck.setOpaque(false);
+        card.add(javaAutoUpdateCheck, "gaptop 6");
+        final JTextArea offNote = LookUi.body(SharedLocale.tr("settings.javaUpd.autoOff"), true);
+        offNote.setForeground(LookTheme.palette().warn);
+        card.add(offNote, "gaptop 2, wmin 0, hidemode 3");
+        javaAutoUpdateCheck.addItemListener(e -> offNote.setVisible(!javaAutoUpdateCheck.isSelected()));
+        SwingUtilities.invokeLater(() -> offNote.setVisible(!javaAutoUpdateCheck.isSelected()));
+        final JPanel rows = new JPanel(new MigLayout("insets 0, wrap 1, gap 0 12, fillx", "[grow,fill]", ""));
+        rows.setOpaque(false);
+        card.add(rows, "gaptop 10, wmin 0");
+        reloadJavaRows(rows);
+        return card;
+    }
+
+    private void reloadJavaRows(final JPanel rows) {
+        rows.removeAll();
+        rows.add(LookUi.body(SharedLocale.tr("settings.javaUpd.loading"), true), "wmin 0");
+        rows.revalidate();
+        rows.repaint();
+        launcher.getExecutor().submit(() -> {
+            final java.util.List<com.gummer.launcher.util.JavaUpdates.Entry> list = com.gummer.launcher.util.JavaUpdates.list(launcher);
+            SwingUtilities.invokeLater(() -> {
+                rows.removeAll();
+                for (com.gummer.launcher.util.JavaUpdates.Entry e : list) rows.add(javaRow(rows, e), "wmin 0");
+                rows.revalidate();
+                rows.repaint();
+                // 19.11.2026 (власник: «Знову багато місця в кінці списку джав»): тексти з переносом рахували висоту
+                // до того, як отримали ширину; розкласти сторінку ще раз, як у вікні «Збірка»
+                InstanceManageDialog.relayoutLater(rows);
+            });
+            return null;
+        });
+    }
+
+    private JPanel javaRow(final JPanel rows, final com.gummer.launcher.util.JavaUpdates.Entry e) {
+        JPanel r = new JPanel(new MigLayout("insets 0, gap 8 2, fillx", "[grow,fill][][]", "[][]"));
+        r.setOpaque(false);
+        String title = e.isLauncher() ? SharedLocale.tr("settings.javaUpd.launcher")
+                : SharedLocale.tr("settings.javaUpd.game", e.component);
+        JLabel name = new JLabel(title + "   " + e.installed);
+        name.setFont(name.getFont().deriveFont(Font.BOLD));
+
+        String status;
+        boolean warn = false;
+        if (e.isLauncher() && e.external) {
+            status = SharedLocale.tr("settings.javaUpd.external");
+        } else if (e.latest == null) {
+            status = SharedLocale.tr("settings.javaUpd.unknown");
+        } else if (e.updateAvailable) {
+            status = SharedLocale.tr("settings.javaUpd.newer", e.latest);
+            warn = true;
+        } else {
+            status = SharedLocale.tr("settings.javaUpd.upToDate");
+        }
+        if (e.pinned) status = SharedLocale.tr("settings.javaUpd.pinned") + (e.updateAvailable ? ". " + status : "");
+        if (!e.isLauncher()) {
+            status += "\n" + (e.usedBy.isEmpty() ? SharedLocale.tr("settings.javaUpd.unused")
+                    : SharedLocale.tr("settings.javaUpd.usedBy", String.join(", ", e.usedBy)));
+        }
+        final JTextArea info = LookUi.body(status, true);
+        if (warn) info.setForeground(LookTheme.palette().warn);
+
+        final JButton upd = new JButton(SharedLocale.tr("settings.javaUpd.update"));
+        final JButton rb = new JButton(SharedLocale.tr("settings.javaUpd.rollback"));
+        LookUi.secondary(upd);
+        LookUi.secondary(rb);
+        upd.setEnabled(e.canUpdate && (e.updateAvailable || e.pinned));
+        if (e.isLauncher()) {
+            rb.setEnabled(false);
+            rb.setToolTipText(SharedLocale.tr("settings.javaUpd.launcherNoRollback"));
+        } else {
+            rb.setEnabled(e.canRollback);
+            rb.setToolTipText(e.canRollback ? SharedLocale.tr("settings.javaUpd.rollbackTip", e.prevVersion)
+                    : SharedLocale.tr("settings.javaUpd.noRollback"));
+        }
+
+        upd.addActionListener(a -> {
+            upd.setEnabled(false);
+            rb.setEnabled(false);
+            info.setText(SharedLocale.tr("settings.javaUpd.updating", 0));
+            launcher.getExecutor().submit(() -> {
+                try {
+                    if (e.isLauncher()) {
+                        // вікно «Оновлюю лаунчер», далі лаунчер закривається сам; false: оновлювати нічого
+                        if (!com.gummer.launcher.util.LauncherJreUpdate.startNow(launcher, ConfigurationDialogFlat.this)) {
+                            SwingUtilities.invokeLater(() -> reloadJavaRows(rows));
+                        }
+                    } else {
+                        com.gummer.launcher.util.JavaUpdates.update(launcher, e.component, e.os, pct ->
+                                SwingUtilities.invokeLater(() -> info.setText(SharedLocale.tr("settings.javaUpd.updating", pct))));
+                        SwingUtilities.invokeLater(() -> reloadJavaRows(rows));
+                    }
+                } catch (Exception ex) {
+                    javaActionFailed(rows, ex);
+                }
+                return null;
+            });
+        });
+        rb.addActionListener(a -> {
+            upd.setEnabled(false);
+            rb.setEnabled(false);
+            launcher.getExecutor().submit(() -> {
+                try {
+                    com.gummer.launcher.util.JavaUpdates.rollback(launcher, e.component, e.os);
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(ConfigurationDialogFlat.this,
+                                SharedLocale.tr("settings.javaUpd.rolledBack", e.prevVersion),
+                                SharedLocale.tr("settings.javaUpd.title"), JOptionPane.INFORMATION_MESSAGE);
+                        reloadJavaRows(rows);
+                    });
+                } catch (Exception ex) {
+                    javaActionFailed(rows, ex);
+                }
+                return null;
+            });
+        });
+
+        r.add(name, "wmin 0");
+        r.add(upd, "spany 2, aligny center, h 30!");
+        r.add(rb, "spany 2, aligny center, h 30!, wrap");
+        r.add(info, "wmin 0");
+        return r;
+    }
+
+    private void javaActionFailed(final JPanel rows, final Exception ex) {
+        java.util.logging.Logger.getLogger(ConfigurationDialogFlat.class.getName())
+                .log(java.util.logging.Level.WARNING, "Java update action failed", ex);
+        final String msg = ex instanceof com.gummer.launcher.util.JavaUpdates.InUseException
+                ? SharedLocale.tr("settings.javaUpd.inUse")
+                : SharedLocale.tr("settings.javaUpd.failed", String.valueOf(ex.getMessage()));
+        SwingUtilities.invokeLater(() -> {
+            JOptionPane.showMessageDialog(ConfigurationDialogFlat.this, msg, SharedLocale.tr("settings.javaUpd.title"),
+                    JOptionPane.WARNING_MESSAGE);
+            reloadJavaRows(rows);
+        });
+    }
+
     /** Сторінка розділу: картки одна під одною. */
     private static JPanel page() {
         JPanel p = new JPanel(new MigLayout("insets 0 0 14 4, wrap 1, gap 0 12, fillx", "[grow,fill]", ""));
@@ -483,6 +637,161 @@ public class ConfigurationDialogFlat extends JDialog {
         public boolean getScrollableTracksViewportHeight() {
             return false;
         }
+    }
+
+    // ---------------------------------------------------------- Видалення (1.36.3)
+
+    /**
+     * Дві червоні кнопки (19.11.2026, власник: «кнопку (червону, щоб випадково не натиснули) ... щоб гравець не мусів
+     * все руками чистити»). Від випадкового натискання: червоний контур замість заливки, вікно підтвердження з
+     * розміром, кнопка «Видалити» вмикається лише після галочки «Розумію, що це не можна скасувати». Що саме
+     * видаляється: {@link com.gummer.launcher.util.Uninstall}.
+     */
+    private JPanel createDangerCard() {
+        JPanel c = section(SharedLocale.tr("settings.danger.title"), SharedLocale.tr("settings.danger.desc"));
+        JButton builds = LookUi.danger(new JButton(SharedLocale.tr("settings.danger.builds")));
+        JButton all = LookUi.danger(new JButton(SharedLocale.tr("settings.danger.all")));
+        JPanel row = new JPanel(new MigLayout("insets 0, gap 8 8", "", ""));
+        row.setOpaque(false);
+        row.add(builds);
+        row.add(all);
+        c.add(row, "gaptop 8, growx 0");
+        builds.addActionListener(e -> askDelete(false));
+        all.addActionListener(e -> askDelete(true));
+        return c;
+    }
+
+    private void askDelete(boolean everything) {
+        if (com.gummer.launcher.util.Uninstall.RUNNING_GAMES.get() > 0) {
+            JOptionPane.showMessageDialog(this, SharedLocale.tr("settings.danger.gameRunning"),
+                    SharedLocale.tr("settings.danger.title"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        launcher.getExecutor().submit(() -> {
+            final com.gummer.launcher.util.Uninstall.Plan plan;
+            long backups = 0;
+            File base = launcher.getBaseDir();
+            if (everything) {
+                plan = com.gummer.launcher.util.Uninstall.everything(base, bootstrapDirFor(base), ownAppDir(base));
+                com.gummer.launcher.util.Uninstall.addLinuxShortcuts(plan);
+            } else {
+                plan = com.gummer.launcher.util.Uninstall.builds(base, false);
+                File wb = new File(base, com.gummer.launcher.manage.Worlds.BACKUPS);
+                backups = wb.isDirectory() ? com.gummer.launcher.util.Uninstall.size(wb) : 0;
+            }
+            final long backupBytes = backups;
+            SwingUtilities.invokeLater(() -> {
+                setCursor(Cursor.getDefaultCursor());
+                showDeleteDialog(everything, plan, backupBytes);
+            });
+        });
+    }
+
+    /** Тека bootstrap.yml у Документах: лише якщо вона вказує саме на цю теку даних (портативний лаунчер чужу не чіпає). */
+    private static File bootstrapDirFor(File base) {
+        try {
+            File boot = new File(com.gummer.launcher.shared.SharedData.getFileChooseDefaultDir(), "GummerCraft");
+            File wd = BootstrapConfig.get().getWorkingDirectory();
+            if (wd != null && wd.getCanonicalFile().equals(base.getCanonicalFile())) return boot;
+        } catch (Exception ignored) {
+            // нема bootstrap.yml: нема що прибирати
+        }
+        return null;
+    }
+
+    /** Розпакований лаунчер з Java, лише якщо цей лаунчер запущено саме з нього. */
+    private static File ownAppDir(File base) {
+        File app = com.gummer.launcher.util.Uninstall.appDir(base);
+        if (app == null) return null;
+        try {
+            String home = new File(System.getProperty("java.home")).getCanonicalPath() + File.separator;
+            return home.startsWith(app.getCanonicalPath() + File.separator) ? app : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String size(long bytes) {
+        return com.gummer.launcher.util.Uninstall.human(bytes, SharedLocale.tr("settings.danger.gb"),
+                SharedLocale.tr("settings.danger.mb"));
+    }
+
+    private void showDeleteDialog(boolean everything, com.gummer.launcher.util.Uninstall.Plan plan, long backupBytes) {
+        String k = everything ? "settings.danger.all" : "settings.danger.builds";
+        JPanel body = new JPanel(new MigLayout("insets 0, wrap 1, gap 0 8, fillx", "[grow,fill]", ""));
+        body.setOpaque(false);
+        body.add(LookUi.body(SharedLocale.tr(k + "Text"), true), "w 460!, wmin 0");
+        JLabel sizeLabel = new JLabel(SharedLocale.tr("settings.danger.size", size(plan.bytes)));
+        sizeLabel.setFont(sizeLabel.getFont().deriveFont(Font.BOLD));
+        body.add(sizeLabel, "gaptop 4");
+        final JCheckBox withBackups = new JCheckBox(SharedLocale.tr("settings.danger.backups", size(backupBytes)));
+        withBackups.setOpaque(false);
+        if (!everything && backupBytes > 0) {
+            body.add(withBackups);
+            withBackups.addActionListener(e -> sizeLabel.setText(SharedLocale.tr("settings.danger.size",
+                    size(plan.bytes + (withBackups.isSelected() ? backupBytes : 0)))));
+        }
+        JCheckBox sure = new JCheckBox(SharedLocale.tr("settings.danger.confirm"));
+        sure.setOpaque(false);
+        body.add(sure, "gaptop 6");
+
+        JButton delete = LookUi.dangerSolid(new JButton(SharedLocale.tr("settings.danger.delete")));
+        delete.setEnabled(false);
+        JButton cancel = LookUi.secondary(new JButton(SharedLocale.tr("button.cancel")));
+        sure.addActionListener(e -> delete.setEnabled(sure.isSelected()));
+        JOptionPane pane = new JOptionPane(body, JOptionPane.WARNING_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
+                new Object[]{delete, cancel}, cancel);
+        JDialog d = pane.createDialog(this, SharedLocale.tr(k + "Title"));
+        delete.addActionListener(e -> pane.setValue(delete));
+        cancel.addActionListener(e -> pane.setValue(cancel));
+        d.setVisible(true);
+        d.dispose();
+        if (pane.getValue() != delete || !sure.isSelected()) return;
+        if (com.gummer.launcher.util.Uninstall.RUNNING_GAMES.get() > 0) { // гру могли запустити, поки вікно було відкрите
+            JOptionPane.showMessageDialog(this, SharedLocale.tr("settings.danger.gameRunning"),
+                    SharedLocale.tr("settings.danger.title"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (everything) deleteEverything(plan);
+        else deleteBuilds(withBackups.isSelected());
+    }
+
+    private void deleteBuilds(boolean withBackups) {
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        launcher.getExecutor().submit(() -> {
+            // 19.11.2026: значення відеокарти в реєстрі, які записав лаунчер, прибрати разом з Java, для якої вони
+            com.gummer.launcher.util.Gpu.forgetAll(launcher.getBaseDir());
+            int failed = com.gummer.launcher.util.Uninstall.deleteNow(
+                    com.gummer.launcher.util.Uninstall.builds(launcher.getBaseDir(), withBackups));
+            SwingUtilities.invokeLater(() -> {
+                setCursor(Cursor.getDefaultCursor());
+                String msg = failed == 0 ? SharedLocale.tr("settings.danger.buildsDone")
+                        : SharedLocale.tr("settings.danger.buildsPartial", failed);
+                JOptionPane.showMessageDialog(this, msg, SharedLocale.tr("settings.danger.builds"),
+                        failed == 0 ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
+                // у пам'яті лишились списки збірок і кешів: найпростіше і найнадійніше почати з чистого запуску
+                if (!SelfRestart.relaunchBootstrap()) {
+                    JOptionPane.showMessageDialog(this, SharedLocale.tr("settings.danger.reopen"),
+                            SharedLocale.tr("settings.danger.builds"), JOptionPane.INFORMATION_MESSAGE);
+                    System.exit(0);
+                }
+            });
+        });
+    }
+
+    private void deleteEverything(com.gummer.launcher.util.Uninstall.Plan plan) {
+        try {
+            com.gummer.launcher.util.Gpu.forgetAll(launcher.getBaseDir()); // 19.11.2026: записи відеокарти в реєстрі
+            com.gummer.launcher.util.Uninstall.deleteAfterExit(plan);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, SharedLocale.tr("settings.danger.failed", String.valueOf(e.getMessage())),
+                    SharedLocale.tr("settings.danger.all"), JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        JOptionPane.showMessageDialog(this, SharedLocale.tr("settings.danger.allBye"), SharedLocale.tr("settings.danger.all"),
+                JOptionPane.INFORMATION_MESSAGE);
+        System.exit(0);
     }
 
     /** Картка розділу з заголовком і (необов'язково) поясненням. */

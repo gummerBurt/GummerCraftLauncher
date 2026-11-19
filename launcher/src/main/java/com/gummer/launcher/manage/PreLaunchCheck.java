@@ -22,7 +22,7 @@ import java.util.Set;
  */
 public final class PreLaunchCheck {
 
-    public enum Kind { DUPLICATE, WRONG_LOADER, MISSING }
+    public enum Kind { DUPLICATE, WRONG_LOADER, WRONG_GAME, INCOMPATIBLE, MISSING }
 
     /** Одна проблема: що сказати гравцю і які файли вимкнути, щоб її прибрати. */
     public static final class Issue {
@@ -31,6 +31,8 @@ public final class PreLaunchCheck {
         public final String mod;
         /** Деталь: файли дублікатів, завантажувачі мода, яких модів бракує. */
         public final String detail;
+        /** Ще одна деталь для тексту: версія гри збірки (WRONG_GAME). */
+        public String extra = "";
         public final List<InstanceMods.Mod> disable = new ArrayList<InstanceMods.Mod>();
 
         Issue(Kind kind, String mod, String detail) {
@@ -104,6 +106,42 @@ public final class PreLaunchCheck {
             out.add(is);
             off.add(e.getKey());
         }
+        // 1б. 19.11.2026 (власник: «Мод не під ту версію Minecraft. -- давай»): умова версії гри з опису мода, за правилами
+        // самого завантажувача (McRange). Лише точне «не підходить»: незвичну умову (снапшоти, літери) пропускаємо. Мод
+        // під інший завантажувач (Connector) і jar під кілька завантажувачів у Forge-збірці (опис читається з боку Fabric)
+        // не перевіряються
+        String game = ModrinthBrowse.gameVersionOf(instance);
+        if (McRange.parse(game) != null) {
+            boolean fabricLike = "fabric".equals(loader) || "quilt".equals(loader);
+            boolean forgeLike = "forge".equals(loader) || "neoforge".equals(loader);
+            for (Map.Entry<InstanceMods.Mod, ModInfo> e : info.entrySet()) {
+                if (off.contains(e.getKey())) continue;
+                ModInfo mi = e.getValue();
+                Boolean ok = null;
+                String want = null;
+                if (fabricLike && mi.loaders.contains("fabric") && !mi.mcFabric.isEmpty()) {
+                    ok = McRange.fabric(mi.mcFabric, game);
+                    want = String.join(" | ", mi.mcFabric);
+                } else if (forgeLike && (mi.loaders.contains("forge") || mi.loaders.contains("neoforge")) && !mi.mcMaven.isEmpty()) {
+                    ok = Boolean.TRUE;
+                    for (String r : mi.mcMaven) {
+                        Boolean x = McRange.maven(r, game);
+                        if (x == null) ok = null;
+                        else if (!x) {
+                            ok = Boolean.FALSE;
+                            want = r;
+                            break;
+                        }
+                    }
+                }
+                if (ok == null || ok) continue;
+                Issue is = new Issue(Kind.WRONG_GAME, mi.name, want);
+                is.extra = game;
+                is.disable.add(e.getKey());
+                out.add(is);
+                off.add(e.getKey());
+            }
+        }
         // 2. той самий мод двічі: лишається новіша версія
         Map<String, List<InstanceMods.Mod>> byId = new LinkedHashMap<String, List<InstanceMods.Mod>>();
         for (Map.Entry<InstanceMods.Mod, ModInfo> e : info.entrySet()) {
@@ -133,6 +171,11 @@ public final class PreLaunchCheck {
             }
             out.add(is);
         }
+        // 2б. 19.11.2026 (власник: «Несумісні пари модів. -- теж імба, давай»): мод сам оголосив себе несумісним з іншим
+        // (Fabric breaks, NeoForge incompatible), і такий мод стоїть: завантажувач гру не запустить. Вимикається той, з
+        // яким несумісно (Sodium «ламає» OptiFabric: вимкнути OptiFabric). Плюс OptiFine, який сам нічого не оголошує, з
+        // модами, що замінюють його рендер (Sodium, Embeddium, Rubidium, Iris, Oculus): вимикається OptiFine
+        incompatible(info, off, out);
         // 3. бракує обов'язкового мода (серед того, що лишиться увімкненим)
         Set<String> have = new HashSet<String>();
         for (Map.Entry<InstanceMods.Mod, ModInfo> e : info.entrySet()) if (!off.contains(e.getKey())) have.addAll(e.getValue().provides);
@@ -148,6 +191,57 @@ public final class PreLaunchCheck {
             out.add(is);
         }
         return out;
+    }
+
+    /** Моди, які разом з OptiFine не працюють (замінюють його рендер). */
+    private static final String[] NOT_WITH_OPTIFINE = {"sodium", "embeddium", "rubidium", "magnesium", "iris", "oculus"};
+
+    private static void incompatible(Map<InstanceMods.Mod, ModInfo> info, Set<InstanceMods.Mod> off, List<Issue> out) {
+        Map<String, InstanceMods.Mod> byId = new LinkedHashMap<String, InstanceMods.Mod>();
+        for (Map.Entry<InstanceMods.Mod, ModInfo> e : info.entrySet()) {
+            if (off.contains(e.getKey())) continue;
+            for (String id : e.getValue().provides) if (!byId.containsKey(id)) byId.put(id, e.getKey());
+        }
+        for (Map.Entry<InstanceMods.Mod, ModInfo> e : info.entrySet()) {
+            if (off.contains(e.getKey())) continue;
+            ModInfo a = e.getValue();
+            for (Map.Entry<String, List<String>> b : a.breaksFabric.entrySet()) {
+                InstanceMods.Mod target = byId.get(b.getKey());
+                if (target == null || target == e.getKey() || off.contains(target)) continue;
+                Boolean hit = b.getValue().contains("*") ? Boolean.TRUE : McRange.fabric(b.getValue(), versionFor(info.get(target), b.getKey()));
+                if (Boolean.TRUE.equals(hit)) conflict(info, target, a.name, off, out);
+            }
+            for (Map.Entry<String, String> b : a.breaksMaven.entrySet()) {
+                InstanceMods.Mod target = byId.get(b.getKey());
+                if (target == null || target == e.getKey() || off.contains(target)) continue;
+                String r = b.getValue().trim();
+                Boolean hit = r.isEmpty() || r.equals("*") ? Boolean.TRUE : McRange.maven(r, versionFor(info.get(target), b.getKey()));
+                if (Boolean.TRUE.equals(hit)) conflict(info, target, a.name, off, out);
+            }
+        }
+        InstanceMods.Mod optifine = byId.get("optifine");
+        if (optifine != null && !off.contains(optifine)) {
+            for (String id : NOT_WITH_OPTIFINE) {
+                InstanceMods.Mod other = byId.get(id);
+                if (other == null || other == optifine || off.contains(other)) continue;
+                conflict(info, optifine, info.get(other).name, off, out);
+                break;
+            }
+        }
+    }
+
+    /** Версія мода, якщо умову записано саме про його головний id (вкладені моди мають свої версії), інакше null. */
+    private static String versionFor(ModInfo mi, String id) {
+        if (mi == null || mi.id == null || !mi.id.equalsIgnoreCase(id)) return null;
+        return McRange.plainModVersion(mi.version);
+    }
+
+    private static void conflict(Map<InstanceMods.Mod, ModInfo> info, InstanceMods.Mod disable, String with,
+                                 Set<InstanceMods.Mod> off, List<Issue> out) {
+        Issue is = new Issue(Kind.INCOMPATIBLE, info.get(disable).name, with);
+        is.disable.add(disable);
+        out.add(is);
+        off.add(disable);
     }
 
     /** Вимкнути файли, які пропонують проблеми (лишаються в теці як вимкнені, вмикаються у вікні «Збірка»). */

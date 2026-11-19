@@ -28,7 +28,8 @@ public final class ListMemory {
 
     /** Запам'ятати вибір гравця в поточному режимі. «+ Додати збірку» не запам'ятовується. */
     public static void remember(Configuration c, Instance selected) {
-        if (selected == null || InstanceTableModel.isAddRow(selected) || selected.getName() == null) return;
+        if (selected == null || InstanceTableModel.isAddRow(selected) || InstanceTableModel.isImportRow(selected)
+                || selected.getName() == null) return;
         String name = selected.getName();
         boolean changed = false;
         if (c.isInstalledOnly()) {

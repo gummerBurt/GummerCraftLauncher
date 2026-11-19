@@ -56,6 +56,14 @@ public class XboxTokenAuthorizer {
 		if (xboxErrorCode == 2148916238L) {
 			return SharedLocale.tr("login.xbox.isChild");
 		}
+		// 19.11.2026 (власник: «перевір, що вхід з майкрософт точно працює. А вхід з бедрок аккаунтом працює?»): ще
+		// дві відомі відмови Xbox людською мовою замість «невідома помилка (XErr ...)»
+		if (xboxErrorCode == 2148916235L) {
+			return SharedLocale.tr("login.xbox.country");
+		}
+		if (xboxErrorCode == 2148916236L || xboxErrorCode == 2148916237L) {
+			return SharedLocale.tr("login.xbox.adultCheck");
+		}
 		if (!xstsError.getMessage().isEmpty()) {
 			return SharedLocale.tr("login.xbox.errorMessage", xstsError.getMessage());
 		}

@@ -68,7 +68,7 @@ public class MorphRootPane extends JRootPane {
     public void doLayout() {
         Dimension now = getSize();
         if (DEBUG) log("doLayout " + laidOut + " -> " + now + " showing=" + isShowing());
-        if (laidOut != null && now.width > 0 && now.height > 0 && isShowing() && big(laidOut, now)) {
+        if (!LookTheme.LITE && laidOut != null && now.width > 0 && now.height > 0 && isShowing() && big(laidOut, now)) {
             overlay.start(snapshot(laidOut));
             log("snapshot done");
         }

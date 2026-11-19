@@ -131,7 +131,7 @@ public class FlatBackgroundPanel3 extends JPanel {
                         : logo != null ? logo : defaultLogo, intOf(layout, "logo.x"), intOf(layout, "logo.y"));
         if (next.looksSame(current)) return;
 
-        if (!animate) {
+        if (!animate || com.gummer.launcher.look.LookTheme.LITE) {
             fadeTimer.stop();
             previous = null;
             current = next;
