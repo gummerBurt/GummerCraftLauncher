@@ -87,6 +87,13 @@ public final class VanillaDefaults {
         if (marker.exists() || new File(dir, "logs").exists()) return;
         dir.mkdirs();
         String[] other = fromOtherBuilds(dir);
+        // 1.36.2: спершу те, що гравець сам змінив у грі (GamePrefs, game-prefs.json у теці лаунчера: тека instances
+        // лежить у ній), а не найсвіжіший options.txt (його міг щойно перезаписати модпак)
+        File self = dir.getAbsoluteFile().getParentFile();
+        File base = self != null && self.getParentFile() != null ? self.getParentFile().getParentFile() : null;
+        java.util.Map<String, String> prefs = GamePrefs.load(base);
+        if (prefs.containsKey(GamePrefs.LANG)) other[0] = prefs.get(GamePrefs.LANG);
+        if (prefs.containsKey(GamePrefs.GUI)) other[1] = prefs.get(GamePrefs.GUI);
         String lang = other[0] != null ? langFor(other[0], versionId) : langCode(versionId);
         java.util.List<String> lines = options.isFile()
                 ? new ArrayList<String>(java.nio.file.Files.readAllLines(options.toPath(), StandardCharsets.UTF_8))

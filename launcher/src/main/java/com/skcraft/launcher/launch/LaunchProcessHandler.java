@@ -94,6 +94,8 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         }
 
         log.info("Process ended, re-showing launcher...");
+        // 1.36.2: мова чи розмір інтерфейсу, змінені гравцем у грі, стають уподобанням для нових збірок
+        if (instance != null) com.gummer.launcher.vanilla.GamePrefs.afterGame(launcher.getBaseDir(), instance);
         // 1.33: кнопку могли натиснути за мить до закриття гри
         checkDisconnectReport();
 

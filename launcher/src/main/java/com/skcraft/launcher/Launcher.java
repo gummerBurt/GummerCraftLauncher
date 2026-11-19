@@ -507,7 +507,9 @@ public final class Launcher {
                 Launcher launcher = createFromArguments(args);
                 SwingHelper.setSwingProperties(tr("launcher.appTitle", launcher.getVersion()));
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-                launcher.showLauncherWindow();
+                Window mainWindow = launcher.showLauncherWindow();
+                // 1.36.2 (java4shell): Java самого лаунчера оновлюється новим GummerCraft.exe, якщо стара
+                com.gummer.launcher.util.LauncherJreUpdate.start(launcher, mainWindow);
             } catch (Throwable t) {
                 log.log(Level.WARNING, "Load failure", t);
                 SwingHelper.showStartupError(t);

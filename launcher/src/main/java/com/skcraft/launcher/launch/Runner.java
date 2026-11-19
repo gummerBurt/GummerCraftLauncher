@@ -110,6 +110,8 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
         // 1.32.1: Vanilla одразу українською і з сервером GummerCraft у списку (лише перший раз, див. VanillaDefaults)
         com.gummer.launcher.vanilla.VanillaDefaults.apply(instance);
+        // 1.36.2: мова і розмір інтерфейсу до гри, щоб після закриття побачити, що змінив сам гравець (GamePrefs)
+        com.gummer.launcher.vanilla.GamePrefs.snapshot(instance);
         // 17.11.2026: моди модпаку, які гравець вимкнув у вікні «Збірка», оновлення паку качає знову: вимкнути ще раз
         com.gummer.launcher.manage.InstanceMods.reapplyDisabled(instance);
         // 17.11.2026: мод вимагає новішу версію іншого мода, ніж стоїть (The Pixelmon Modpack 9.1.13 кладе byg 1.1.6, а
