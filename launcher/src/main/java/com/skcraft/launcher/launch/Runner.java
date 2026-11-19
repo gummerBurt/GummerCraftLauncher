@@ -412,6 +412,8 @@ public class Runner implements Callable<Process>, ProgressObservable {
                 flags.addAll(JavaProcessBuilder.splitArgs(rawJvmArgs));
             }
         }
+        // 1.36.1 (java4shell): -XX:-UseBASE64Intrinsics для Java 17+, якщо гравець сам не задав
+        com.gummer.launcher.util.JavaSecurity.addGameFlags(builder.getRuntime(), flags);
 
         List<GameArgument> javaArguments = versionManifest.getArguments().getJvmArguments();
         StrSubstitutor substitutor = new StrSubstitutor(getCommandSubstitutions());

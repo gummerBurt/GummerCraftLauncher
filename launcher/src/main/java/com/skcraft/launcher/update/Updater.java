@@ -282,6 +282,7 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
 
 
         JavaManifest javaManifest = null;
+        File runtimeMarkerDir = null; // 1.36.1: куди після встановлення записати JavaSecurity.MARKER
         // 1.32.2: на Mac з Apple Silicon старі версії гри (LWJGL без arm64) беруть Java для Intel, див. MacRosetta
         String runtimeOs = com.gummer.launcher.util.MacRosetta.runtimeOs(version);
         if (com.gummer.launcher.util.MacRosetta.needsIntelJava(version)) {
@@ -328,6 +329,7 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
             // Validating / downloading the JVM
             log.info("Installing correct runtime");
             installJvm(installer, jvmDir, files);
+            runtimeMarkerDir = jvmDir;
         }
 
         // Install the .jar
@@ -367,6 +369,9 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         installer.execute(launcher);
 
         installer.executeLate(launcher);
+        if (runtimeMarkerDir != null) {
+            com.gummer.launcher.util.JavaSecurity.writeMarker(runtimeMarkerDir, javaManifest);
+        }
 
         log.info("Completing...");
         complete();

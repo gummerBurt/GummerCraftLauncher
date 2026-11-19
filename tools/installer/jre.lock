@@ -3,9 +3,12 @@
 #   jre8  - Windows 7 і 8.1 (5% гравців у логах CDN): Temurin 17 там офіційно не підтримується, а Java 8 працює.
 # Портативний zip лише з jre17 (Windows 10+). Java для самої гри від цього не залежить (вона своя, з runtime\).
 # Оновити: https://api.adoptium.net/v3/assets/latest/<17|8>/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse
-jre17.name=OpenJDK17U-jre_x64_windows_hotspot_17.0.21_9.zip
-jre17.url=https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.21%2B9/OpenJDK17U-jre_x64_windows_hotspot_17.0.21_9.zip
-jre17.sha256=fe4656bd78fb09812dc38c49da777f79cc33e7ee435a254be82f9e7f40d9d117
+# 19.11.2026 (1.36.1): jre17 = Azul Zulu 17.0.21.1+2 (java4shell, CVE-2026-114938, виправлено в 17.0.21.1). Temurin
+# 17.0.21.1 вийшов лише для Linux x64 і Mac ARM, для Windows x64 ще ні; sha256 з api.azul.com/metadata/v1/zulu/packages/.
+# Коли Temurin викладе виправлену збірку для Windows (17.0.21.1+ або 17.0.22+), можна повернутись на нього.
+jre17.name=zulu17.70.201-ca-jre17.0.21.1-win_x64.zip
+jre17.url=https://cdn.azul.com/zulu/bin/zulu17.70.201-ca-jre17.0.21.1-win_x64.zip
+jre17.sha256=7ac4b62ed405c724dfd5731442f77a655d0bfc8dd3e92921702292280aa75f55
 jre8.name=OpenJDK8U-jre_x64_windows_hotspot_8u512b09.zip
 jre8.url=https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jre_x64_windows_hotspot_8u512b09.zip
 jre8.sha256=ae1ae12f817d7735477c6555107eece73854da0654da69077309ef9bff0b78bf

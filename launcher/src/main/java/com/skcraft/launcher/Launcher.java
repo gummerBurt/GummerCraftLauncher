@@ -102,6 +102,7 @@ public final class Launcher {
         com.skcraft.launcher.swing.SwingHelper.setNewLauncherDownloadUrl(properties.getProperty("newLauncherDownloadUrl"));
         com.gummer.launcher.support.SupportLogBuffer.install(); // лог лаунчера для звернень у підтримку (1.32)
         com.gummer.launcher.support.LauncherLogFile.install(this.baseDir); // і у файл logs/launcher.log (16.11.2026)
+        com.gummer.launcher.util.JavaSecurity.protectLauncherJvm(); // 1.36.1, java4shell: прапорець для Java лаунчера
         this.instances = new InstanceList(this);
         this.assets = new AssetsRoot(new File(baseDir, "assets"));
         this.accounts = Persistence.load(new File(configDir, "accounts.dat"), AccountList.class);

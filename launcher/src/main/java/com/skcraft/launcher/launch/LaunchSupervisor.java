@@ -95,6 +95,15 @@ public class LaunchSupervisor {
                 instance.setUpdatePending(true);
             }
 
+            // 1.36.1 (java4shell): Java гри не та, що в маніфесті CDN (нова збірка Java, наприклад з виправленням
+            // вразливості): оновлення докачає лише змінені файли Java, див. JavaSecurity. Скидається в Updater.
+            if (!update && options.getUpdatePolicy().isUpdateEnabled() && instance.isInstalled()
+                    && !launcher.getInstances().isOffline()
+                    && com.gummer.launcher.util.JavaSecurity.runtimeStale(launcher, instance)) {
+                update = true;
+                instance.setUpdatePending(true);
+            }
+
             if (update) {
                 // Execute the updater
                 Updater updater = new Updater(launcher, instance);

@@ -10,6 +10,7 @@ import com.skcraft.launcher.util.SharedLocale;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -37,7 +38,8 @@ public final class PreLaunchDialog {
         if (issues.isEmpty()) return;
         log.info("Pre-launch check: " + issues.size() + " issue(s)");
         final int[] answer = {-1};
-        final boolean canFetch = hasMissing(issues);
+        // 1.36.1: і мод не під завантажувач збірки (той самий мод під потрібний завантажувач з Modrinth, див. LoaderSwap)
+        final boolean canFetch = hasMissing(issues) || hasWrongLoader(issues);
         try {
             SwingUtilities.invokeAndWait(() -> answer[0] = show(instance, issues, canFetch));
         } catch (Exception e) {
@@ -47,8 +49,21 @@ public final class PreLaunchDialog {
             // 18.11.2026 (власник: «докачати цей мод? Або докачати автоматично»): залежності з Modrinth, потім ще раз
             // перевірка; що лишилось, пропонується вимкнути як раніше (без повторного «Докачати»)
             List<String> missing = new java.util.ArrayList<String>();
+            // 1.36.1 (власник: «Шукати відповідники модів з неофордж в форджі та заміняти їх»): спершу заміна модів не під
+            // той завантажувач, бо в нових версій можуть бути інші залежності
+            for (PreLaunchCheck.Issue is : issues) {
+                if (is.kind != PreLaunchCheck.Kind.WRONG_LOADER || is.disable.isEmpty()) continue;
+                File f = is.disable.get(0).file;
+                try {
+                    LoaderSwap.replace(instance, f, ModInfo.of(f), missing);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new LauncherException("Cancelled", SharedLocale.tr("prelaunch.cancelled"));
+                }
+            }
             for (PreLaunchCheck.Issue is : issues) {
                 if (is.kind != PreLaunchCheck.Kind.MISSING || is.disable.isEmpty()) continue;
+                if (!is.disable.get(0).file.isFile()) continue; // мод щойно замінено іншою версією
                 try {
                     DepFetch.fetch(instance, is.disable.get(0).file, java.util.Arrays.asList(is.detail.split(",\\s*")), missing);
                 } catch (InterruptedException e) {
@@ -96,6 +111,11 @@ public final class PreLaunchDialog {
         return false;
     }
 
+    private static boolean hasWrongLoader(List<PreLaunchCheck.Issue> issues) {
+        for (PreLaunchCheck.Issue is : issues) if (is.kind == PreLaunchCheck.Kind.WRONG_LOADER) return true;
+        return false;
+    }
+
     /** 0 вимкнути і запустити, 1 запустити як є, {@link #FETCH} докачати, інше скасувати. */
     private static int show(Instance instance, List<PreLaunchCheck.Issue> issues, boolean canFetch) {
         StringBuilder html = new StringBuilder("<html><body style='width:460px'>");
@@ -110,9 +130,11 @@ public final class PreLaunchDialog {
                     : is.kind == PreLaunchCheck.Kind.WRONG_LOADER ? "prelaunch.wrongLoader" : "prelaunch.missing";
             html.append("&#8226; ").append(esc(SharedLocale.tr(key, is.mod, is.detail))).append("<br>");
         }
+        boolean swap = canFetch && hasWrongLoader(issues);
+        if (swap) html.append("<br>").append(esc(SharedLocale.tr("prelaunch.swapHint")));
         html.append("<br>").append(esc(SharedLocale.tr("prelaunch.hint"))).append("</body></html>");
         Object[] options = canFetch
-                ? new Object[]{SharedLocale.tr("prelaunch.fetch"), SharedLocale.tr("prelaunch.fix"), SharedLocale.tr("prelaunch.anyway"), SharedLocale.tr("prelaunch.cancel")}
+                ? new Object[]{SharedLocale.tr(swap ? "prelaunch.swap" : "prelaunch.fetch"), SharedLocale.tr("prelaunch.fix"), SharedLocale.tr("prelaunch.anyway"), SharedLocale.tr("prelaunch.cancel")}
                 : new Object[]{SharedLocale.tr("prelaunch.fix"), SharedLocale.tr("prelaunch.anyway"), SharedLocale.tr("prelaunch.cancel")};
         Window owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
         if (owner == null) {

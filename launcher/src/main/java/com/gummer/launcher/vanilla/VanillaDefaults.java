@@ -37,6 +37,8 @@ public final class VanillaDefaults {
     public static final String SERVER_ADDRESS = "play.gummercraft.fun";
     /** Позначка «сервер уже додавали» в теці гри версії. */
     static final String SERVER_MARKER = ".gummercraft-server-added";
+    /** 1.36.1: мову і розмір інтерфейсу вже поставлено при першому запуску (далі options.txt лише гравця). */
+    static final String FIRST_MARKER = ".gummercraft-first-settings";
 
     private static final Logger log = Logger.getLogger(VanillaDefaults.class.getName());
 
@@ -77,12 +79,78 @@ public final class VanillaDefaults {
 
     static void applyLanguage(File dir, String versionId) throws IOException {
         File options = new File(dir, "options.txt");
-        if (options.exists()) return;
+        // 1.36.1 (власник: «При першому включенні ставити розмір інтерфейсу та мову майну як в інших збірках»): мова і
+        // розмір інтерфейсу з тієї збірки, у яку гравець грав останньою; таких немає: українська, розмір гри за
+        // замовчуванням. Лише перший запуск: гра в цій теці ще не стартувала (немає logs) і позначки ще немає. Модпаки
+        // Modrinth часто приносять свій options.txt (англійська, свій розмір): у ньому міняються лише ці два рядки.
+        File marker = new File(dir, FIRST_MARKER);
+        if (marker.exists() || new File(dir, "logs").exists()) return;
         dir.mkdirs();
-        try (Writer w = new OutputStreamWriter(new FileOutputStream(options), StandardCharsets.UTF_8)) {
-            w.write("lang:" + langCode(versionId) + "\n");
+        String[] other = fromOtherBuilds(dir);
+        String lang = other[0] != null ? langFor(other[0], versionId) : langCode(versionId);
+        java.util.List<String> lines = options.isFile()
+                ? new ArrayList<String>(java.nio.file.Files.readAllLines(options.toPath(), StandardCharsets.UTF_8))
+                : new ArrayList<String>();
+        boolean hasLang = false, hasGui = false;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).startsWith("lang:")) {
+                lines.set(i, "lang:" + lang);
+                hasLang = true;
+            } else if (other[1] != null && lines.get(i).startsWith("guiScale:")) {
+                lines.set(i, "guiScale:" + other[1]);
+                hasGui = true;
+            }
         }
-        log.info("Vanilla: options.txt created with lang " + langCode(versionId));
+        if (!hasLang) lines.add("lang:" + lang);
+        if (other[1] != null && !hasGui) lines.add("guiScale:" + other[1]);
+        try (Writer w = new OutputStreamWriter(new FileOutputStream(options), StandardCharsets.UTF_8)) {
+            for (String l : lines) w.write(l + "\n");
+        }
+        marker.createNewFile();
+        log.info("Vanilla: options.txt created with lang " + lang + (other[1] != null ? ", guiScale " + other[1] : "")
+                + (other[2] != null ? " (from " + other[2] + ")" : ""));
+    }
+
+    /**
+     * {мова, guiScale, звідки} з options.txt інших збірок гравця (тека instances): найсвіжіший файл з мовою. Що не
+     * знайшлось: null. Помилка читання: файл пропускається.
+     */
+    static String[] fromOtherBuilds(File contentDir) {
+        String[] best = new String[3];
+        long bestTime = -1;
+        File self = contentDir.getAbsoluteFile().getParentFile();
+        File root = self != null ? self.getParentFile() : null;
+        File[] builds = root != null ? root.listFiles(File::isDirectory) : null;
+        if (builds == null) return best;
+        for (File b : builds) {
+            if (b.equals(self)) continue;
+            File f = new File(new File(b, "minecraft"), "options.txt");
+            if (!f.isFile() || f.lastModified() <= bestTime) continue;
+            String lang = null, gui = null;
+            try {
+                for (String line : java.nio.file.Files.readAllLines(f.toPath(), StandardCharsets.UTF_8)) {
+                    if (line.startsWith("lang:")) lang = line.substring(5).trim();
+                    else if (line.startsWith("guiScale:")) gui = line.substring(9).trim();
+                }
+            } catch (IOException | RuntimeException e) {
+                continue;
+            }
+            if (lang == null || !lang.matches("[A-Za-z]{2,3}_[A-Za-z0-9]{2,4}")) continue;
+            if (gui != null && !gui.matches("[0-9]{1,2}")) gui = null;
+            best[0] = lang;
+            best[1] = gui;
+            best[2] = b.getName();
+            bestTime = f.lastModified();
+        }
+        return best;
+    }
+
+    /** Код мови з іншої збірки під цю версію гри: до 1.11 країна великими (uk_UA), з 1.11 усе малими (uk_ua). */
+    static String langFor(String lang, String versionId) {
+        String low = lang.toLowerCase(java.util.Locale.ROOT);
+        if (!"uk_UA".equals(langCode(versionId))) return low;
+        int u = low.indexOf('_');
+        return low.substring(0, u + 1) + low.substring(u + 1).toUpperCase(java.util.Locale.ROOT);
     }
 
     static void applyServer(File dir) throws IOException {
