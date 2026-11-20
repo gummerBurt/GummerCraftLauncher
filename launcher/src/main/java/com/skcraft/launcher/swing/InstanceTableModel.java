@@ -656,7 +656,7 @@ public class InstanceTableModel extends AbstractTableModel {
     /** Перший рядок: назва (шрифт 13) і онлайн; назва скорочується, якщо не влазить. */
     private String titleLine(String title, Instance instance) {
         String badge = onlineBadge(instance);
-        String html = "&nbsp;<span style=\"font-size:" + fs(13) + "\">" + SwingHelper.htmlEscape(title) + "</span>" + badge;
+        String html = "<span style=\"font-size:" + fs(13) + "\">&nbsp;" + SwingHelper.htmlEscape(title) + "</span>" + badge;
         if (!fitting()) return html;
         String key = "t|" + fitWidth + "|" + html;
         String cached = fitCache.get(key);
@@ -668,7 +668,7 @@ public class InstanceTableModel extends AbstractTableModel {
         steps.add(html);
         while (t.length() > 2 && steps.size() < 400) {
             t = shorter(t);
-            steps.add("&nbsp;<span style=\"font-size:" + fs(13) + "\">" + SwingHelper.htmlEscape(t) + "</span>" + badge);
+            steps.add("<span style=\"font-size:" + fs(13) + "\">&nbsp;" + SwingHelper.htmlEscape(t) + "</span>" + badge);
         }
         String out = steps.get(firstFit(steps));
         fitCache.put(key, out);
@@ -712,7 +712,9 @@ public class InstanceTableModel extends AbstractTableModel {
         }
         // 20.11.2026 (власник: «просканити лаунчер на ... відсутнє вертикальне центрування, кнопки які хуй зна куди
         // залізли»): відступ той самий, що в назви (один &nbsp; базовим шрифтом), раніше три і другий рядок стояв правіше
-        return "&nbsp;<span style=\"font-size:" + fs(11) + ";\">" + sb + "</span>";
+        // 20.11.2026, 1.36.6: &nbsp; усередині спану (і в назві, і в значку онлайну): висоту рядків задають лише явні розміри,
+        // а не базовий шрифт таблиці (власник: «"доступне оновлення" тепер дуже низько»)
+        return "<span style=\"font-size:" + fs(11) + ";\">&nbsp;" + sb + "</span>";
     }
 
     /** Повний текст рядка для підказки, якщо в списку він скорочений; інакше null. */
@@ -740,7 +742,7 @@ public class InstanceTableModel extends AbstractTableModel {
      */
     private String onlineBadge(Instance instance) {
         String online = onlineLines.get(instance.getName());
-        return online != null ? "&nbsp;&nbsp;<span style=\"color:" + GREEN + ";font-size:" + fs(11) + ";\">● " + SwingHelper.htmlEscape(online) + "</span>" : "";
+        return online != null ? "<span style=\"color:" + GREEN + ";font-size:" + fs(11) + ";\">&nbsp;&nbsp;● " + SwingHelper.htmlEscape(online) + "</span>" : "";
     }
 
     /** Другий рядок групи: «Minecraft 1.21». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */

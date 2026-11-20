@@ -63,15 +63,31 @@ public class FancyLauncher {
                         // 20.11.2026 (власник: «шрифти наче зжаті ... в очах мерехтить»): шрифт інтерфейсу Inter замість
                         // системного Segoe UI. Java малює Segoe UI власним растеризатором, і на масштабі 125% він виходить
                         // щільним і важким; Inter зроблений для екранів і в Java рівний. Повернути Segoe: -Dgummer.font=segoe
-                        if( !"segoe".equalsIgnoreCase( System.getProperty( "gummer.font" ) ) ) {
+                        // 1.36.6: лише якщо в системі немає свого «Inter» і розміри збігаються з нашим файлом (look.FontCheck),
+                        // інакше Segoe UI, як до 1.36.5 (після 1.36.5 у власника на двох машинах текст був удвічі більший)
+                        String fontChoice;
+                        if( "segoe".equalsIgnoreCase( System.getProperty( "gummer.font" ) ) ) { fontChoice = "Segoe UI (gummer.font=segoe)"; System.setProperty( "gummer.font.used", "segoe" ); }
+                        else if( com.gummer.launcher.look.FontCheck.oldJava() ) { fontChoice = "Segoe UI (Java 8)"; System.setProperty( "gummer.font.used", "java8" ); }
+                        else if( com.gummer.launcher.look.FontCheck.systemHasInter() ) { fontChoice = "Segoe UI (system has its own Inter)"; System.setProperty( "gummer.font.used", "sysinter" ); }
+                        else {
                             com.formdev.flatlaf.fonts.inter.FlatInterFont.install();
-                            System.setProperty( "gummer.font.inter", "true" ); // для розмірів у HTML (InstanceTableModel.fs)
-                            com.formdev.flatlaf.FlatLaf.setPreferredFontFamily( com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY );
-                            com.formdev.flatlaf.FlatLaf.setPreferredLightFontFamily( com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_LIGHT );
-                            com.formdev.flatlaf.FlatLaf.setPreferredSemiboldFontFamily( com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_SEMIBOLD );
+                            setInter( true );
+                            fontChoice = "Inter";
+                            System.setProperty( "gummer.font.used", "inter" );
                         }
                         // init and setup UI LaF
                         UIManager.setLookAndFeel( new FlatMacDarkLaf() );
+                        if( "Inter".equals( fontChoice ) ) {
+                            String bad = com.gummer.launcher.look.FontCheck.interMismatch();
+                            if( bad != null ) {
+                                setInter( false );
+                                UIManager.setLookAndFeel( new FlatMacDarkLaf() );
+                                fontChoice = "Segoe UI (Inter mismatch: " + bad + ")";
+                                System.setProperty( "gummer.font.used", "mismatch" );
+                                com.gummer.launcher.stats.LaunchStats.fontFallback( launcher, "mismatch" );
+                            }
+                        }
+                        com.gummer.launcher.look.FontCheck.logChoice( fontChoice );
                     } catch( Exception ex ) {
                         System.err.println( "Failed to initialize UI LaF" );
                         //ex.printStackTrace();
@@ -255,6 +271,15 @@ public class FancyLauncher {
             if ("--dir".equals(args[i])) baseDir = new File(args[i + 1]);
         }
         return baseDir;
+    }
+
+    /** Шрифт Inter для FlatLaf увімкнути чи вимкнути (до setLookAndFeel). 1.36.6 */
+    private static void setInter( boolean on ) {
+        if( on ) System.setProperty( "gummer.font.inter", "true" ); // для розмірів у HTML (InstanceTableModel.fs)
+        else System.clearProperty( "gummer.font.inter" );
+        com.formdev.flatlaf.FlatLaf.setPreferredFontFamily( on ? com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY : null );
+        com.formdev.flatlaf.FlatLaf.setPreferredLightFontFamily( on ? com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_LIGHT : null );
+        com.formdev.flatlaf.FlatLaf.setPreferredSemiboldFontFamily( on ? com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_SEMIBOLD : null );
     }
 
     public static void enforcePlatformDefaults() {

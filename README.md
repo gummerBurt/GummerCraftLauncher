@@ -24,6 +24,13 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
 
+## Що нового в 1.36.6
+
+- Виправлено: якщо лаунчер працює на старій Java 8 (старий `Gummer_Craft_launcher.exe` без вбудованої Java), після 1.36.5 весь текст був приблизно вдвічі більшим, назви обрізались («Встан…», «Скас…»), а рядки списку налазили один на одний. На Java 8 лаунчер знову пише системним шрифтом Segoe UI, як до 1.36.5.
+- Лаунчер на старті сам перевіряє, що шрифт Inter має правильні розміри. Якщо ні, бере Segoe UI. Що вибрано і чому, видно в журналі лаунчера (рядок `UI font`).
+- Виправлено: у списку збірок Liquid Glass другий рядок («доступне оновлення») міг стояти помітно нижче назви.
+- Анонімна статистика запуску гри тепер містить Java, на якій працює сам лаунчер (виробник, версія, вбудована чи своя), і вибраний шрифт, щоб такі проблеми було видно раніше за скарги. Подробиці в [SECURITY.md](SECURITY.md).
+
 ## Що нового в 1.36.5
 
 - **Дві вкладки над списком збірок:** ліворуч «Встановлені», праворуч «Додати +». Лаунчер відкривається на «Встановлених», а якщо там ще нічого немає, одразу на «Додати +».
@@ -299,6 +306,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.36.6:** fixed text about twice too large (cut-off labels, overlapping rows) when the launcher runs on Java 8 (the old `Gummer_Craft_launcher.exe` without bundled Java): Java 8 uses Segoe UI again, as before 1.36.5; the launcher checks the Inter font metrics on start and falls back to Segoe UI if they are off (`UI font` line in the launcher log); the second line of a Liquid Glass list item no longer sits too low; the anonymous launch statistic now includes the launcher Java (vendor, major version, bundled or system) and the chosen UI font.
 
 **1.36.5:** new UI font Inter and system ClearType text on Windows (Segoe UI with forced grayscale antialiasing looked squeezed at 125% scaling); sharp icons at 125-150% scaling (vector account, Telegram, Discord and context menu icons, pixel-snapped glyphs and flags, sharp pixel-art buttons); Esc closes launcher dialogs; the Liquid Glass splash no longer overlaps the UA / EN flags and account chips, the like and design feedback buttons sit closer to the look switch and stay inside the sidebar, rounded borders (like button, account chips, flags, selected pack, toasts, news cards) are no longer clipped at 125-150% scaling, a game closed from Task Manager no longer blames a mod that only logged a harmless warning, the launcher frees background images while the game runs (about 120 MB less memory), Classic: the build button is centred on PLAY and the flags match the button height, the keyboard focus ring shows only after Tab or arrow keys, the support form fills the window, standard confirm dialogs use the launcher language for OK / Cancel / Yes / No, list subtitles are aligned with titles; the GummerCraft logo no longer jumps between Main versions; two tabs above the build list, "Installed" (left, opens on start) and "Add +" (opens on start when nothing is installed yet); "Add +" only installs: Vanilla, Fabric, Quilt, Forge, NeoForge and Modrinth modpacks are added as a new installation each time ("Forge 1.16.5 (2)" next to an existing one, with a count under the button), the GummerCraft and StalDayZ servers show "Install" or "Play"; after installing the launcher switches to "Installed" on the new build and no longer starts the game by itself; an "Install" button in Liquid Glass; in the Library the top buttons shrink to icons in a narrow window and the look picker is shown on the Modrinth page and with no builds installed; fixes: the Java updates tile no longer offers the same version, and the "Send a report to support" button no longer appears twice on the disconnect screen.
 

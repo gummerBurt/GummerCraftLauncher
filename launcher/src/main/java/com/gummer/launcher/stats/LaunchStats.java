@@ -27,10 +27,12 @@ import java.util.regex.Pattern;
  *       для Vanilla і завантажувачів тип і версія Minecraft ({@code vanilla-1.21.4}, {@code fabric-1.20.1}).
  *       Усе інше (імпортовані збірки, локальні теки) іде як {@code mrpack} чи {@code other}: назви, які гравець
  *       дав сам, не надсилаються ніколи;</li>
- *   <li>{@code i}: анонімний ID установки ({@link InstallId}), якщо він є.</li>
+ *   <li>{@code i}: анонімний ID установки ({@link InstallId}), якщо він є;</li>
+ *   <li>з 1.36.6 {@code j}: Java самого лаунчера (виробник, версія, вбудована чи системна, {@link #javaTag()}) і
+ *       {@code f}: вибраний шрифт інтерфейсу ({@link #fontTag()}).</li>
  * </ul>
  *
- * <p>Чого тут немає: ніка, акаунта, списку модів, шляхів, даних про комп'ютер (версію лаунчера, ОС і Java, як і в
+ * <p>Чого тут немає: ніка, акаунта, списку модів, шляхів, інших даних про комп'ютер (версію лаунчера, ОС і Java, як і в
  * кожному запиті лаунчера, видно із заголовка User-Agent). Слово {@code off} у {@code stats-id.txt} вимикає подію
  * повністю. Порожній {@code launchStatsUrl} у {@code launcher.properties} теж. Запит іде у фоні, помилки мовчки
  * ігноруються: на запуск гри він не впливає.</p>
@@ -68,7 +70,63 @@ public final class LaunchStats {
         if (instance == null) {
             return null;
         }
-        return eventUrl(launcher, "e=launch&p=" + packOf(instance) + "&m=" + ownMods(instance));
+        return eventUrl(launcher, "e=launch&p=" + packOf(instance) + "&m=" + ownMods(instance) + "&j=" + javaTag() + "&f=" + fontTag());
+    }
+
+    /**
+     * 1.36.6 (20.11.2026, після 1.36.5: Inter на Oracle Java 8 малювався вдвічі більшим, а з User-Agent старого exe не
+     * видно ні Java, ні виробника): Java, на якій працює сам лаунчер: виробник, версія, вбудована чи системна,
+     * напр. {@code oracle-8-system}, {@code azul-17-bundled}. Без шляхів і точних номерів збірок.
+     */
+    static String javaTag() {
+        try {
+            String v = System.getProperty("java.vendor", "").toLowerCase(Locale.ROOT);
+            String vendor = v.contains("oracle") || v.contains("sun micro") ? "oracle"
+                    : v.contains("azul") ? "azul"
+                    : v.contains("temurin") || v.contains("adoptium") || v.contains("eclipse") || v.contains("adoptopenjdk") ? "temurin"
+                    : v.contains("microsoft") ? "microsoft"
+                    : v.contains("amazon") ? "amazon"
+                    : v.contains("bellsoft") ? "bellsoft"
+                    : v.contains("jetbrains") ? "jetbrains" : "other";
+            // не через launcher-shared: у старого exe там його власна стара копія без потрібних методів
+            String spec = System.getProperty("java.specification.version", "");
+            String major = spec.startsWith("1.") ? spec.substring(2) : spec;
+            String kind = "system";
+            for (File jre = new File(System.getProperty("java.home", "")); jre != null && jre.getParentFile() != null; jre = jre.getParentFile()) {
+                if (jre.getName().equalsIgnoreCase("jre")) {
+                    if (new File(jre.getParentFile(), "GummerCraft.exe").isFile()) kind = "bundled";
+                    break;
+                }
+            }
+            String tag = vendor + "-" + major + "-" + kind;
+            return SAFE.matcher(tag).matches() ? tag : OTHER;
+        } catch (Throwable t) {
+            return OTHER;
+        }
+    }
+
+    /** 1.36.6: шрифт інтерфейсу, який вибрав лаунчер на старті (властивість gummer.font.used, ставить FancyLauncher). */
+    static String fontTag() {
+        String f = System.getProperty("gummer.font.used", "");
+        return SAFE.matcher(f).matches() ? f : OTHER;
+    }
+
+    /**
+     * 1.36.6: анонімна подія {@code e=font}: перевірка на старті відкинула шрифт Inter (розміри не ті), лаунчер
+     * перейшов на Segoe UI. Так проблему видно в статистиці раніше за скарги. Лише слово причини і {@link #javaTag()}.
+     */
+    public static void fontFallback(final Launcher launcher, final String reason) {
+        try {
+            if (reason == null || !SAFE.matcher(reason).matches()) return;
+            Thread thread = new Thread(() -> {
+                URL url = eventUrl(launcher, "e=font&f=" + reason + "&j=" + javaTag());
+                if (url != null) send(url);
+            }, "launch-stats");
+            thread.setDaemon(true);
+            thread.start();
+        } catch (Throwable t) {
+            log.log(Level.FINE, "Font statistics are unavailable", t);
+        }
     }
 
     /**

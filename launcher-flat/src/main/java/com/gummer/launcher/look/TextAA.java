@@ -20,7 +20,8 @@ public final class TextAA {
         if (hints instanceof Map) {
             g.addRenderingHints((Map<?, ?>) hints);
         } else {
-            com.gummer.launcher.look.TextAA.apply(g);
+            // 20.11.2026, 1.36.6: тут був виклик самого себе (переповнення стеку там, де система підказок не дає, напр. Linux)
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         }
     }
 }
