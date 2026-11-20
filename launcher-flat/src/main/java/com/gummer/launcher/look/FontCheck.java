@@ -31,17 +31,33 @@ public final class FontCheck {
     private FontCheck() {
     }
 
+    /** Накреслення Inter у ресурсах лаунчера (TrueType, перегнані з Inter 4.0 OTF скриптом tools/inter-otf2ttf.py). */
+    private static final String[] FILES = {"Inter-Regular.ttf", "Inter-Bold.ttf", "Inter-SemiBold.ttf", "Inter-Light.ttf"};
+    private static final String DIR = "/com/gummer/launcher/fonts/";
+
     /**
-     * Java 8 (старий Gummer_Craft_launcher.exe на системній Java). 20.11.2026: обидві машини власника з великим текстом
-     * запускали саме його на Oracle Java 1.8.0_511. Inter у FlatLaf це OpenType з CFF (2048 одиниць на em), а Oracle
-     * Java 8 на Windows малює своїм старим растеризатором; текст виходив приблизно у 2 рази більшим (2048 / 1000).
-     * На Adoptium Java 8 (freetype) нормально, але на Java 8 просто лишаємо Segoe UI, як до 1.36.5.
+     * 1.36.6: зареєструвати наш Inter у Java (родини «Inter», «Inter SemiBold», «Inter Light»). Раніше брали Inter з
+     * flatlaf-fonts-inter, а там OpenType з CFF (2048 одиниць на em); Oracle Java 8 на Windows малює CFF своїм старим
+     * растеризатором, і текст виходив приблизно у 2 рази більшим (так було на обох машинах власника після 1.36.5,
+     * старий Gummer_Craft_launcher.exe на Oracle Java 1.8.0_511). Ті самі шрифти у TrueType Java 8 малює як звичайні
+     * системні (Segoe UI теж TrueType). true, якщо зареєстровано основне накреслення.
      */
-    public static boolean oldJava() {
-        return System.getProperty("java.specification.version", "").startsWith("1.");
+    public static boolean installInter() {
+        boolean regular = false;
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        for (String name : FILES) {
+            try (InputStream in = FontCheck.class.getResourceAsStream(DIR + name)) {
+                if (in == null) continue;
+                boolean ok = ge.registerFont(Font.createFont(Font.TRUETYPE_FONT, in));
+                if (ok && name.equals(FILES[0])) regular = true;
+            } catch (Exception e) {
+                log.info("UI font: cannot load " + name + ": " + e);
+            }
+        }
+        return regular;
     }
 
-    /** Чи є в системі свій шрифт з родиною «Inter» (викликати до FlatInterFont.install). */
+    /** Чи є в системі свій шрифт з родиною «Inter» (викликати до installInter). */
     public static boolean systemHasInter() {
         try {
             Font f = new Font("Inter", Font.PLAIN, 12);
@@ -95,7 +111,7 @@ public final class FontCheck {
     }
 
     private static Font bundledInter(float size) {
-        try (InputStream in = FontCheck.class.getResourceAsStream("/com/formdev/flatlaf/fonts/inter/Inter-Regular.otf")) {
+        try (InputStream in = FontCheck.class.getResourceAsStream(DIR + FILES[0])) {
             if (in == null) return null;
             return Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(Font.PLAIN, size);
         } catch (Exception e) {

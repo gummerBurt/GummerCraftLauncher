@@ -26,7 +26,8 @@ dependencies {
     implementation project(path: ':launcher-shared')
     implementation project(path: ':launcher')
     implementation 'com.formdev:flatlaf:3.5.4'
-    implementation 'com.formdev:flatlaf-fonts-inter:4.0' // 20.11.2026: шрифт інтерфейсу (FancyLauncher)
+    // 1.36.6: flatlaf-fonts-inter прибрано: Inter лежить у ресурсах як TrueType (com/gummer/launcher/fonts, tools/inter-otf2ttf.py),
+    // бо його OTF (CFF) Oracle Java 8 малювала вдвічі більшим
     implementation 'net.java.dev.jna:jna-platform:5.11.0' // 17.11.2026: look/WinPlacement (та сама версія, що в :launcher)
 }
 

@@ -63,14 +63,13 @@ public class FancyLauncher {
                         // 20.11.2026 (власник: «шрифти наче зжаті ... в очах мерехтить»): шрифт інтерфейсу Inter замість
                         // системного Segoe UI. Java малює Segoe UI власним растеризатором, і на масштабі 125% він виходить
                         // щільним і важким; Inter зроблений для екранів і в Java рівний. Повернути Segoe: -Dgummer.font=segoe
-                        // 1.36.6: лише якщо в системі немає свого «Inter» і розміри збігаються з нашим файлом (look.FontCheck),
+                        // 1.36.6: наш Inter у TrueType (look.FontCheck.installInter), лише якщо в системі немає свого «Inter» і розміри збігаються,
                         // інакше Segoe UI, як до 1.36.5 (після 1.36.5 у власника на двох машинах текст був удвічі більший)
                         String fontChoice;
                         if( "segoe".equalsIgnoreCase( System.getProperty( "gummer.font" ) ) ) { fontChoice = "Segoe UI (gummer.font=segoe)"; System.setProperty( "gummer.font.used", "segoe" ); }
-                        else if( com.gummer.launcher.look.FontCheck.oldJava() ) { fontChoice = "Segoe UI (Java 8)"; System.setProperty( "gummer.font.used", "java8" ); }
                         else if( com.gummer.launcher.look.FontCheck.systemHasInter() ) { fontChoice = "Segoe UI (system has its own Inter)"; System.setProperty( "gummer.font.used", "sysinter" ); }
+                        else if( !com.gummer.launcher.look.FontCheck.installInter() ) { fontChoice = "Segoe UI (Inter not registered)"; System.setProperty( "gummer.font.used", "noreg" ); }
                         else {
-                            com.formdev.flatlaf.fonts.inter.FlatInterFont.install();
                             setInter( true );
                             fontChoice = "Inter";
                             System.setProperty( "gummer.font.used", "inter" );
@@ -277,9 +276,9 @@ public class FancyLauncher {
     private static void setInter( boolean on ) {
         if( on ) System.setProperty( "gummer.font.inter", "true" ); // для розмірів у HTML (InstanceTableModel.fs)
         else System.clearProperty( "gummer.font.inter" );
-        com.formdev.flatlaf.FlatLaf.setPreferredFontFamily( on ? com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY : null );
-        com.formdev.flatlaf.FlatLaf.setPreferredLightFontFamily( on ? com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_LIGHT : null );
-        com.formdev.flatlaf.FlatLaf.setPreferredSemiboldFontFamily( on ? com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_SEMIBOLD : null );
+        com.formdev.flatlaf.FlatLaf.setPreferredFontFamily( on ? "Inter" : null );
+        com.formdev.flatlaf.FlatLaf.setPreferredLightFontFamily( on ? "Inter Light" : null );
+        com.formdev.flatlaf.FlatLaf.setPreferredSemiboldFontFamily( on ? "Inter SemiBold" : null );
     }
 
     public static void enforcePlatformDefaults() {
