@@ -262,6 +262,16 @@ public final class CrashDialog {
                 }
                 break;
             }
+            case MOVE_DATA_DIR:
+                // 20.11.2026 (тікет #88): лише після справжнього вильоту, щоб не чіпати тих, у кого гра з Документів іде
+                if (launcher != null) {
+                    primary = new JButton(tr("datadir.moveButton"));
+                    primary.addActionListener(e -> {
+                        dialog.dispose();
+                        com.gummer.launcher.util.DataDirCheck.offerMove(owner, launcher);
+                    });
+                }
+                break;
             case DRIVERS:
                 final String url = driversHelpUrl;
                 if (url != null && !url.isEmpty()) {

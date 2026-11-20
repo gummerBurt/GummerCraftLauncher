@@ -376,9 +376,15 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
         // process JVM runtime setup
         try {
+            // 20.11.2026 (тікет #88, власник: «може в таких випадках краще щоб лаунчер автоматично примусово знімав
+            // галочку? Але щоб не було фолс позитив»): Java, вибрана галочкою «використовувати вказані параметри»,
+            // береться, лише якщо вона є на диску і не старіша, ніж просить гра. Інакше на цей запуск наша Java (галочка
+            // і вибір гравця лишаються: для інших збірок його Java може підходити). Тільки ці два випадки, бо з ними гра
+            // однаково не запуститься; «занадто нова» Java не відкидається (часто працює, був би хибний відкид).
+            JavaRuntime enforced = null;
+            String enforcedReject = null;
             if (config.isEnforceRuntime()) {
-                // check if config enforceRuntime option enabled -- then use specified runtime
-                JavaRuntime runtime = Optional.ofNullable(instance.getSettings().getRuntime())
+                enforced = Optional.ofNullable(instance.getSettings().getRuntime())
                     .orElseGet(() -> {
                         JavaRuntime configRuntime = config.getJavaRuntime();
                         if (configRuntime != null) {
@@ -388,6 +394,15 @@ public class Runner implements Callable<Process>, ProgressObservable {
                             .flatMap(JavaRuntimeFinder::findBestJavaRuntime)
                             .orElse(null);
                     });
+                enforcedReject = com.gummer.launcher.util.EnforcedJava.reject(enforced,
+                        versionManifest.getJavaVersion() != null ? versionManifest.getJavaVersion().getMajorVersion() : 0);
+                if (enforcedReject != null) {
+                    log.warning("Chosen Java ignored for this launch (" + enforcedReject + "): " + enforced);
+                }
+            }
+            if (config.isEnforceRuntime() && enforcedReject == null) {
+                // check if config enforceRuntime option enabled -- then use specified runtime
+                JavaRuntime runtime = enforced;
                 builder.setRuntime(runtime);
                 SwingExtras.logDebugMessage(launcher, "builder.setRuntime", "using system runtime as config.isEnforceRuntime is true\n" + String.valueOf(runtime));
             } else if (RuntimePackJvmPath != null && !FileUtils.isDirEmpty(RuntimePackJvmPath)) {

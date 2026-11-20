@@ -52,6 +52,11 @@ public class SupportDialog extends JDialog {
 
     // чат
     private final JLabel chatTitle = new JLabel();
+    /** 20.11.2026: «адміністрація вже відповіла» над чатом, коли звіт з вікна вильоту чекає, а відповідь не прочитана. */
+    private final JTextArea chatBanner = wrapText("", false);
+    /** 20.11.2026: текст і тема звіту з вікна вильоту, поки гравець читає відповідь (форма їх не губить). */
+    private String pendingText;
+    private String pendingTopic;
     private final JEditorPane chatPane = new JEditorPane("text/html", "");
     private final JTextArea replyArea = new JTextArea(3, 40);
     private final JButton replyButton = new JButton(tr("support.reply"));
@@ -82,13 +87,34 @@ public class SupportDialog extends JDialog {
         if (open == null || !open.isDisplayable()) {
             open = new SupportDialog(owner, service, selectedInstance);
         }
+        open.pendingTopic = topic;
+        open.pendingText = text;
         open.showForm();
-        if (topic != null && SupportService.TOPICS.contains(topic)) open.topicBox.setSelectedItem(topic);
-        if (text != null) {
-            open.textArea.setText(text);
-            open.textArea.setCaretPosition(0);
-        }
         open.setVisible(true);
+        // 20.11.2026 (тікет #88: гравець тричі слав новий звіт про той самий виліт, не прочитавши відповідей): якщо на
+        // поточну розмову є непрочитана відповідь, спершу чат з нею і поясненням; «Нове звернення» поверне цей звіт
+        if (service.hasConversation()) {
+            final SupportDialog d = open;
+            new SwingWorker<Integer, Void>() {
+                @Override
+                protected Integer doInBackground() throws Exception {
+                    return service.unreadReplies();
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        if (get() > 0 && d.isDisplayable()) {
+                            d.showChat();
+                            d.chatBanner.setText(tr("support.unreadBeforeNew"));
+                            d.chatBanner.setVisible(true);
+                        }
+                    } catch (Exception e) {
+                        log.log(Level.INFO, "Support: could not check replies before a new report: " + e);
+                    }
+                }
+            }.execute();
+        }
         open.toFront();
         // 1.33: звіт про відключення приходить, поки гра на весь екран, а головне вікно сховане. Ненадовго «поверх усіх»,
         // щоб форма не загубилась за грою; далі звичайне вікно, яке можна сховати за інші.
@@ -195,10 +221,12 @@ public class SupportDialog extends JDialog {
         nickField.setText(service.defaultNick());
         topicBox.setSelectedItem(SupportService.defaultTopic(selectedInstance.get()));
         contactField.setText(s.contact != null ? s.contact : "");
-        textArea.setText("");
+        if (pendingTopic != null && SupportService.TOPICS.contains(pendingTopic)) topicBox.setSelectedItem(pendingTopic);
+        textArea.setText(pendingText != null ? pendingText : "");
+        textArea.setCaretPosition(0);
         formError.setText(" ");
         toChatButton.setVisible(service.hasConversation());
-        toChatButton.setText(tr("support.backToChat", s.conversationId));
+        toChatButton.setText(tr("support.backToChatAll"));
         cards.show(root, "form");
         SwingUtilities.invokeLater(textArea::requestFocusInWindow);
     }
@@ -229,6 +257,8 @@ public class SupportDialog extends JDialog {
                 sendButton.setEnabled(true);
                 try {
                     get();
+                    pendingText = null;
+                    pendingTopic = null;
                     shownMaxId = -1;
                     showChat();
                 } catch (InterruptedException | ExecutionException e) {
@@ -260,6 +290,11 @@ public class SupportDialog extends JDialog {
         JPanel p = new JPanel(new MigLayout("insets 16 18 14 18, wrap 1, fill", "[0:0:,grow,fill]", "[][][grow,fill][][][]"));
         chatTitle.putClientProperty("FlatLaf.styleClass", "h3");
         p.add(chatTitle);
+        chatBanner.setOpaque(true);
+        chatBanner.setBackground(new Color(0xFF, 0xC1, 0x07, 60));
+        chatBanner.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        chatBanner.setVisible(false);
+        p.add(chatBanner, "hidemode 3, gapbottom 4");
         JTextArea note = wrapText(tr("support.chatNote"), true);
         p.add(note, "gapbottom 4");
 
@@ -291,8 +326,9 @@ public class SupportDialog extends JDialog {
 
     private void showChat() {
         SupportState s = service.getState();
-        chatTitle.setText(tr("support.chatTitle", s.conversationId, s.topic != null ? s.topic : ""));
+        chatTitle.setText(tr("support.chatTitleAll"));
         chatStatus.setText(" ");
+        chatBanner.setVisible(false);
         cards.show(root, "chat");
         refreshChat();
         poll.start();
@@ -334,7 +370,15 @@ public class SupportDialog extends JDialog {
         if (messages.isEmpty()) {
             html.append("<p style=\"color:#8a8f98\">").append(SwingHelper.htmlEscape(tr("support.noMessages"))).append("</p>");
         }
+        int conv = -1;
         for (SupportMessage m : messages) {
+            // 20.11.2026: спільний чат усіх звернень: перед кожним зверненням рядок з його номером і датою
+            if (m.conversationId > 0 && m.conversationId != conv) {
+                conv = m.conversationId;
+                html.append("<div style=\"color:#8a8f98; margin:6px 0 8px 0; border-top:1px solid #4a4f58; padding-top:4px\">")
+                        .append(SwingHelper.htmlEscape(tr("support.convSeparator", conv, time.format(new Date(m.createdAt)))))
+                        .append("</div>");
+            }
             boolean mine = m.isFromPlayer();
             String who = mine ? tr("support.you") : (m.senderName != null && !m.senderName.isEmpty() ? m.senderName : tr("support.admin"));
             String color = mine ? "#7fb2ff" : "#7fd99a";

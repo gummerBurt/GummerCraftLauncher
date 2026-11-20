@@ -21,6 +21,11 @@ public class SupportState {
     public String topic;
     /** Найбільший id повідомлення, яке гравець уже бачив у вікні (для «нова відповідь»). */
     public long lastSeenMessageId;
+    /**
+     * 20.11.2026: чат показує всі звернення гравця разом, тож «прочитано» одне на всі розмови (id повідомлень у Chatwoot
+     * наскрізні). false: старий support.json, де лічильник скидався з кожним новим зверненням (див. SupportService).
+     */
+    public boolean unifiedChat;
     /** Коли створювались розмови (мс): обмеження частоти. */
     public List<Long> createdAt = new ArrayList<Long>();
 }

@@ -602,7 +602,7 @@ public class LauncherFrameFlat2 extends JFrame {
      * {@link SupportUnread}), з числом непрочитаних на кнопці.
      */
     private void checkSupportReplies() {
-        SupportUnread.watch(this, supportService, n -> {
+        SupportUnread.watch(this, supportService, this::getSelectedInstance, n -> {
             supportButton.setToolTipText(SharedLocale.tr(n > 0 ? "support.newReplyTooltip" : "tooltip.support"));
             ((Btn) supportButton).setBadge(n);
         }, () -> showNotification(LauncherFrameFlat2.rootFrame, LauncherFrameFlat2.class, Notification.Type.INFO,

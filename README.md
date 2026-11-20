@@ -24,6 +24,13 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
 
+## Що нового в 1.36.4
+
+- **Усі звернення в підтримку в одному чаті:** у вікні «Підтримка» видно всі свої звернення та відповіді адміністрації однією стрічкою, тож відповідь на старе звернення більше не загубиться.
+- **Відповідь підтримки видно одразу:** коли адміністрація відповіла, лаунчер показує вікно з текстом відповіді. Якщо після вильоту відповідь ще не переглянута, спершу покаже її, а вже потім нове звернення.
+- **Кирилиця в шляху до гри:** якщо гра не запускається, бо Windows не передає Java літери в шляху (наприклад «Документи»), у вікні вильоту є кнопка «Перевстановити до нової теки».
+- Java, вибрана в налаштуваннях вручну, не заважає запуску, якщо її видалили або вона застара для цієї версії гри: тоді на цей запуск береться Java лаунчера.
+
 ## Що нового в 1.36.3
 
 - **Імпорт збірок з інших лаунчерів:** рядок «Імпорт збірки» під Modrinth у списку збірок та вкладка «Імпорт/Експорт» у вікні «Збірка». Лаунчер сам знаходить збірки Prism Launcher, PolyMC, ATLauncher, CurseForge, Modrinth App (стара версія), TLauncher, SKlauncher та офіційного лаунчера Minecraft, визначає версію гри та завантажувач і переносить моди, налаштування, ресурспаки та шейдери в нову збірку, а світи за бажанням. Теку MultiMC чи будь-якого іншого лаунчера можна вибрати вручну. Нового Modrinth App поки немає: він зберігає збірки у своїй базі.
@@ -272,6 +279,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.36.4:** all support requests and replies in one chat in the Support window, a window with the reply text when the administration answers (shown before a new crash report if the reply is unread); a "Reinstall to a new folder" button in the crash window when Windows cannot pass the letters of the game path to Java (for example a Cyrillic "Documents"); a Java chosen by hand that is missing or too old for the game version is skipped for that launch.
 
 **1.36.3:** import builds from other launchers (Prism Launcher, PolyMC, ATLauncher, CurseForge, the old Modrinth App, TLauncher, SKlauncher, the official launcher; MultiMC or any other folder by hand) with the game version and mod loader detected; a graphics card choice per build on PCs with two graphics cards (see "what the launcher does on your computer" below); "Delete all builds" and "Delete the launcher and all builds" buttons; Java updates with update and rollback buttons and an optional auto-update; more crash and pre-launch hints (mod for the wrong Minecraft version, incompatible mod pairs, broken mod config, bad Java arguments, corrupted world, old Forge with Cyrillic in the path, roll back a mod after an update); a disk space check before downloads; a clear message when an antivirus blocks a file; a lighter mode without blur and animations on Mac and Linux; faster tab switching in the Build window.
 

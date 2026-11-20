@@ -97,23 +97,44 @@ public class SupportClient {
         JsonNode arr = json("GET", messagesPath(sourceId, conversationId), null);
         java.util.List<SupportMessage> list = new java.util.ArrayList<SupportMessage>();
         if (arr.isArray()) {
-            for (JsonNode m : arr) {
-                SupportMessage msg = new SupportMessage();
-                msg.id = m.path("id").asLong();
-                msg.content = m.path("content").isNull() ? "" : m.path("content").asText("");
-                msg.messageType = m.path("message_type").asInt();
-                msg.createdAt = m.path("created_at").asLong() * 1000L;
-                JsonNode sender = m.path("sender");
-                msg.senderName = sender.path("available_name").asText(sender.path("name").asText(""));
-                for (JsonNode a : m.path("attachments")) {
-                    String url = a.path("data_url").asText("");
-                    if (!url.isEmpty()) msg.attachments.add(url);
-                }
-                list.add(msg);
+            for (JsonNode m : arr) list.add(parse(m, conversationId));
+        }
+        list.sort((a, b) -> Long.compare(a.id, b.id));
+        return list;
+    }
+
+    /**
+     * 20.11.2026: усі розмови цього контакту з їх повідомленнями одним запитом (Client API «list conversations»: лише
+     * розмови цього source_id; повідомлення в scope chat, тобто без приватних нотаток і службових подій), від старих
+     * до нових. Для спільного чату всіх звернень гравця.
+     */
+    public List<SupportMessage> allMessages(String sourceId) throws IOException {
+        JsonNode arr = json("GET", "/contacts/" + enc(sourceId) + "/conversations", null);
+        java.util.List<SupportMessage> list = new java.util.ArrayList<SupportMessage>();
+        if (arr.isArray()) {
+            for (JsonNode c : arr) {
+                int conv = c.path("id").asInt(0);
+                for (JsonNode m : c.path("messages")) list.add(parse(m, conv));
             }
         }
         list.sort((a, b) -> Long.compare(a.id, b.id));
         return list;
+    }
+
+    private static SupportMessage parse(JsonNode m, int conversationId) {
+        SupportMessage msg = new SupportMessage();
+        msg.id = m.path("id").asLong();
+        msg.conversationId = m.path("conversation_id").asInt(conversationId);
+        msg.content = m.path("content").isNull() ? "" : m.path("content").asText("");
+        msg.messageType = m.path("message_type").asInt();
+        msg.createdAt = m.path("created_at").asLong() * 1000L;
+        JsonNode sender = m.path("sender");
+        msg.senderName = sender.path("available_name").asText(sender.path("name").asText(""));
+        for (JsonNode a : m.path("attachments")) {
+            String url = a.path("data_url").asText("");
+            if (!url.isEmpty()) msg.attachments.add(url);
+        }
+        return msg;
     }
 
     private String messagesPath(String sourceId, int conversationId) {

@@ -34,6 +34,8 @@ public final class CrashAnalyzer {
         RESET_CONFIG,
         /** 19.11.2026: прибрати параметр Java, якого Java не знає ({@link Diagnosis#detail}). */
         JVM_ARG,
+        /** 20.11.2026: перейти на безпечну теку даних ({@link com.gummer.launcher.util.DataDirCheck#offerMove}). */
+        MOVE_DATA_DIR,
         /** Без особливої дії: лише підтримка. */
         NONE
     }
@@ -109,6 +111,11 @@ public final class CrashAnalyzer {
         Diagnosis d = match(t, source);
         if (d != null && "brokenConfig".equals(d.key)) return withConfig(instance, d);
         if (d != null) return withMod(instance, d);
+        // 20.11.2026 (тікет #88): шлях з літерами, яких немає в кодовій сторінці Windows для програм: Java бачить «?»
+        // замість них і не знаходить файлів. Будь-яка версія гри; часто гра падає ще до логу, тож без умови на текст,
+        // але лише коли відомої причини немає (щоб не підміняти справжню)
+        path = badLettersPath(instance, source);
+        if (path != null) return path;
         // відомі коди виходу Windows: 0xC0000005 (-1073741819) доступ до пам'яті, найчастіше драйвер відеокарти
         if (exitCode == -1073741819 || exitCode == -1073740791) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
@@ -253,6 +260,18 @@ public final class CrashAnalyzer {
             // без цієї поради
         }
         return null;
+    }
+
+    /** 20.11.2026: тека збірки з літерами, яких Windows не передасть Java (лише Windows). */
+    private static Diagnosis badLettersPath(Instance instance, File source) {
+        try {
+            String path = instance.getContentDir().getAbsolutePath();
+            if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows")) return null;
+            if (com.gummer.launcher.util.DataDirCheck.encodable(path)) return null;
+            return new Diagnosis("badLetters", Action.MOVE_DATA_DIR, path, source);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     /** Знайти пошкоджений конфіг у теці config збірки (за назвою файлу, до трьох рівнів углиб); один збіг: кнопка. */

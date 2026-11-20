@@ -165,7 +165,8 @@ public class SupportService {
             state.contact = contact;
             state.conversationId = conv;
             state.topic = topic;
-            state.lastSeenMessageId = 0;
+            // 20.11.2026: не скидаємо «прочитано»: чат спільний для всіх звернень, а id повідомлень наскрізні. Раніше
+            // скидання тут разом з чатом лише останньої розмови губило непрочитані відповіді (тікет #88)
             state.createdAt.add(System.currentTimeMillis());
             save();
         }
@@ -221,6 +222,11 @@ public class SupportService {
         return conv;
     }
 
+    /**
+     * 20.11.2026 (власник: «Нехай гравець матиме в лаунчері "чат", зі всіма ЙОГО зверненнями та НАШИМИ відповідями»):
+     * повідомлення всіх розмов гравця одним запитом, від старих до нових. Якщо список розмов не вдався (наприклад,
+     * інший сервер підтримки без цього запиту), лише поточна розмова, як раніше.
+     */
     public List<SupportMessage> messages() throws IOException {
         String s;
         int c;
@@ -229,7 +235,34 @@ public class SupportService {
             c = state.conversationId;
         }
         if (s == null || c <= 0) return new ArrayList<SupportMessage>();
-        return client.messages(s, c);
+        List<SupportMessage> all;
+        try {
+            all = client.allMessages(s);
+        } catch (SupportClient.SupportException e) {
+            if (e.code != 404) throw e;
+            all = client.messages(s, c);
+        }
+        migrateSeen(all, c);
+        return all;
+    }
+
+    /**
+     * Один раз після оновлення зі старого лаунчера: там «прочитано» скидалось з кожним новим зверненням, тож старі
+     * відповіді в попередніх розмовах інакше раптом стали б «новими». Вважаємо прочитаними відповіді, що прийшли
+     * раніше за перше повідомлення поточної розмови; відповіді в поточній лишаються як є.
+     */
+    private synchronized void migrateSeen(List<SupportMessage> all, int current) {
+        if (state.unifiedChat) return;
+        long firstOfCurrent = Long.MAX_VALUE;
+        for (SupportMessage m : all) if (m.conversationId == current) firstOfCurrent = Math.min(firstOfCurrent, m.id);
+        if (firstOfCurrent == Long.MAX_VALUE) return; // поточної розмови в списку немає: спробуємо наступного разу
+        long seen = state.lastSeenMessageId;
+        for (SupportMessage m : all) {
+            if (!m.isFromPlayer() && m.id < firstOfCurrent) seen = Math.max(seen, m.id);
+        }
+        state.lastSeenMessageId = seen;
+        state.unifiedChat = true;
+        save();
     }
 
     public void send(String text) throws IOException {
@@ -245,15 +278,20 @@ public class SupportService {
 
     /** Скільки відповідей адміна гравець ще не бачив (для позначки на кнопці при старті). */
     public int unreadReplies() throws IOException {
+        return unreadReplyMessages().size();
+    }
+
+    /** 20.11.2026: самі непрочитані відповіді адміна (для вікна з текстом відповіді), від старих до нових. */
+    public List<SupportMessage> unreadReplyMessages() throws IOException {
         long seen;
         synchronized (this) {
             seen = state.lastSeenMessageId;
         }
-        int n = 0;
+        List<SupportMessage> out = new ArrayList<SupportMessage>();
         for (SupportMessage m : messages()) {
-            if (!m.isFromPlayer() && m.messageType == 1 && m.id > seen) n++;
+            if (!m.isFromPlayer() && m.messageType == 1 && m.id > seen) out.add(m);
         }
-        return n;
+        return out;
     }
 
     public synchronized void markSeen(long messageId) {
