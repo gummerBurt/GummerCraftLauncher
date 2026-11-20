@@ -231,7 +231,7 @@ public class FlatBackgroundPanel2 extends JPanel {
     private Properties layout(String key) {
         return layouts.computeIfAbsent(key, k -> {
             Properties props = new Properties();
-            try (InputStream in = Launcher.class.getResourceAsStream("ui/frame/frame_" + k + ".properties")) {
+            try (InputStream in = com.gummer.launcher.look.FrameImages.layoutStream(k)) {
                 if (in != null) props.load(new InputStreamReader(in, StandardCharsets.UTF_8));
             } catch (IOException e) {
                 props.clear();

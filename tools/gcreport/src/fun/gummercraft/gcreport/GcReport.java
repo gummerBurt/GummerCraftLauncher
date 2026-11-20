@@ -52,6 +52,8 @@ public final class GcReport implements ClientModInitializer {
     private static String lastServer = "";
 
     private static Object curScreen, curButton;
+    /** Усі кнопки, які ми коли-небудь додали (слабкі посилання): щоб не додати другу на той самий екран. */
+    private static final java.util.Map<Object, Boolean> OURS = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
     private static int scrW, scrH;
     private static Object stateScreen;
     private static String state; // null | waiting | opened | bot | failed
@@ -103,10 +105,23 @@ public final class GcReport implements ClientModInitializer {
         }
         scrW = w;
         scrH = h;
-        Object button = newButton(text(label()), () -> send(screen));
-        if (button == null) return;
         @SuppressWarnings("unchecked")
         List<Object> list = (List<Object>) buttonsOf.invoke(null, screen);
+        // 20.11.2026 (власник зі скріном Main 26.2: дві кнопки «Надіслати звіт у техпідтримку»): у нових версіях гри зміна розміру
+        // вікна кличе AFTER_INIT ще раз, а кнопки екрана не очищаються (repositionElements замість init). Наша кнопка вже є: лише
+        // переставляємо її, нову не додаємо і слухача тіку вдруге не реєструємо.
+        for (Object existing : new ArrayList<>(list)) {
+            if (OURS.containsKey(existing)) {
+                curScreen = screen;
+                curButton = existing;
+                applyState();
+                place();
+                return;
+            }
+        }
+        Object button = newButton(text(label()), () -> send(screen));
+        if (button == null) return;
+        OURS.put(button, Boolean.TRUE);
         list.add(button);
         curScreen = screen;
         curButton = button;

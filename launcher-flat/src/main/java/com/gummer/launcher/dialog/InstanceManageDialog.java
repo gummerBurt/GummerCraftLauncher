@@ -1738,7 +1738,7 @@ public class InstanceManageDialog extends JDialog {
             } else {
                 g2.setColor(pal.surface3);
                 g2.fillRoundRect(0, 0, w, h, 10, 10);
-                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                com.gummer.launcher.look.TextAA.apply(g2);
                 g2.setFont(getFont().deriveFont(Font.BOLD, 18f));
                 FontMetrics fm = g2.getFontMetrics();
                 g2.setColor(pal.text2);
@@ -1932,16 +1932,13 @@ public class InstanceManageDialog extends JDialog {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            com.gummer.launcher.look.TextAA.apply(g2);
             int w = getWidth(), h = getHeight();
             int arc = pal.library() ? h : pal.glass() ? 14 : 8;
             // доріжка
-            g2.setColor(pal.glass() ? new Color(255, 255, 255, 12) : pal.surface);
-            g2.fillRoundRect(0, 0, w, h, arc, arc);
-            if (!pal.library()) {
-                g2.setColor(pal.glass() ? new Color(255, 255, 255, 30) : pal.line);
-                g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
-            }
+            // 20.11.2026: по фізичних пікселях (look.Edge)
+            com.gummer.launcher.look.Edge.pill(g2, 0, 0, w, h, arc, pal.glass() ? new Color(255, 255, 255, 12) : pal.surface,
+                    pal.library() ? null : pal.glass() ? new Color(255, 255, 255, 30) : pal.line);
             int n = labels.length, cell = (w - 8) / n;
             for (int i = 0; i < n; i++) {
                 int x = 4 + i * cell, y = 4, sw = i == n - 1 ? w - 8 - cell * (n - 1) : cell, sh = h - 8;

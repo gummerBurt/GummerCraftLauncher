@@ -56,6 +56,15 @@ public final class ModrinthPage extends JPanel {
     private final Consumer<String> play;
     private ModrinthBrowse.Kind kind = ModrinthBrowse.Kind.MODPACK;
     private final JLabel title = LookUi.title(tr("mpage.title"), 22f);
+    /**
+     * 20.11.2026 (власник: «Де кнопка зміни дизайну?»): місце праворуч у шапці. Бібліотека переносить сюди «Вигляд» з
+     * лайком, бо сторінка закриває героя, де вони живуть; у Склі та Класиці порожнє (там «Вигляд» у бічній панелі).
+     */
+    private final JPanel headerSlot = new JPanel(new BorderLayout());
+
+    public JPanel headerSlot() {
+        return headerSlot;
+    }
     private final WrapText hint;
     private final JComboBox<String> categoryBox = new JComboBox<String>();
     private final JComboBox<String> sortBox = new JComboBox<String>();
@@ -89,12 +98,14 @@ public final class ModrinthPage extends JPanel {
         setOpaque(false);
         LookTheme.Palette p = LookTheme.palette();
 
-        JPanel top = new JPanel(new MigLayout("insets 0, gap 16", "[][]push", "[]"));
+        JPanel top = new JPanel(new MigLayout("insets 0, gap 16", "[][]push[]", "[]"));
         top.setOpaque(false);
         top.add(title);
         com.gummer.launcher.look.ListModeSwitch tabs = new com.gummer.launcher.look.ListModeSwitch(
                 tr("mpage.tab.packs"), tr("mpage.tab.mods"), false, mods -> setKind(mods ? ModrinthBrowse.Kind.MOD : ModrinthBrowse.Kind.MODPACK));
         top.add(tabs, "aligny center, w 220!, h 30!");
+        headerSlot.setOpaque(false);
+        top.add(headerSlot, "aligny center");
         add(top, "wmin 0");
         hint = new WrapText(tr("mpage.hint")); // 17.11.2026: у Класиці звичайний текст обрізався збоку
         add(hint, "gaptop 4, wmin 0");

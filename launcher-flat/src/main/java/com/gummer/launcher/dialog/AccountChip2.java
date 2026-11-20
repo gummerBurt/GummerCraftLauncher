@@ -44,7 +44,7 @@ final class AccountChip2 extends JPanel {
         super(new MigLayout("insets 0 10 0 12, gap 8 0", "[][grow]", "[grow,center]"));
         this.launcher = launcher;
         setOpaque(false);
-        userIcon = com.skcraft.launcher.swing.CrispIcon.of(Launcher.class, "ui/icon/light/user.png", HEAD - 6, HEAD - 6);
+        userIcon = new com.gummer.launcher.look.UserIcon(HEAD - 6); // 20.11.2026: векторний замість user.png 16x16
         text.setForeground(com.gummer.launcher.ui2.Ui.TEXT);
         text.setFont(com.gummer.launcher.ui2.Ui.font(Font.BOLD, 12.5f));
         caption.setForeground(com.gummer.launcher.ui2.Ui.TEXT_3);

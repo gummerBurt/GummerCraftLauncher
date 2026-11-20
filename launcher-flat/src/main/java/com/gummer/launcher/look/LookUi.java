@@ -271,19 +271,15 @@ public final class LookUi {
                 LookTheme.Palette p = LookTheme.palette();
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                com.gummer.launcher.look.TextAA.apply(g2);
                 int w = getWidth(), h = getHeight();
                 boolean on = selected == index;
                 int arc = p.library() ? h : p.glass() ? 12 : 6;
                 if (on) {
                     if (p.glass()) {
                         // 17.11.2026: рамка на півпікселя всередині, щоб на 125% і 150% жоден її край не падав за межу пункту
-                        java.awt.geom.RoundRectangle2D.Float rr = new java.awt.geom.RoundRectangle2D.Float(0.5f, 0.5f, w - 1.5f, h - 1.5f, arc, arc);
-                        g2.setColor(new Color(255, 255, 255, 30));
-                        g2.fill(rr);
-                        g2.setColor(new Color(255, 255, 255, 46));
-                        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
-                        g2.draw(rr);
+                        // 20.11.2026: по фізичних пікселях (Edge), рамка однакова зверху і знизу
+                        Edge.pill(g2, 0, 0, w, h, arc, new Color(255, 255, 255, 30), new Color(255, 255, 255, 46));
                     } else if (p.library()) {
                         g2.setColor(p.surface3);
                         g2.fillRoundRect(0, 0, w, h, arc, arc);

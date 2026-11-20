@@ -66,7 +66,7 @@ public final class Ui {
     public static Graphics2D smooth(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        com.gummer.launcher.look.TextAA.apply(g2);
         g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
         return g2;
     }
@@ -77,9 +77,9 @@ public final class Ui {
 
     /** Рамка фокусу клавіатури: 2 px акцентом навколо елемента. */
     public static void focusRing(Graphics2D g2, int w, int h, int arc) {
-        g2.setColor(FOCUS);
-        g2.setStroke(new BasicStroke(2f));
-        g2.drawRoundRect(1, 1, w - 3, h - 3, arc, arc);
+        if (!com.gummer.launcher.look.FocusVisible.on()) return; // лише коли ходять клавіатурою (20.11.2026)
+        // 20.11.2026: по фізичних пікселях (look.Edge), раніше знизу лишався зазор 1 px, а зверху ні
+        com.gummer.launcher.look.Edge.pill(g2, 0, 0, w, h, arc + 2, null, FOCUS, 2.0);
     }
 
     /** Текст, що не влазить у ширину, обрізається з «…». */

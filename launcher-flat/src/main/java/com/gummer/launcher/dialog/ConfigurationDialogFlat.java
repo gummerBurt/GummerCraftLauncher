@@ -119,7 +119,7 @@ public class ConfigurationDialogFlat extends JDialog {
     //private final ImageIcon settingsIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/settings.png")));
     //private final ImageIcon javaIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/t/java.png")));
     //private final ImageIcon invaderIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/t/invader.png")));
-    private final static ImageIcon folderIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/folder.png")));
+    private final static Icon folderIcon = com.gummer.launcher.look.MenuIcon.FOLDER; // 20.11.2026: вектор, чітко на 125-150%
     private final static Map<Lang, ImageIcon> flagIcons = new HashMap<>();
 
     /**

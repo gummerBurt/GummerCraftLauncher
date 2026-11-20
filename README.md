@@ -24,6 +24,26 @@
 
 Зайти на StalDayZ можна прямо з цього лаунчера: обираєш у списку **StalDayZ**, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Крім StalDayZ, у лаунчері є збірки GummerCraft для різних версій Minecraft і чистий Minecraft від Mojang (розділ Vanilla).
 
+## Що нового в 1.36.5
+
+- **Дві вкладки над списком збірок:** ліворуч «Встановлені», праворуч «Додати +». Лаунчер відкривається на «Встановлених», а якщо там ще нічого немає, одразу на «Додати +».
+- **«Додати +» лише встановлює.** Vanilla, Fabric, Quilt, Forge, NeoForge та модпаки Modrinth там тільки ставляться. Якщо така версія вже є, поряд з'явиться ще одна, наприклад «Forge 1.16.5 (2)», а під кнопкою видно, скільки таких уже встановлено. Назву інсталяції можна змінити у вікні «Збірка», а видалити її правим кліком у «Встановлених».
+- **Сервери GummerCraft і StalDayZ** у «Додати +»: не встановлена версія з кнопкою «Встановити», встановлена одразу з «Запуском».
+- **Після встановлення** лаунчер сам переходить у «Встановлені» на нову збірку. Гра після встановлення більше не запускається сама: натисни «Запуск», коли будеш готовий.
+- **Liquid Glass:** у не встановленої збірки кнопка «Встановити» замість «Запуску», на тому самому місці.
+- **Бібліотека:** у вузькому вікні кнопки «Налаштування», «Вікі», «Підтримка» стискаються до значків (назва в підказці), тож нічого не виїжджає за край. Вибір вигляду тепер є і на сторінці Modrinth, і коли ще нічого не встановлено.
+- **Новий шрифт, чіткіший текст:** весь лаунчер тепер пише шрифтом Inter, зробленим спеціально для екранів, і згладжує його так само, як Windows (ClearType). Раніше на масштабі екрана 125% і подібних літери стискались, відступи між ними були нерівні, і текст наче мерехтів.
+- **Чіткі іконки:** значок акаунта, Telegram, Discord та іконки меню правого кліку тепер векторні, решта значків рівняється по пікселях екрана, прапорці UA / EN рівніші, а піксельні кнопки (Telegram, Discord, «Підтримати», «Запуск») більше не розмиваються на масштабі 125% і 150%.
+- **Esc закриває вікна:** налаштування, акаунт, «Збірка» та інші вікна лаунчера закриваються клавішею Esc, як хрестиком.
+- **Менше пам'яті під час гри:** поки йде гра, лаунчер звільняє готові картинки фонів і віддає пам'ять системі (на нашому тесті приблизно на 120 МБ менше).
+- Виправлено: жовтий напис біля лого Liquid Glass у малому вікні налазив на прапорці UA / EN і плашку акаунта; кнопки лайку і «Фідбек по дизайну» стоять ближче до «Вигляд» і не вилазять за бічну панель; рамки кнопок і плашок (лайк, акаунт, прапорці, вибрана збірка, сповіщення, картки новин) на масштабі 125% і 150% більше не зрізані зверху чи знизу; кнопка відміни всюди «Скасувати» (і в стандартних вікнах підтвердження замість англійських Cancel, Yes, No); другий рядок у списку збірок Liquid Glass («Усі версії та модпаки») стоїть рівно під назвою.
+- Виправлено: логотип GummerCraft стояв то вище, то нижче залежно від версії Main.
+- Виправлено: у Класиці кнопка «Збірка» стоїть по центру кнопки «ГРАТИ», а прапорці UA / EN такої ж висоти, як сусідні кнопки; зелена рамка вибору з'являється лише тоді, коли ходиш клавішами Tab чи стрілками (раніше одразу після запуску стояла на першій кнопці); у вікні «Підтримка» поле для питання займає всю висоту вікна, без порожнечі під «Надіслати».
+- Виправлено: якщо гру закрили через диспетчер завдань, лаунчер міг помилково назвати винним мод, про який у журналі гри було лише звичайне попередження.
+- Виправлено: у меню правого кліку по порожньому місцю списку зверху була зайва смужка.
+- Виправлено: «Оновлення Java» пропонувало оновитись на ту саму версію, що вже стоїть.
+- Виправлено: на екрані відключення від сервера (GummerCraft на новій версії Minecraft) кнопка «Надіслати звіт у техпідтримку» могла з'являтись двічі.
+
 ## Що нового в 1.36.4
 
 - **Усі звернення в підтримку в одному чаті:** у вікні «Підтримка» видно всі свої звернення та відповіді адміністрації однією стрічкою, тож відповідь на старе звернення більше не загубиться.
@@ -279,6 +299,8 @@ python tools/verify-cdn.py
 ## English summary
 
 GummerCraft Launcher installs and updates modpacks for the GummerCraft Minecraft servers and launches the game with a Microsoft account. It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
+
+**1.36.5:** new UI font Inter and system ClearType text on Windows (Segoe UI with forced grayscale antialiasing looked squeezed at 125% scaling); sharp icons at 125-150% scaling (vector account, Telegram, Discord and context menu icons, pixel-snapped glyphs and flags, sharp pixel-art buttons); Esc closes launcher dialogs; the Liquid Glass splash no longer overlaps the UA / EN flags and account chips, the like and design feedback buttons sit closer to the look switch and stay inside the sidebar, rounded borders (like button, account chips, flags, selected pack, toasts, news cards) are no longer clipped at 125-150% scaling, a game closed from Task Manager no longer blames a mod that only logged a harmless warning, the launcher frees background images while the game runs (about 120 MB less memory), Classic: the build button is centred on PLAY and the flags match the button height, the keyboard focus ring shows only after Tab or arrow keys, the support form fills the window, standard confirm dialogs use the launcher language for OK / Cancel / Yes / No, list subtitles are aligned with titles; the GummerCraft logo no longer jumps between Main versions; two tabs above the build list, "Installed" (left, opens on start) and "Add +" (opens on start when nothing is installed yet); "Add +" only installs: Vanilla, Fabric, Quilt, Forge, NeoForge and Modrinth modpacks are added as a new installation each time ("Forge 1.16.5 (2)" next to an existing one, with a count under the button), the GummerCraft and StalDayZ servers show "Install" or "Play"; after installing the launcher switches to "Installed" on the new build and no longer starts the game by itself; an "Install" button in Liquid Glass; in the Library the top buttons shrink to icons in a narrow window and the look picker is shown on the Modrinth page and with no builds installed; fixes: the Java updates tile no longer offers the same version, and the "Send a report to support" button no longer appears twice on the disconnect screen.
 
 **1.36.4:** all support requests and replies in one chat in the Support window, a window with the reply text when the administration answers (shown before a new crash report if the reply is unread); a "Reinstall to a new folder" button in the crash window when Windows cannot pass the letters of the game path to Java (for example a Cyrillic "Documents"); a Java chosen by hand that is missing or too old for the game version is skipped for that launch.
 

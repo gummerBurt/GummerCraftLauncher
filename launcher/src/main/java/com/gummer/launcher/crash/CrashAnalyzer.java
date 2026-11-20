@@ -123,8 +123,27 @@ public final class CrashAnalyzer {
         return new Diagnosis("unknown", Action.NONE, null, source);
     }
 
+    /** Рядок журналу гри з рівнем INFO, WARN, DEBUG чи TRACE: «[12:00:00] [Render thread/WARN]: ...» чи «[main/INFO]». */
+    private static final Pattern QUIET_LINE = Pattern.compile("^(?:\\[[^\\]]*\\] )?\\[[^\\]]*/(?:INFO|WARN|DEBUG|TRACE)\\]");
+
+    /** Текст без рядків {@link #QUIET_LINE} і їх продовжень (рядки без «[» на початку), доки не почнеться новий запис. */
+    static String withoutQuietLines(String t) {
+        StringBuilder out = new StringBuilder(t.length());
+        boolean quiet = false;
+        for (String line : t.split("\n", -1)) {
+            if (line.startsWith("[")) quiet = QUIET_LINE.matcher(line).find();
+            if (!quiet) out.append(line).append('\n');
+        }
+        return out.toString();
+    }
+
     /** Пошук відомих причин у тексті звіту чи лога. Пакетний доступ для перевірки. */
     static Diagnosis match(String t, File source) {
+        // 20.11.2026: без рядків журналу рівня INFO, WARN, DEBUG і TRACE. Гра пише туди нешкідливі речі, які збігались
+        // із причинами: попередження Mixin «... from mod sspb::...» (тест: вбита ззовні гра показала «вбив мод Sodium
+        // Shadowy Path Blocks»), необов'язкова сумісність з NoClassDefFoundError. Справжня причина буває в ERROR, FATAL,
+        // у стеку (рядки без рівня) або у звіті про збій
+        String strict = withoutQuietLines(t);
         // 18.11.2026 (власник обрав: «помічник при вильоті розпізнає цей текст і пише гравцю по-людськи»): модпак, автори
         // якого дозволяють гру лише зі свого лаунчера (Official Grand Theft Warzone, мод GtwNpc: «Invalid minecraft
         // configuration. Unsupported launcher. Stopping.»). Це їхній захист, лаунчер його не обходить. Першим: у такому
@@ -199,12 +218,12 @@ public final class CrashAnalyzer {
         if (incompatible.find() || t.contains("Incompatible mods found!") || t.contains("ModResolutionException")) {
             return new Diagnosis("modConflict", Action.REINSTALL, firstGroupOrNull(incompatible), source);
         }
-        Matcher mixin = Pattern.compile("Mixin apply(?: for mod ([A-Za-z0-9_\\-]+))? failed").matcher(t);
+        Matcher mixin = Pattern.compile("Mixin apply(?: for mod ([A-Za-z0-9_\\-]+))? failed").matcher(strict);
         if (mixin.find()) {
             return new Diagnosis("mixin", Action.REINSTALL, mixin.group(1), source);
         }
         if (t.contains("java.util.zip.ZipException") || t.contains("zip END header not found") || t.contains("Invalid or corrupt jarfile")
-                || t.contains("java.lang.NoClassDefFoundError") || t.contains("java.lang.ClassNotFoundException: net.minecraft")) {
+                || strict.contains("java.lang.NoClassDefFoundError") || t.contains("java.lang.ClassNotFoundException: net.minecraft")) {
             return new Diagnosis("corrupt", Action.REINSTALL, null, source);
         }
         if (t.contains("There is not enough space on the disk") || t.contains("No space left on device")) {
@@ -225,7 +244,7 @@ public final class CrashAnalyzer {
         if (suspected.find() && !BUILTIN.contains(suspected.group(2))) {
             return new Diagnosis("modCrash", Action.NONE, suspected.group(2), source);
         }
-        Matcher fromMod = Pattern.compile("from mod ([a-z0-9_\\-]+)").matcher(t);
+        Matcher fromMod = Pattern.compile("from mod ([a-z0-9_\\-]+)").matcher(strict);
         while (fromMod.find()) {
             if (!BUILTIN.contains(fromMod.group(1))) return new Diagnosis("modCrash", Action.NONE, fromMod.group(1), source);
         }

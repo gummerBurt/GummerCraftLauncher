@@ -23,14 +23,10 @@ final class SkinChip extends JPanel {
     /** Сіра напівпрозора підкладка з тонкою рамкою (SkinChip і AccountChip, дизайн 1.35). */
     static void paintGlassChip(Graphics2D g2, JComponent c, boolean hover) {
         // 17.11.2026: темна підкладка, як у хотбара (на світлому фоні Vanilla сірий підпис «Акаунт ГК» губився)
-        g2.setColor(new Color(0, 0, 0, 120));
-        g2.fillRoundRect(0, 0, c.getWidth(), c.getHeight(), 12, 12);
-        if (hover) {
-            g2.setColor(new Color(255, 255, 255, 28));
-            g2.fillRoundRect(0, 0, c.getWidth(), c.getHeight(), 12, 12);
-        }
-        g2.setColor(new Color(255, 255, 255, hover ? 70 : 40));
-        g2.drawRoundRect(0, 0, c.getWidth() - 1, c.getHeight() - 1, 12, 12);
+        // 20.11.2026: рамка по фізичних пікселях (look.Edge), раніше верхній край на 125% зрізало
+        com.gummer.launcher.look.Edge.pill(g2, 0, 0, c.getWidth(), c.getHeight(), 12, new Color(0, 0, 0, 120), null);
+        com.gummer.launcher.look.Edge.pill(g2, 0, 0, c.getWidth(), c.getHeight(), 12, hover ? new Color(255, 255, 255, 28) : null,
+                new Color(255, 255, 255, hover ? 70 : 40));
     }
 
     private boolean hover;
@@ -112,9 +108,7 @@ final class SkinChip extends JPanel {
         paintGlassChip(g2, this, hover);
         if (pulse.isRunning()) {
             int a = (int) (90 + 120 * (0.5 + 0.5 * Math.sin(phase)));
-            g2.setStroke(new BasicStroke(2.5f));
-            g2.setColor(new Color(255, 255, 255, Math.min(255, a)));
-            g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 11, 11);
+            com.gummer.launcher.look.Edge.pill(g2, 0, 0, getWidth(), getHeight(), 12, null, new Color(255, 255, 255, Math.min(255, a)), 2.5);
         }
         g2.dispose();
         super.paintComponent(g);

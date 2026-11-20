@@ -16,10 +16,13 @@ public class CustomImageButton extends JButton {
     Icon hoverIcon;
 
     public CustomImageButton(BufferedImage icon, int width, int height, String tooltip) {
-        super(null, new ImageIcon(getResizedImage(icon, width, height)));
-        Image resized = getResizedImage(icon, width, height);
-        defaultIcon = new ImageIcon(resized);
-        hoverIcon = new ImageIcon(getHoveredImage(resized));
+        super(null, null);
+        // 20.11.2026: картинка готується у фізичних пікселях екрана (CrispIcon), а не в логічних з розтягуванням
+        // Java на 125-150%, тож піксельні написи кнопок не розмиваються
+        defaultIcon = new com.skcraft.launcher.swing.CrispIcon(icon, width, height);
+        hoverIcon = new com.skcraft.launcher.swing.CrispIcon(getHoveredImage(icon), width, height);
+        setDisabledIcon(new com.skcraft.launcher.swing.CrispIcon(GrayFilter.createDisabledImage(icon), width, height));
+        setIcon(defaultIcon);
         this.setOpaque(false);
         this.setContentAreaFilled(false);
         this.setBorderPainted(false);
@@ -45,9 +48,9 @@ public class CustomImageButton extends JButton {
     /** Замінити картинку кнопки (наприклад, кнопка соцмережі вибраної збірки); стан наведення зберігається. */
     public void setImage(BufferedImage icon, int width, int height) {
         boolean hovered = getIcon() == hoverIcon;
-        Image resized = getResizedImage(icon, width, height);
-        defaultIcon = new ImageIcon(resized);
-        hoverIcon = new ImageIcon(getHoveredImage(resized));
+        defaultIcon = new com.skcraft.launcher.swing.CrispIcon(icon, width, height);
+        hoverIcon = new com.skcraft.launcher.swing.CrispIcon(getHoveredImage(icon), width, height);
+        setDisabledIcon(new com.skcraft.launcher.swing.CrispIcon(GrayFilter.createDisabledImage(icon), width, height));
         setIcon(hovered ? hoverIcon : defaultIcon);
     }
 

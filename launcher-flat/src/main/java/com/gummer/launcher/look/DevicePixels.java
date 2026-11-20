@@ -108,6 +108,15 @@ public final class DevicePixels {
         return img;
     }
 
+    /**
+     * 20.11.2026: викинути всі готові картинки (look.MemoryTrim на старті гри). Вікно лаунчера на час гри сховане, а
+     * кеш до 160 МБ тримав би пам'ять, поки граєш; після гри потрібні фони порахуються знову.
+     */
+    public static synchronized void clear() {
+        CACHE.clear();
+        cacheBytes = 0;
+    }
+
     private static final java.util.concurrent.ExecutorService SCALER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GummerCraft background scaler");
         t.setDaemon(true);

@@ -47,8 +47,21 @@ public final class DesignVote extends JPanel {
     private static final Color TEXT = new Color(0xE6E8EC);
     private static final Color DIM = new Color(0x9AA0A9);
     private static long lastFeedbackAt;
-    /** Висота блоку: два ряди по 28 і проміжок 6. */
-    public static final int HEIGHT = 62;
+    /**
+     * Висота блоку: два ряди по 28 і проміжок {@link #ROW_GAP}. 20.11.2026 (власник: «лайк і фідбек треба вище»):
+     * проміжок між рядами 4 замість 6, а відступ до «Код лаунчера на GitHub» під блоком більший.
+     */
+    public static final int ROW_GAP = 4;
+    public static final int HEIGHT = 28 + ROW_GAP + 28;
+
+    /**
+     * Висота блоку при збільшенні z рівно з тих самих округлених рядів, що ставить {@link #setZoom}. 20.11.2026
+     * (власник: «в повноекранному досі як було»): раніше бралось round(HEIGHT * z), а при z ~1.2 це 72, тоді як ряди
+     * 34 + 5 + 34 = 73, і блок відрізав нижній ряд обводки лайку і фідбеку.
+     */
+    public static int height(double z) {
+        return 2 * com.gummer.launcher.look.Zoom.px(z, 28) + com.gummer.launcher.look.Zoom.px(z, ROW_GAP);
+    }
     private static final String[] LOOKS = {com.gummer.launcher.FancyLauncher.LOOK_GLASS,
             com.gummer.launcher.FancyLauncher.LOOK_CLASSIC, com.gummer.launcher.FancyLauncher.LOOK_LIBRARY};
 
@@ -65,8 +78,8 @@ public final class DesignVote extends JPanel {
     /** 17.11.2026: збільшення в розгорнутому склі (плашки малюються в масштабі, ряди і ширина лайка тут). */
     public void setZoom(double z) {
         MigLayout lay = (MigLayout) getLayout();
-        int r = com.gummer.launcher.look.Zoom.px(z, 28), g = com.gummer.launcher.look.Zoom.px(z, 6);
-        lay.setLayoutConstraints("insets 0, gap " + g + " " + g + ", novisualpadding");
+        int r = com.gummer.launcher.look.Zoom.px(z, 28), g = com.gummer.launcher.look.Zoom.px(z, 6), gy = com.gummer.launcher.look.Zoom.px(z, ROW_GAP);
+        lay.setLayoutConstraints("insets 0, gap " + g + " " + gy + ", novisualpadding, aligny top");
         lay.setRowConstraints("[" + r + "!][" + r + "!]");
         if (likePill != null) lay.setComponentConstraints(likePill, "w " + com.gummer.launcher.look.Zoom.px(z, 58) + "!");
         revalidate();
@@ -81,7 +94,7 @@ public final class DesignVote extends JPanel {
     }
 
     private DesignVote(Window owner, Launcher launcher, SupportService support, String look, String likeUrl) {
-        super(new MigLayout("insets 0, gap 6 6, novisualpadding", "[][grow,fill]", "[28!][28!]"));
+        super(new MigLayout("insets 0, gap 6 " + ROW_GAP + ", novisualpadding, aligny top", "[][grow,fill]", "[28!][28!]"));
         this.owner = owner;
         this.launcher = launcher;
         this.support = support;
@@ -203,13 +216,13 @@ public final class DesignVote extends JPanel {
         Graphics2D background(Graphics g, boolean active) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            com.gummer.launcher.look.TextAA.apply(g2);
+            // 20.11.2026 (власник: «червона обводка знизу менша ніж зверху, вона ОБРІЗАНА»): плашка і обводка по фізичних
+            // пікселях (look.Edge), раніше на 125% нижній ряд обводки відрізало
+            com.gummer.launcher.look.Edge.pill(g2, 0, 0, getWidth(), getHeight(), getHeight(),
+                    new Color(255, 255, 255, active ? 34 : hover ? 30 : 18),
+                    active ? new Color(HEART.getRed(), HEART.getGreen(), HEART.getBlue(), 120) : new Color(255, 255, 255, hover ? 60 : 36), z());
             g2.scale(z(), z());
-            RoundRectangle2D r = new RoundRectangle2D.Float(0.5f, 0.5f, lw() - 1f, lh() - 1f, lh(), lh());
-            g2.setColor(new Color(255, 255, 255, active ? 34 : hover ? 30 : 18));
-            g2.fill(r);
-            g2.setColor(active ? new Color(HEART.getRed(), HEART.getGreen(), HEART.getBlue(), 120) : new Color(255, 255, 255, hover ? 60 : 36));
-            g2.draw(r);
             return g2;
         }
     }
@@ -364,10 +377,23 @@ public final class DesignVote extends JPanel {
             setToolTipText(tr("design.feedbackTip"));
         }
 
+        /** Відступ тексту від краю плашки, мінімум. */
+        private static final int PAD = 12;
+
         @Override
         public Dimension getPreferredSize() {
             FontMetrics fm = getFontMetrics(getFont());
-            return zoomed(fm.stringWidth(tr("design.feedback")) + 24, 28);
+            return zoomed(fm.stringWidth(tr("design.feedback")) + 2 * PAD, 28);
+        }
+
+        /**
+         * 20.11.2026 (власник: «кнопки лайку та фідбеку залізли куди не треба»): плашка може бути вужчою за свій
+         * текст (вузька колонка Liquid Glass, ширший шрифт Inter, англійська), тоді вона не вилазить за колонку, а
+         * текст зменшується (див. paintComponent).
+         */
+        @Override
+        public Dimension getMinimumSize() {
+            return zoomed(40, 28);
         }
 
         @Override
@@ -378,9 +404,15 @@ public final class DesignVote extends JPanel {
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = background(g, false);
-            FontMetrics fm = g2.getFontMetrics(getFont());
-            g2.setFont(getFont());
             String t = tr("design.feedback");
+            Font f = getFont();
+            FontMetrics fm = g2.getFontMetrics(f);
+            int room = lw() - 2 * PAD;
+            while (fm.stringWidth(t) > room && f.getSize2D() > 10f) {
+                f = f.deriveFont(f.getSize2D() - 0.5f);
+                fm = g2.getFontMetrics(f);
+            }
+            g2.setFont(f);
             g2.setColor(hover ? TEXT : DIM);
             g2.drawString(t, (lw() - fm.stringWidth(t)) / 2, (lh() - fm.getHeight()) / 2 + fm.getAscent());
             g2.dispose();

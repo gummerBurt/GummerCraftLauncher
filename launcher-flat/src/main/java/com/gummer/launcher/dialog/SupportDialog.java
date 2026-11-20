@@ -173,7 +173,7 @@ public class SupportDialog extends JDialog {
     }
 
     private JPanel buildForm() {
-        JPanel p = new JPanel(new MigLayout("insets 18 20 16 20, wrap 1, fillx", "[0:0:,grow,fill]", ""));
+        JPanel p = new JPanel(new MigLayout("insets 18 20 16 20, wrap 1, fill", "[0:0:,grow,fill]", "")); // 20.11.2026: fill, щоб поле питання забирало зайву висоту
         JLabel title = new JLabel(tr("support.formTitle"));
         title.putClientProperty("FlatLaf.styleClass", "h2");
         p.add(title, "gapbottom 4");
@@ -190,7 +190,7 @@ public class SupportDialog extends JDialog {
         p.add(new JLabel(tr("support.text")));
         textArea.setLineWrap(true);
         textArea.setWrapStyleWord(true);
-        p.add(new JScrollPane(textArea), "h 120::, growy, gapbottom 6");
+        p.add(new JScrollPane(textArea), "h 120::, grow, pushy, gapbottom 6"); // 20.11.2026: без порожнечі під «Надіслати»
 
         p.add(new JLabel(tr("support.contact")));
         contactField.putClientProperty("JTextField.placeholderText", tr("support.contactHint"));

@@ -213,7 +213,7 @@ public class CardInstanceTable extends InstanceTable {
         Graphics2D g2 = (Graphics2D) g.create();
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            com.gummer.launcher.look.TextAA.apply(g2);
             Rectangle clip = g2.getClipBounds();
             int width = getWidth();
             for (int row = 0; row < getRowCount(); row++) {
@@ -231,10 +231,8 @@ public class CardInstanceTable extends InstanceTable {
                 boolean selected = isRowSelected(row);
                 Color accent = PackLook.accentOf(instanceAt(row));
                 if (selected) {
-                    g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 52));
-                    g2.fillRoundRect(x, y, w, h, arc, arc);
-                    g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 150));
-                    g2.drawRoundRect(x, y, w - 1, h - 1, arc, arc);
+                    com.gummer.launcher.look.Edge.pill(g2, x, y, w, h, arc, new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 52),
+                            new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 150)); // 20.11.2026: по фізичних пікселях
                     g2.setColor(accent);
                     g2.fillRoundRect(x + 1, y + bar, Math.max(3, (int) Math.round(3 * zoom)), h - 2 * bar, 3, 3);
                 } else {

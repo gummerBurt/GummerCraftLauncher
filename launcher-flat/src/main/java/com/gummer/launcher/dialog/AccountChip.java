@@ -54,7 +54,7 @@ final class AccountChip extends JPanel {
             // значок намалює createIcon
         }
         userImage = ui;
-        userIcon = SwingHelper.createIcon(Launcher.class, "ui/icon/light/user.png", HEAD - 6, HEAD - 6);
+        userIcon = new com.gummer.launcher.look.UserIcon(HEAD - 6); // 20.11.2026: векторний замість user.png 16x16
         text.setForeground(new Color(235, 235, 235));
         text.setFont(text.getFont().deriveFont(Font.BOLD));
         caption.setForeground(new Color(190, 190, 190));
@@ -105,16 +105,16 @@ final class AccountChip extends JPanel {
         lay.setComponentConstraints(icon, "w " + head + "!, h " + head + "!");
         text.setFont(textFont.deriveFont((float) (textFont.getSize2D() * z)));
         caption.setFont(captionFont.deriveFont((float) (captionFont.getSize2D() * z)));
-        if (headSmall != null) headIcon = new ImageIcon(scaleNearest(headSmall, head));
-        Icon user = userImage != null ? new ImageIcon(scaleSmooth(userImage, head - (int) Math.round(6 * z))) : userIcon;
+        if (headSmall != null) headIcon = new com.skcraft.launcher.swing.CrispIcon(headSmall, head, head); // 20.11.2026: у фізичних пікселях
+        Icon user = new com.gummer.launcher.look.UserIcon(head - (int) Math.round(6 * z));
         icon.setIcon(headSmall != null && headIcon != null ? headIcon : user);
         revalidate();
         repaint();
     }
 
     private Icon userIcon() {
-        if (zoom == 1.0 || userImage == null) return userIcon;
-        return new ImageIcon(scaleSmooth(userImage, (int) Math.round((HEAD - 6) * zoom)));
+        if (zoom == 1.0) return userIcon;
+        return new com.gummer.launcher.look.UserIcon((int) Math.round((HEAD - 6) * zoom));
     }
 
     private static BufferedImage scaleNearest(BufferedImage src, int size) {
@@ -162,7 +162,7 @@ final class AccountChip extends JPanel {
                     if (id == refreshId && h != null) {
                         headUuid = uuid;
                         headSmall = h;
-                        headIcon = new ImageIcon(scaleNearest(h, (int) Math.round(HEAD * zoom)));
+                        headIcon = new com.skcraft.launcher.swing.CrispIcon(h, (int) Math.round(HEAD * zoom), (int) Math.round(HEAD * zoom)); // 20.11.2026: у фізичних пікселях
                         icon.setIcon(headIcon);
                     }
                 });

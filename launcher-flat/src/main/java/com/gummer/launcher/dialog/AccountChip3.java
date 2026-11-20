@@ -43,11 +43,11 @@ final class AccountChip3 extends JPanel {
         super(new MigLayout("insets 0 12 0 12, gap 12 0", "[][grow]", "[grow,center]"));
         this.launcher = launcher;
         setOpaque(false);
-        userIcon = com.skcraft.launcher.swing.CrispIcon.of(Launcher.class, "ui/icon/light/user.png", HEAD - 6, HEAD - 6);
+        userIcon = new com.gummer.launcher.look.UserIcon(HEAD - 6); // 20.11.2026: векторний замість user.png 16x16
         text.setForeground(com.gummer.launcher.ui3.Ui.TEXT);
         text.setFont(com.gummer.launcher.ui3.Ui.font(Font.BOLD, 14f));
         caption.setForeground(com.gummer.launcher.ui3.Ui.TEXT_3);
-        caption.setFont(com.gummer.launcher.ui3.Ui.font(Font.PLAIN, 12f)); // на 11 px у Segoe UI губиться крапка «і»
+        caption.setFont(com.gummer.launcher.ui3.Ui.font(Font.PLAIN, Boolean.getBoolean("gummer.font.inter") ? 11f : 12f)); // на 11 px у Segoe UI губиться крапка «і»; Inter 11 як Segoe 12
         icon.setHorizontalAlignment(SwingConstants.CENTER);
         add(icon, "w 32!, h 32!");
         JPanel lines = new JPanel(new MigLayout("insets 0, gap 0, wrap 1", "[grow,fill]", "[]0[]"));

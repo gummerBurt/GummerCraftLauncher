@@ -163,16 +163,16 @@ public class LauncherFrameFlat extends JFrame {
     private AccountChip accountChip;
 
     // load popup icons
-    private final static ImageIcon downloadIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/download.png")));
-    private final static ImageIcon gamepadIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/play.png")));
-    private final static ImageIcon refreshIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/refresh.png")));
-    private final static ImageIcon folderIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/folder.png")));
-    private final static ImageIcon javaIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/settings.png")));
-    private final static ImageIcon widgetIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/widget.png")));
-    private final static ImageIcon imageIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/image.png")));
-    private final static ImageIcon crashIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/crash.png")));
-    private final static ImageIcon reinstallIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/reinstall.png")));
-    private final static ImageIcon trashIcon = new ImageIcon(Objects.requireNonNull(SwingExtras.readIconImage(Launcher.class, "ui/icon/light/trash.png")));
+    private final static Icon downloadIcon = com.gummer.launcher.look.MenuIcon.DOWNLOAD; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon gamepadIcon = com.gummer.launcher.look.MenuIcon.PLAY; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon refreshIcon = com.gummer.launcher.look.MenuIcon.REFRESH; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon folderIcon = com.gummer.launcher.look.MenuIcon.FOLDER; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon javaIcon = com.gummer.launcher.look.MenuIcon.SETTINGS; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon widgetIcon = com.gummer.launcher.look.MenuIcon.WIDGET; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon imageIcon = com.gummer.launcher.look.MenuIcon.IMAGE; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon crashIcon = com.gummer.launcher.look.MenuIcon.CRASH; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon reinstallIcon = com.gummer.launcher.look.MenuIcon.REINSTALL; // 20.11.2026: вектор, чітко на 125-150%
+    private final static Icon trashIcon = com.gummer.launcher.look.MenuIcon.TRASH; // 20.11.2026: вектор, чітко на 125-150%
 
     /**
      * Create a new frame.
@@ -184,7 +184,10 @@ public class LauncherFrameFlat extends JFrame {
 
         this.launcher = launcher;
         instancesModel = new InstanceTableModel(launcher.getInstances(), () -> launcher.getConfig().getLastInstance());
-        instancesModel.setInstalledOnly(launcher.getConfig().isInstalledOnly());
+        // 20.11.2026 (власник: відкривати «Встановлені», якщо там щось є): на старті завжди «Встановлені»; жодної
+        // встановленої збірки, тоді selectRememberedInstance перемкне на «Додати інсталяцію»
+        launcher.getConfig().setInstalledOnly(true);
+        instancesModel.setInstalledOnly(true);
         rootFrame = this;
 
         // Initialize lang from this.launcher config
@@ -240,13 +243,14 @@ public class LauncherFrameFlat extends JFrame {
         if (supportService != null) {
             supportButton = new HotbarSlot("ui/icon/slot/support.png", SharedLocale.tr("look.slot.support"), SharedLocale.tr("tooltip.support"));
         }
-        launchButton = new CustomImageButton(
-            ImageIO.read(Objects.requireNonNull(
-                Launcher.class.getResourceAsStream("ui/button/play_" + langCode + ".png")
-            )),
-            302,101,
-            SharedLocale.tr("tooltip.launch")
-        );
+        playImage = ImageIO.read(Objects.requireNonNull(
+                Launcher.class.getResourceAsStream("ui/button/play_" + langCode + ".png")));
+        // 20.11.2026 (власник: «коли збірка не встановлена, має бути не кнопка "запуск", а кнопка "встановити"»): та сама
+        // зелена плитка 302x101 з написом піксельним шрифтом (зроблена з play_*.png), тож кнопка міняє лише напис і нічого
+        // поряд не зсувається
+        java.io.InputStream installStream = Launcher.class.getResourceAsStream("ui/button/install_" + langCode + ".png");
+        installImage = installStream != null ? ImageIO.read(installStream) : playImage;
+        launchButton = new CustomImageButton(playImage, 302, 101, SharedLocale.tr("tooltip.launch"));
 //        refreshButton = new CustomImageButton(
 //            ImageIO.read(Objects.requireNonNull(
 //                Launcher.class.getResourceAsStream("ui/button/reload.png")
@@ -370,7 +374,7 @@ public class LauncherFrameFlat extends JFrame {
         JComponent sourceLink = createSourceLink();
         sourceLinkRef = sourceLink;
         if (sourceLink != null) {
-            sidebarButtonsPanel.add(Box.createVerticalStrut(4));
+            sidebarButtonsPanel.add(Box.createVerticalStrut(9)); // 20.11.2026: було 4, лайк і фідбек впритул до посилання
             sidebarButtonsPanel.add(sourceLink);
         }
         sidebarButtonsPanel.add(Box.createVerticalStrut(1));
@@ -583,6 +587,23 @@ public class LauncherFrameFlat extends JFrame {
 
     /** Вибрати в списку останню вибрану збірку (Configuration.lastInstance), якщо вона є в списку, інакше першу. */
     private void selectRememberedInstance() {
+        // 20.11.2026: на старті «Встановлені»; якщо встановленого немає зовсім (новий гравець), «Додати інсталяцію».
+        // Вирішується один раз, коли список уже прочитано (порожній список ще нічого не значить)
+        if (startupTab && launcher.getInstances().size() > 0) {
+            startupTab = false;
+            boolean any = false;
+            synchronized (launcher.getInstances()) {
+                for (Instance i : launcher.getInstances().getInstances()) {
+                    if (i.isLocal() && i.isInstalled()) {
+                        any = true;
+                        break;
+                    }
+                }
+            }
+            if (!any && listSwitchRef != null && listSwitchRef.isInstalledOnly()) {
+                SwingUtilities.invokeLater(() -> listSwitchRef.setInstalledOnly(false));
+            }
+        }
         // 17.11.2026: копія чи збірка Modrinth (щойно створена) у розділі: рядок розділу має показати саме її, а не
         // версію, вибрану в розділі раніше
         // 17.11.2026: свій останній вибір у кожного режиму списку («Усі» / «Встановлені»)
@@ -731,6 +752,9 @@ public class LauncherFrameFlat extends JFrame {
                     boolean installed = i.isLocal() && i.isInstalled();
                     String dotColor = !installed ? "#6b7079" : i.isUpdatePending() ? "#e0b050" : "#7ccf6a";
                     String dot = "<span style=\"color:" + dotColor + "\">" + (installed ? "●" : "○") + "</span>&nbsp;";
+                    // 20.11.2026: у «Додати інсталяцію» ваніль і завантажувачі не кажуть, яка версія вже є
+                    boolean fresh = instancesModel.isFreshInstall(i);
+                    if (fresh) dot = "";
                     if (index < 0) {
                         // закритий список: позначка і версія
                         text = "<html><nobr>" + dot + mc + SwingHelper.htmlEscape(version) + "</nobr></html>";
@@ -743,7 +767,8 @@ public class LauncherFrameFlat extends JFrame {
                         String newest = instancesModel.isNewest(i) ? "&nbsp;&nbsp;<span style=\"color:#5aa9ff;font-size:11\">"
                                 + SwingHelper.htmlEscape(tr("launcher.versionNewest")) + "</span>" : "";
                         if (derived && derivedVer != null) status = derivedVer + " · " + status;
-                        text = "<html>" + dot + "<b" + (installed ? "" : " style=\"color:#b4b8bf\"") + ">" + mc
+                        if (fresh) status = "";
+                        text = "<html>" + dot + "<b" + (installed || fresh ? "" : " style=\"color:#b4b8bf\"") + ">" + mc
                                 + SwingHelper.htmlEscape(version) + "</b>&nbsp;&nbsp;<span style=\"color:" + statusColor + ";font-size:11\">"
                                 + SwingHelper.htmlEscape(status) + "</span>" + newest + "</html>";
                     }
@@ -755,6 +780,7 @@ public class LauncherFrameFlat extends JFrame {
                     // 17.11.2026: встановлені вгорі списку, від решти їх відділяє тонка риска
                     Object above = index > 0 ? list.getModel().getElementAt(index - 1) : null;
                     boolean split = value instanceof Instance && above instanceof Instance
+                            && !instancesModel.isFreshInstall((Instance) value)
                             && !(((Instance) value).isLocal() && ((Instance) value).isInstalled())
                             && ((Instance) above).isLocal() && ((Instance) above).isInstalled();
                     ((JComponent) c).setBorder(split
@@ -765,12 +791,19 @@ public class LauncherFrameFlat extends JFrame {
                     // закрите поле (16.11.2026): довга назва («Pre-classic rd-20090515») при 18 не влазить і
                     // переносилась на два рядки; зменшуємо шрифт, доки не влізе (не менше 13)
                     int room = versionBox.getWidth() - 44; // мінус стрілка і відступи поля
+                    // 20.11.2026: міряємо сам текст (без HTML), бо розмір HTML-підпису з кешу (HtmlCellCache) не завжди
+                    // перераховувався, і в полі 164 px «○ Minecraft 26.2» обрізалось до «Minecraft 26»
+                    String plain = text instanceof String ? ((String) text).replaceAll("<[^>]*>", "").replace("&nbsp;", " ") : String.valueOf(text);
                     float size = 18f;
-                    c.setFont(c.getFont().deriveFont(Font.BOLD, size));
-                    while (c.getPreferredSize().width > room && size > 13f) {
+                    Font f = c.getFont().deriveFont(Font.BOLD, size);
+                    while (c.getFontMetrics(f).stringWidth(plain) > room && size > 12f) {
                         size -= 1f;
-                        c.setFont(c.getFont().deriveFont(Font.BOLD, size));
+                        f = f.deriveFont(size);
                     }
+                    c.setFont(f);
+                    // закрите поле малює значення шрифтом самого поля (BasicComboBoxUI.paintCurrentValue ставить
+                    // comboBox.getFont() поверх нашого), тож розмір задаємо полю; той самий розмір вдруге нічого не міняє
+                    if (versionBox.getFont().getSize2D() != size) versionBox.setFont(f);
                 }
                 return c;
             }
@@ -1058,11 +1091,24 @@ public class LauncherFrameFlat extends JFrame {
     private JPanel pillPanel;
 
     /** Онлайн і «Одразу на сервер» для вибраного паку (лише вкладка GummerCraft і паки з адресою сервера). */
+    private java.awt.image.BufferedImage playImage, installImage;
+    private boolean showingInstall;
+
+    /** 20.11.2026: «ВСТАНОВИТИ» на не встановленій збірці і на ванілі чи завантажувачі в «Додати інсталяцію», інакше «ЗАПУСК». */
+    private void refreshLaunchImage(Instance sel) {
+        boolean install = sel != null && !InstanceTableModel.isBrowser(sel) && !InstanceTableModel.isAddRow(sel)
+                && (instancesModel.isFreshInstall(sel) || !(sel.isLocal() && sel.isInstalled()));
+        if (install == showingInstall || playImage == null) return;
+        showingInstall = install;
+        ((CustomImageButton) launchButton).setImage(install ? installImage : playImage, 302, 101); // розмір той самий
+    }
+
     private void refreshStatusRow() {
         Instance sel = getSelectedInstance();
+        refreshLaunchImage(sel);
         String address = sel != null && !sel.isBuiltIn() ? sel.getServerAddress() : null;
         boolean show = address != null;
-        launchButton.setToolTipText(trFor(sel, "tooltip.launch"));
+        launchButton.setToolTipText(showingInstall ? tr("ui2.install") : trFor(sel, "tooltip.launch"));
         quickJoinBox.setVisible(show);
         com.gummer.launcher.server.ServerPing.Status st = show ? online.get(address) : null;
         if (st != null) {
@@ -1658,7 +1704,8 @@ public class LauncherFrameFlat extends JFrame {
 
         // 1.33: імпорт збірки з Modrinth (.mrpack)
         if (com.gummer.launcher.modrinth.MrpackPacks.ENABLED) {
-            popup.addSeparator();
+            // 20.11.2026: роздільник лише під пунктами збірки; клік по порожньому місцю давав порожню смужку зверху
+            if (popup.getComponentCount() > 0) popup.addSeparator();
             menuItem = new JMenuItem(tr("mrpack.importMenu"), downloadIcon);
             menuItem.addActionListener(e -> importMrpack());
             popup.add(menuItem);
@@ -1826,6 +1873,9 @@ public class LauncherFrameFlat extends JFrame {
     protected void sidebarWidthChanged(int width) {
     }
 
+    /** Ширина бічної панелі при множнику 1 (20.11.2026: 250 на кілька годин, повернуто 220 разом з назвою вкладки «Додати +»). */
+    static final int SIDEBAR_W = 220;
+
     private int zpx(double v) {
         return com.gummer.launcher.look.Zoom.px(sideZoom, v);
     }
@@ -1836,7 +1886,7 @@ public class LauncherFrameFlat extends JFrame {
      */
     private void zoomForSize() {
         applySideZoom(Math.min(com.gummer.launcher.look.Zoom.forWindow(getWidth(), getHeight()),
-                com.gummer.launcher.ui2.Ui.RAIL_W / 220.0));
+                com.gummer.launcher.ui2.Ui.RAIL_W / (double) SIDEBAR_W));
     }
 
     /**
@@ -1856,7 +1906,7 @@ public class LauncherFrameFlat extends JFrame {
     private void applySideZoom(double z) {
         if (z == sideZoom || sidebarRef == null) return;
         sideZoom = z;
-        int sw = zpx(220);
+        int sw = zpx(SIDEBAR_W);
         sidebarWidthChanged(sw);
         sidebarRef.putClientProperty(com.gummer.launcher.look.Zoom.KEY, z);
         sidebarRef.setPreferredSize(new Dimension(sw, 0));
@@ -1870,7 +1920,7 @@ public class LauncherFrameFlat extends JFrame {
         if (coffeeImageRef != null) ((CustomImageButton) coffeeButton).setImage(coffeeImageRef, zpx(200), zpx(45));
         if (updateImageRef != null) ((CustomImageButton) selfUpdateButton).setImage(updateImageRef, zpx(200), zpx(45));
         if (voteRef != null) {
-            Dimension vd = new Dimension(zpx(200), zpx(DesignVote.HEIGHT));
+            Dimension vd = new Dimension(zpx(200), DesignVote.height(z));
             voteRef.setPreferredSize(vd);
             voteRef.setMinimumSize(vd);
             voteRef.setMaximumSize(vd);
@@ -1903,6 +1953,11 @@ public class LauncherFrameFlat extends JFrame {
     }
     private JPanel topArea;
     private JPanel accountBoxRef;
+
+    /** Плашки акаунта, скіна і прапорців справа вгорі: жовтий напис біля лого на них не заходить (20.11.2026). */
+    protected JComponent splashAvoid() {
+        return accountBoxRef;
+    }
     private int topAreaHeight = 150;
 
     // ---------------------------------------------------------------- 17.11.2026: «Усі / Встановлені» і сторінка Modrinth
@@ -1914,6 +1969,8 @@ public class LauncherFrameFlat extends JFrame {
     private JPanel launchGroupRef;
 
     private com.gummer.launcher.look.ListModeSwitch listSwitchRef;
+    /** 20.11.2026: ще не вирішено, чи лишити «Встановлені» на старті (див. selectRememberedInstance). */
+    private boolean startupTab = true;
 
     /** Перемикач над списком збірок: «Усі» або «Встановлені» (запам'ятовується в config.json). */
     private JComponent createListSwitch() {
@@ -1931,7 +1988,8 @@ public class LauncherFrameFlat extends JFrame {
             // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,
             // збірка вибирається і одразу ставляться гра і завантажувач, без ще одного натискання «Встановити»
             Instance added = showNewBuild(name);
-            if (added != null) InstanceManageDialog.installOnly(this, launcher, added, this::refreshInstancesQuietly);
+            // 20.11.2026: після встановлення «Встановлені» на цій збірці, гра не запускається
+            if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> afterCatalogInstall(added.getName()));
         }, this::playBuild);
         mainHolder.add(modrinthPage, "modrinth");
         return mainHolder;
@@ -1953,6 +2011,17 @@ public class LauncherFrameFlat extends JFrame {
         }
         loadInstances();
         return null;
+    }
+
+    /** 20.11.2026: після встановлення з «Додати інсталяцію»: «Встановлені», вибрана саме нова збірка, кнопка «Запуск». */
+    private void afterCatalogInstall(String name) {
+        launcher.getConfig().setLastInstanceInstalled(name);
+        showNewBuild(name); // перечитати список з диска (нова копія) і запам'ятати її
+        if (listSwitchRef != null && !listSwitchRef.isInstalledOnly()) {
+            listSwitchRef.setInstalledOnly(true);
+        } else {
+            reselect(name);
+        }
     }
 
     private void setInstalledOnly(boolean on) {
@@ -2054,6 +2123,13 @@ public class LauncherFrameFlat extends JFrame {
         Instance instance = getSelectedInstance();
         if (InstanceTableModel.isBrowser(instance)) return; // рядок Modrinth: сторінка модпаків, не збірка
         if (instance == null) return;
+        // 20.11.2026 (власник: «Додати інсталяцію» це «меню суто для встановлення нових збірок»): ваніль і завантажувачі
+        // щоразу ставлять нову інсталяцію, не встановлений сервер ставиться; гра після цього не запускається
+        if (!instancesModel.isInstalledOnly()
+                && (instancesModel.isFreshInstall(instance) || !(instance.isLocal() && instance.isInstalled()))) {
+            CatalogInstall.install(this, launcher, instance, this::showNewBuild, this::afterCatalogInstall);
+            return;
+        }
         InstanceManageDialog.warnMemory(this, launcher, instance); // 17.11.2026: більше половини пам'яті ПК
 
         LaunchOptions options = new LaunchOptions.Builder()
@@ -2090,6 +2166,7 @@ public class LauncherFrameFlat extends JFrame {
             if (frame != null) {
                 frame.dispose();
             }
+            com.gummer.launcher.look.MemoryTrim.forGame(); // 20.11.2026: не тримати кеш картинок, поки граєш
         }
 
         @Override

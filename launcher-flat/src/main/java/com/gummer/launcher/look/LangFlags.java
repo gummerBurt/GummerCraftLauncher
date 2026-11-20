@@ -13,6 +13,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Line2D;
 import java.awt.geom.RoundRectangle2D;
 
@@ -165,7 +166,7 @@ public final class LangFlags extends JComponent {
         Graphics2D g = (Graphics2D) g0.create();
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            com.gummer.launcher.look.TextAA.apply(g);
             g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
             LookTheme.Palette p = LookTheme.palette();
             Font f = UIManager.getFont("Label.font").deriveFont(Font.BOLD, (float) (12.5 * zoom));
@@ -176,13 +177,9 @@ public final class LangFlags extends JComponent {
                 boolean on = langs[i] == current, hot = i == hover;
                 float arc = (float) px(8);
                 RoundRectangle2D shape = new RoundRectangle2D.Float(r.x + 0.5f, r.y + 0.5f, r.width - 1f, r.height - 1f, arc, arc);
-                g.setColor(new Color(0, 0, 0, on ? 110 : hot ? 90 : 60));
-                g.fill(shape);
-                if (on || hot) {
-                    g.setColor(on ? LookTheme.alpha(p.accent, 200) : new Color(255, 255, 255, 70));
-                    g.setStroke(new BasicStroke((float) Math.max(1.0, zoom)));
-                    g.draw(shape);
-                }
+                // 20.11.2026: плашка і рамка по фізичних пікселях (look.Edge)
+                Edge.pill(g, r.x, r.y, r.width, r.height, arc + 1, new Color(0, 0, 0, on ? 110 : hot ? 90 : 60),
+                        on || hot ? (on ? LookTheme.alpha(p.accent, 200) : new Color(255, 255, 255, 70)) : null, Math.max(1.0, zoom));
                 int fw = px(FLAG_W), fh = px(FLAG_H);
                 String c = code(langs[i]);
                 int content = fw + px(7) + fm.stringWidth(c);
@@ -193,47 +190,105 @@ public final class LangFlags extends JComponent {
                 fg.dispose();
                 g.setColor(on ? p.text : hot ? p.text : p.text2);
                 int tx = fx + fw + px(7);
-                g.drawString(c, tx, r.y + (r.height - fm.getHeight()) / 2 + fm.getAscent());
+                // 20.11.2026: по центру за висотою великих літер (як прапорець), базова лінія по цілому фізичному пікселю
+                double cap = f.createGlyphVector(g.getFontRenderContext(), "UAEN").getVisualBounds().getHeight();
+                drawSnapped(g, c, tx, r.y + r.height / 2.0 + cap / 2.0);
             }
         } finally {
             g.dispose();
         }
     }
 
+    /** Текст з базовою лінією по цілому фізичному пікселю (на 125% інакше розмивається по вертикалі). */
+    private static void drawSnapped(Graphics2D g, String text, double x, double baseline) {
+        AffineTransform at = g.getTransform();
+        if (at.getShearX() != 0 || at.getShearY() != 0 || at.getScaleY() <= 0) {
+            g.drawString(text, (float) x, (float) baseline);
+            return;
+        }
+        double by = Math.round(at.getTranslateY() + baseline * at.getScaleY());
+        g.drawString(text, (float) x, (float) ((by - at.getTranslateY()) / at.getScaleY()));
+    }
+
+    /** Кеш прапорців у фізичних пікселях: мова|ширина|висота. */
+    private static final java.util.Map<String, java.awt.image.BufferedImage> FLAGS = new java.util.HashMap<>();
+
+    /**
+     * 20.11.2026 (власник: «замісти трішки краще прапорці»): прапорець малюється у фізичних пікселях екрана: межа
+     * смуг і краї по цілих пікселях, кути згладжені (раніше обрізка без згладжування в логічних координатах, на 125%
+     * краї розмивались, а кути були зубчасті).
+     */
     private static void paintFlag(Graphics2D g, Lang l, int x, int y, int w, int h) {
-        Shape clip = new RoundRectangle2D.Float(x, y, w, h, Math.max(2, h / 4f), Math.max(2, h / 4f));
-        Shape old = g.getClip();
-        g.clip(clip);
+        AffineTransform at = g.getTransform();
+        double sx = at.getScaleX(), sy = at.getScaleY();
+        if (at.getShearX() != 0 || at.getShearY() != 0 || sx <= 0 || sy <= 0) {
+            sx = sy = 1;
+        }
+        int dx = (int) Math.round(at.getTranslateX() + x * sx), dy = (int) Math.round(at.getTranslateY() + y * sy);
+        int dw = Math.max(4, (int) Math.round(w * sx)), dh = Math.max(3, (int) Math.round(h * sy));
+        String key = l + "|" + dw + "|" + dh;
+        java.awt.image.BufferedImage img = FLAGS.get(key);
+        if (img == null) {
+            img = renderFlag(l, dw, dh);
+            FLAGS.put(key, img);
+        }
+        Graphics2D d = (Graphics2D) g.create();
+        try {
+            if (sx != 1 || sy != 1 || at.getTranslateX() != 0 || at.getTranslateY() != 0) d.setTransform(new AffineTransform());
+            d.drawImage(img, dx, dy, null);
+        } finally {
+            d.dispose();
+        }
+    }
+
+    private static java.awt.image.BufferedImage renderFlag(Lang l, int w, int h) {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
         if (l == Lang.UKRAINIAN) {
             g.setColor(new Color(0x0057B7));
-            g.fillRect(x, y, w, h / 2 + (h % 2));
+            g.fillRect(0, 0, w, h / 2);
             g.setColor(new Color(0xFFD500));
-            g.fillRect(x, y + h / 2, w, h - h / 2);
+            g.fillRect(0, h / 2, w, h - h / 2);
         } else {
-            // спрощений прапор Великої Британії: синій, білі і червоні діагоналі, білий і червоний хрест
+            // прапор Великої Британії (спрощений): синій, білі і червоні діагоналі, білий і червоний хрест
             g.setColor(new Color(0x012169));
-            g.fillRect(x, y, w, h);
+            g.fillRect(0, 0, w, h);
             float s = h / 14f;
             g.setStroke(new BasicStroke(3f * s));
             g.setColor(Color.WHITE);
-            g.draw(new Line2D.Float(x, y, x + w, y + h));
-            g.draw(new Line2D.Float(x, y + h, x + w, y));
+            g.draw(new Line2D.Float(0, 0, w, h));
+            g.draw(new Line2D.Float(0, h, w, 0));
             g.setStroke(new BasicStroke(1.1f * s));
             g.setColor(new Color(0xC8102E));
-            g.draw(new Line2D.Float(x, y, x + w, y + h));
-            g.draw(new Line2D.Float(x, y + h, x + w, y));
+            g.draw(new Line2D.Float(0, 0, w, h));
+            g.draw(new Line2D.Float(0, h, w, 0));
             g.setColor(Color.WHITE);
-            float cw = 4.4f * s;
-            g.fill(new java.awt.geom.Rectangle2D.Float(x + (w - cw) / 2f, y, cw, h));
-            g.fill(new java.awt.geom.Rectangle2D.Float(x, y + (h - cw) / 2f, w, cw));
+            int cw = Math.max(3, Math.round(4.4f * s)), rw = Math.max(1, Math.round(2.6f * s));
+            if ((w - cw) % 2 != 0) cw++;
+            if ((w - rw) % 2 != 0) rw++;
+            g.fillRect((w - cw) / 2, 0, cw, h);
+            g.fillRect(0, (h - cw) / 2, w, cw);
             g.setColor(new Color(0xC8102E));
-            float rw = 2.6f * s;
-            g.fill(new java.awt.geom.Rectangle2D.Float(x + (w - rw) / 2f, y, rw, h));
-            g.fill(new java.awt.geom.Rectangle2D.Float(x, y + (h - rw) / 2f, w, rw));
+            g.fillRect((w - rw) / 2, 0, rw, h);
+            g.fillRect(0, (h - rw) / 2, w, rw);
         }
-        g.setClip(old);
-        g.setColor(new Color(0, 0, 0, 60));
+        // заокруглені кути зі згладжуванням: лишаємо лише те, що всередині заокругленого прямокутника
+        float arc = Math.max(3f, h / 3.5f);
+        java.awt.image.BufferedImage mask = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        Graphics2D m = mask.createGraphics();
+        m.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        m.setColor(Color.WHITE);
+        m.fill(new RoundRectangle2D.Float(0, 0, w, h, arc, arc));
+        m.dispose();
+        g.setComposite(AlphaComposite.DstIn);
+        g.drawImage(mask, 0, 0, null);
+        g.setComposite(AlphaComposite.SrcOver);
+        g.setColor(new Color(0, 0, 0, 70));
         g.setStroke(new BasicStroke(1f));
-        g.draw(new RoundRectangle2D.Float(x + 0.5f, y + 0.5f, w - 1f, h - 1f, Math.max(2, h / 4f), Math.max(2, h / 4f)));
+        g.draw(new RoundRectangle2D.Float(0.5f, 0.5f, w - 1f, h - 1f, arc - 1, arc - 1));
+        g.dispose();
+        return img;
     }
 }

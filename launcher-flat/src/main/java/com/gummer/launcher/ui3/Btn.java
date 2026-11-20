@@ -32,6 +32,8 @@ public class Btn extends JButton {
     private int badgeSpace;
     private int height = 36;
     private boolean onScene;
+    /** 20.11.2026: лише значок (текст у підказці), коли верхній ряд Бібліотеки не влазить у вікно. */
+    private boolean compact;
 
     public Btn(String text, Glyph glyph, Style style) {
         super(text);
@@ -82,8 +84,21 @@ public class Btn extends JButton {
         repaint();
     }
 
+    /** 20.11.2026: стиснути до значка (текст іде в підказку) або повернути текст. */
+    public void setCompact(boolean on) {
+        if (compact == on || glyph == null) return;
+        compact = on;
+        setToolTipText(on ? getText() : null);
+        revalidate();
+        repaint();
+    }
+
+    public boolean isCompact() {
+        return compact;
+    }
+
     private boolean iconOnly() {
-        return getText() == null || getText().isEmpty();
+        return compact || getText() == null || getText().isEmpty();
     }
 
     @Override

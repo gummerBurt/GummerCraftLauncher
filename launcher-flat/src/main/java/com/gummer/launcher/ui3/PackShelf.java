@@ -336,7 +336,7 @@ public final class PackShelf extends JComponent implements Scrollable {
             g.setStroke(new BasicStroke(2f));
             g.setColor(Color.WHITE);
             g.drawRoundRect(r.x - 4, r.y - 4, r.width + 7, r.height + 7, arc + 6, arc + 6);
-            if (isFocusOwner()) {
+            if (isFocusOwner() && com.gummer.launcher.look.FocusVisible.on()) {
                 g.setColor(Ui.FOCUS);
                 g.drawRoundRect(r.x - 7, r.y - 7, r.width + 13, r.height + 13, arc + 10, arc + 10);
             }

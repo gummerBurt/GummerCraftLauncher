@@ -60,6 +60,16 @@ public class FancyLauncher {
                     SwingHelper.setSwingProperties(tr("launcher.appTitle", launcher.getVersion()));
 
                     try {
+                        // 20.11.2026 (власник: «шрифти наче зжаті ... в очах мерехтить»): шрифт інтерфейсу Inter замість
+                        // системного Segoe UI. Java малює Segoe UI власним растеризатором, і на масштабі 125% він виходить
+                        // щільним і важким; Inter зроблений для екранів і в Java рівний. Повернути Segoe: -Dgummer.font=segoe
+                        if( !"segoe".equalsIgnoreCase( System.getProperty( "gummer.font" ) ) ) {
+                            com.formdev.flatlaf.fonts.inter.FlatInterFont.install();
+                            System.setProperty( "gummer.font.inter", "true" ); // для розмірів у HTML (InstanceTableModel.fs)
+                            com.formdev.flatlaf.FlatLaf.setPreferredFontFamily( com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY );
+                            com.formdev.flatlaf.FlatLaf.setPreferredLightFontFamily( com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_LIGHT );
+                            com.formdev.flatlaf.FlatLaf.setPreferredSemiboldFontFamily( com.formdev.flatlaf.fonts.inter.FlatInterFont.FAMILY_SEMIBOLD );
+                        }
                         // init and setup UI LaF
                         UIManager.setLookAndFeel( new FlatMacDarkLaf() );
                     } catch( Exception ex ) {
@@ -69,6 +79,14 @@ public class FancyLauncher {
 
                     enforcePlatformDefaults();
                     enforceUIManagerDefaults();
+                    com.gummer.launcher.look.EscCloses.install(); // 20.11.2026: Esc закриває вікна-діалоги, як хрестик
+                    com.gummer.launcher.look.FocusVisible.install(); // 20.11.2026: рамка фокусу лише після Tab і стрілок
+                    // 20.11.2026 (власник: «всюди "скасувати"»): стандартні кнопки вікон підтвердження Java теж з мови
+                    // лаунчера (українського перекладу в самій Java немає, і там були англійські Cancel, Yes, No)
+                    UIManager.put("OptionPane.cancelButtonText", tr("button.cancel"));
+                    UIManager.put("OptionPane.okButtonText", tr("button.ok"));
+                    UIManager.put("OptionPane.yesButtonText", tr("dialogYes"));
+                    UIManager.put("OptionPane.noButtonText", tr("dialogNo"));
 
                     launcher.setMainWindowSupplier(new CustomWindowSupplier(launcher));
                     // 17.11.2026 (власник: «відкриваєш лаунчер в повноекранному - і він не відкривається повністю ...
@@ -252,8 +270,11 @@ public class FancyLauncher {
             JFrame.setDefaultLookAndFeelDecorated( true );
             JDialog.setDefaultLookAndFeelDecorated( true );
         }
-        System.setProperty("awt.useSystemAAFontSettings", "on");
-        System.setProperty("Dawt.useSystemAAFontSettings","on");
+        // 20.11.2026: на Windows згладжування як у системі (ClearType). Примусове сіре ("on") разом з масштабом 125%
+        // стискало Segoe UI 12.5-13 px і робило нерівні відступи між літерами. На Linux без цього тексту згладжування
+        // може не бути зовсім, тож там лишаємо; гравець, що задав своє значення, теж не чіпаємо.
+        if( !SystemInfo.isWindows && System.getProperty("awt.useSystemAAFontSettings") == null )
+            System.setProperty("awt.useSystemAAFontSettings", "on");
         System.setProperty("swing.aatext", "true");
     }
 

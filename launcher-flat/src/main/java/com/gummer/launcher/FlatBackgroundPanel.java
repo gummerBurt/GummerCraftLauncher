@@ -65,6 +65,35 @@ public class FlatBackgroundPanel extends JPanel {
      */
     private int sidebarW = SIDEBAR_BASE_W;
 
+    /**
+     * 20.11.2026 (власник: «кнопки які хуй зна куди залізли»): у найменшому вікні довгий напис («Кріпер не пройде!»)
+     * лягав на прапорці UA / EN і плашки акаунта. Тепер його правий край не заходить на цю панель.
+     */
+    private JComponent splashAvoid;
+
+    public void setSplashAvoid(JComponent c) {
+        splashAvoid = c;
+        splashDrops.clear();
+        repaint();
+    }
+
+    /** Лівий край панелі, на яку напис не заходить, якщо вона по висоті там, де напис; інакше ширина вікна. */
+    private int splashRightLimit(double top, double bottom) {
+        JComponent c = splashAvoid;
+        if (c == null || !c.isShowing() || c.getWidth() <= 0) return getWidth();
+        Rectangle b = SwingUtilities.convertRectangle(c.getParent(), c.getBounds(), this);
+        // сама панель прозора і на всю висоту зони лого: беремо межі її видимих дочірніх плашок
+        Rectangle used = null;
+        for (Component ch : c.getComponents()) {
+            if (!ch.isVisible() || ch.getWidth() <= 0) continue;
+            Rectangle cb = SwingUtilities.convertRectangle(c, ch.getBounds(), this);
+            used = used == null ? cb : used.union(cb);
+        }
+        if (used != null) b = used;
+        if (bottom < b.y - 6 || top > b.y + b.height + 6) return getWidth();
+        return Math.min(getWidth(), b.x);
+    }
+
     public void setSidebarWidth(int width) {
         if (width == sidebarW) return;
         sidebarW = width;
@@ -359,7 +388,7 @@ public class FlatBackgroundPanel extends JPanel {
     private Properties layout(String key) {
         return layouts.computeIfAbsent(key, k -> {
             Properties props = new Properties();
-            try (InputStream in = Launcher.class.getResourceAsStream("ui/frame/frame_" + k + ".properties")) {
+            try (InputStream in = com.gummer.launcher.look.FrameImages.layoutStream(k)) {
                 if (in != null) props.load(new InputStreamReader(in, StandardCharsets.UTF_8));
             } catch (IOException e) {
                 props.clear();
@@ -623,6 +652,11 @@ public class FlatBackgroundPanel extends JPanel {
         }
     };
 
+    /** 20.11.2026: для look.MemoryTrim (старт гри), лише з потоку інтерфейсу. */
+    public static void clearGlassCache() {
+        glassCache.clear();
+    }
+
     private void paintGlass(Graphics2D g2, Scene scene, float alpha) {
         if (alpha <= 0.0F || getHeight() <= 0) return;
         BufferedImage glass = scene.glass;
@@ -802,8 +836,18 @@ public class FlatBackgroundPanel extends JPanel {
         if (overflow > 0 && !manual) {
             cx -= overflow;
         }
+        boolean shifted = false;
+        { // і не на плашки акаунта та прапорців (верх напису - правий край, він найвище); навіть виставлений руками (splash.manual), бо на іншій ширині вікна він налазив
+            double rise = 2 * half * Math.sin(rad) + img.getHeight() * base;
+            double over = cx + half * Math.cos(rad) + 8 - splashRightLimit(cy - rise, cy + img.getHeight() * base);
+            if (over > 0) {
+                cx -= over;
+                shifted = true;
+            }
+        }
         // кожен напис різної довжини: якщо налазить на літери логотипа, опускаємо, доки не перестане (до 90 px)
-        if (!manual) cy += splashDrop(img, base, cx, cy, angle); // виставлене руками не чіпаємо
+        // виставлене руками не чіпаємо, хіба що його щойно зсунуло з плашок акаунта: тоді він міг лягти на лого
+        if (!manual || shifted) cy += splashDrop(img, base, cx, cy, angle);
         AffineTransform at = AffineTransform.getTranslateInstance(cx, cy);
         at.rotate(Math.toRadians(-angle));
         at.scale(scale, scale);

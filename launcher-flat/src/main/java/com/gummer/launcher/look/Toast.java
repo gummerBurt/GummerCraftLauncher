@@ -282,7 +282,7 @@ public final class Toast extends JComponent {
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        com.gummer.launcher.look.TextAA.apply(g2);
         int w = getWidth(), h = getHeight();
         int arc = p.glass() ? 18 : p.library() ? 16 : 10;
         // тінь
@@ -292,22 +292,14 @@ public final class Toast extends JComponent {
         }
         Color c = typeColor();
         if (p.glass()) {
-            g2.setColor(new Color(18, 20, 25, 236));
-            g2.fillRoundRect(0, 0, w - 1, h - 1, arc, arc);
-            g2.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, 22), 0, h, new Color(255, 255, 255, 4)));
-            g2.fillRoundRect(0, 0, w - 1, h - 1, arc, arc);
-            g2.setColor(new Color(255, 255, 255, 46));
-            g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
+            // 20.11.2026: плашка і рамка по фізичних пікселях (Edge)
+            Edge.pill(g2, 0, 0, w, h, arc, new Color(18, 20, 25, 236), null);
+            Edge.pill(g2, 0, 0, w, h, arc, new GradientPaint(0, 0, new Color(255, 255, 255, 22), 0, h, new Color(255, 255, 255, 4)),
+                    new Color(255, 255, 255, 46));
         } else if (p.library()) {
-            g2.setColor(p.surface3);
-            g2.fillRoundRect(0, 0, w - 1, h - 1, arc, arc);
-            g2.setColor(LookTheme.alpha(c, 90));
-            g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
+            Edge.pill(g2, 0, 0, w, h, arc, p.surface3, LookTheme.alpha(c, 90));
         } else {
-            g2.setColor(p.surface2);
-            g2.fillRoundRect(0, 0, w - 1, h - 1, arc, arc);
-            g2.setColor(p.line);
-            g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
+            Edge.pill(g2, 0, 0, w, h, arc, p.surface2, p.line);
             g2.setColor(c);
             g2.fillRoundRect(0, 0, 4, h, 4, 4);
         }

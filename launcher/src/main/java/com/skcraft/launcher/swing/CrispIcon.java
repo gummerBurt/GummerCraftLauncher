@@ -85,11 +85,17 @@ public class CrispIcon implements Icon {
         } else if (pw < source.getWidth() || ph < source.getHeight()) {
             out = toBuffered(source.getScaledInstance(pw, ph, Image.SCALE_AREA_AVERAGING));
         } else {
-            out = new BufferedImage(pw, ph, BufferedImage.TYPE_INT_ARGB);
-            Graphics2D g = out.createGraphics();
+            // 20.11.2026 (власник: «супер шакальна іконка»): піксель-арт на дробовому масштабі (125%) найближчим пікселем
+            // виходив з пікселями різної ширини, а плавно розмитим. Тепер «гостро»: спершу найближчим пікселем у ціле
+            // число разів (не менше потрібного), потім усередненням до точного розміру: краї чіткі, пікселі рівні
+            int n = (int) Math.ceil(Math.max(pw / (double) source.getWidth(), ph / (double) source.getHeight()) - 1e-9);
+            BufferedImage big = new BufferedImage(source.getWidth() * n, source.getHeight() * n, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = big.createGraphics();
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            g.drawImage(source, 0, 0, pw, ph, null);
+            g.drawImage(source, 0, 0, big.getWidth(), big.getHeight(), null);
             g.dispose();
+            out = big.getWidth() == pw && big.getHeight() == ph ? big
+                    : toBuffered(big.getScaledInstance(pw, ph, Image.SCALE_AREA_AVERAGING));
         }
         cached = out;
         return out;

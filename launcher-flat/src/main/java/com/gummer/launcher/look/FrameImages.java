@@ -78,4 +78,16 @@ public final class FrameImages {
         t.setPriority(Thread.MIN_PRIORITY);
         t.start();
     }
+
+    /**
+     * Вшите налаштування оформлення збірки {@code ui/frame/frame_<key>.properties}; якщо такого файлу немає, спільне
+     * {@code frame_default.properties} (20.11.2026: гравці писали, що лого GummerCraft «стрибає» між версіями. Свій
+     * файл зі зсувами лого був лише в main-26.2, а Main 1.21, 1.20 тощо брали значення з коду. Тепер усі збірки зі
+     * стандартним лого беруть одне оформлення). null, якщо немає жодного.
+     */
+    public static java.io.InputStream layoutStream(String key) {
+        java.io.InputStream in = com.skcraft.launcher.Launcher.class.getResourceAsStream("ui/frame/frame_" + key + ".properties");
+        if (in == null) in = com.skcraft.launcher.Launcher.class.getResourceAsStream("ui/frame/frame_default.properties");
+        return in;
+    }
 }

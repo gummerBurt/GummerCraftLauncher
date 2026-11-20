@@ -37,6 +37,7 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
 
         // дизайн 1.35: редактор розкладки (код ↑↑↓↓←→←→BA), правки в <--dir>/launcher/frame-edit
         if (backgroundPanel != null) {
+            backgroundPanel.setSplashAvoid(splashAvoid());
             LayoutEditor.install(this, backgroundPanel, new java.io.File(launcher.getBaseDir(), "launcher/frame-edit"));
         }
 

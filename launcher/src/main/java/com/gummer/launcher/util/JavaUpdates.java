@@ -135,6 +135,13 @@ public final class JavaUpdates {
                 String id = JavaSecurity.id(want);
                 String have = read(new File(osDir, JavaSecurity.MARKER));
                 e.updateAvailable = id != null && !id.equals(have);
+                // 20.11.2026 (власник зі скріном: «Java 8 1.8.0_442, Є нова: 1.8.0_442»): маркера немає (Java ставив лаунчер до
+                // 1.36.1) або маркер від старого маніфесту з тією ж версією. Якщо версія та сама, звіряємо файли з маніфестом: усі
+                // збігаються, значить Java вже актуальна, пишемо маркер і не пропонуємо «оновити» на те саме.
+                if (e.updateAvailable && e.latest != null && e.latest.equals(e.installed) && filesMatch(osDir, want)) {
+                    JavaSecurity.writeMarker(osDir, want);
+                    e.updateAvailable = false;
+                }
                 e.canUpdate = want != null;
                 File prev = prevDir(launcher, e.component, e.os);
                 e.canRollback = BundledJava.hasJavaBinary(prev);
@@ -203,6 +210,29 @@ public final class JavaUpdates {
     private static String unq(String s) {
         s = s.trim();
         return s.length() >= 2 && s.startsWith("\"") && s.endsWith("\"") ? s.substring(1, s.length() - 1) : s;
+    }
+
+    /** Усі файли маніфесту Java є в теці і збігаються за sha1 (зайві файли не рахуються). Будь-яка помилка: false. */
+    static boolean filesMatch(File dir, JavaManifest want) {
+        try {
+            JavaVersionManifest vm = HttpRequest.get(HttpRequest.url(want.getManifest().getUrl())).execute()
+                    .expectResponseCode(200).returnContent().asJson(JavaVersionManifest.class);
+            if (vm == null || vm.files == null || vm.files.isEmpty()) return false;
+            Path base = dir.getAbsoluteFile().toPath();
+            for (Map.Entry<String, JavaFile> en : vm.files.entrySet()) {
+                JavaFile jf = en.getValue();
+                if (!"file".equals(jf.getType())) continue;
+                JavaFileDownload raw = jf.getDownloads() != null ? jf.getDownloads().getRaw() : null;
+                if (raw == null || raw.getHash() == null) return false;
+                File f = base.resolve(en.getKey()).normalize().toFile();
+                if (!f.isFile() || !raw.getHash().equalsIgnoreCase(FileUtils.getShaHash(f))) return false;
+            }
+            log.info("Java in " + dir + " matches the CDN manifest file by file, marker written");
+            return true;
+        } catch (Exception e) {
+            log.log(Level.FINE, "Can't compare Java files in " + dir, e);
+            return false;
+        }
     }
 
     static String read(File f) {

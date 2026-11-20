@@ -16,6 +16,10 @@ import java.awt.event.MouseEvent;
 /**
  * 17.11.2026 (власник: перемикач лівого меню «АБО всі доступні, АБО всі встановлені»): дві вкладки над списком збірок,
  * «Усі» і «Встановлені». Малюється сам (без FlatLaf-кнопок), однаково в трьох виглядах, кольори з палітри вигляду.
+ *
+ * <p>20.11.2026 (власник: «поміняти їх місцями: зліва "Встановлені", справа "Усі"», «Усі» тепер «Додати інсталяцію»):
+ * ліворуч (індекс 0) «Встановлені», праворуч (1) каталог. Половини не рівні, а за довжиною підписів, бо «Додати
+ * інсталяцію» помітно довше за «Встановлені» і в рівній половині обрізалось би.</p>
  */
 public final class ListModeSwitch extends JComponent {
 
@@ -29,8 +33,8 @@ public final class ListModeSwitch extends JComponent {
     private int hover = -1;
 
     public ListModeSwitch(String all, String installed, boolean installedOnly, Listener listener) {
-        this.labels = new String[]{all, installed};
-        this.selected = installedOnly ? 1 : 0;
+        this.labels = new String[]{installed, all};
+        this.selected = installedOnly ? 0 : 1;
         this.listener = listener;
         setFont(UIManager.getFont("Label.font").deriveFont(Font.BOLD, 12f));
         setFocusable(true);
@@ -38,12 +42,12 @@ public final class ListModeSwitch extends JComponent {
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                choose(e.getX() < getWidth() / 2 ? 0 : 1);
+                choose(e.getX() < split(getWidth()) ? 0 : 1);
             }
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                int h = e.getX() < getWidth() / 2 ? 0 : 1;
+                int h = e.getX() < split(getWidth()) ? 0 : 1;
                 if (h != hover) {
                     hover = h;
                     repaint();
@@ -80,19 +84,26 @@ public final class ListModeSwitch extends JComponent {
     }
 
     public boolean isInstalledOnly() {
-        return selected == 1;
+        return selected == 0;
+    }
+
+    /** Межа між вкладками для ширини w: пропорційно ширині підписів (з однаковим запасом по боках кожного). */
+    private int split(int w) {
+        FontMetrics fm = getFontMetrics(getFont());
+        double a = fm.stringWidth(labels[0]) + 20, b = fm.stringWidth(labels[1]) + 20;
+        return (int) Math.round(w * a / (a + b));
     }
 
     /** 17.11.2026: перемкнути з коду (рядок «+ Додати збірку»), як клац гравця. */
     public void setInstalledOnly(boolean installedOnly) {
-        choose(installedOnly ? 1 : 0);
+        choose(installedOnly ? 0 : 1);
     }
 
     private void choose(int index) {
         if (index == selected) return;
         selected = index;
         repaint();
-        if (listener != null) listener.changed(selected == 1);
+        if (listener != null) listener.changed(selected == 0);
     }
 
     @Override
@@ -100,7 +111,7 @@ public final class ListModeSwitch extends JComponent {
         FontMetrics fm = getFontMetrics(getFont());
         // 17.11.2026 (власник: «"встановлені" трохи погано в кнопку залазять»): по 10 px запасу з боків тексту (більше
         // не влазить верхня панель Бібліотеки у найменшому вікні: «Змінити скін» виїжджала за край)
-        int w = Math.max(fm.stringWidth(labels[0]), fm.stringWidth(labels[1])) * 2 + 2 * 20;
+        int w = fm.stringWidth(labels[0]) + fm.stringWidth(labels[1]) + 2 * 20; // 20.11.2026: половини за довжиною підписів
         double z = Zoom.of(this); // 17.11.2026: збільшення в розгорнутому склі
         return new Dimension(Zoom.px(z, w), Zoom.px(z, 32));
     }
@@ -116,7 +127,7 @@ public final class ListModeSwitch extends JComponent {
         LookTheme.Palette p = LookTheme.palette();
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        com.gummer.launcher.look.TextAA.apply(g2);
         double z = Zoom.of(this);
         g2.scale(z, z);
         int w = (int) Math.round(getWidth() / z), h = (int) Math.round(getHeight() / z);
@@ -126,7 +137,7 @@ public final class ListModeSwitch extends JComponent {
         Color hoverFill = p.glass() ? new Color(255, 255, 255, 18) : new Color(p.surface3.getRed(), p.surface3.getGreen(), p.surface3.getBlue(), 110);
         g2.setColor(track);
         g2.fillRoundRect(0, 0, w, h, arc, arc);
-        int half = w / 2;
+        int half = split(w);
         int x = selected == 0 ? 3 : half + 1;
         int kw = (selected == 0 ? half : w - half) - 4;
         if (hover >= 0 && hover != selected) {
@@ -136,9 +147,8 @@ public final class ListModeSwitch extends JComponent {
         }
         g2.setColor(knob);
         g2.fillRoundRect(x, 3, kw, h - 6, arc - 4, arc - 4);
-        if (isFocusOwner()) {
-            g2.setColor(new Color(p.accent.getRed(), p.accent.getGreen(), p.accent.getBlue(), 150));
-            g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
+        if (isFocusOwner() && FocusVisible.on()) {
+            Edge.pill(g2, 0, 0, w, h, arc, null, new Color(p.accent.getRed(), p.accent.getGreen(), p.accent.getBlue(), 150));
         }
         g2.setFont(getFont());
         FontMetrics fm = g2.getFontMetrics();

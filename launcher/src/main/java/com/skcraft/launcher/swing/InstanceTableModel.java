@@ -356,6 +356,17 @@ public class InstanceTableModel extends AbstractTableModel {
         if (installedOnly) {
             return members; // «Встановлені»: кожна збірка окремим рядком, вибору версії немає
         }
+        if (instance.isBuiltIn()) {
+            // 20.11.2026 (власник: в «Додати інсталяцію» ваніль і завантажувачі «можна буде лише встановити і не буде
+            // писати яка версія вже є чи ні»): лише чисті версії в загальному порядку, без копій, збірок Modrinth і без
+            // підняття встановлених нагору. Свої копії і збірки гравець бачить у «Встановлених»
+            synchronized (instances) {
+                for (Instance i : instances.getInstances()) {
+                    if (instance.getGroup().equals(i.getGroup()) && !i.isOrphaned() && !isDerived(i)) members.add(i);
+                }
+            }
+            return members;
+        }
         // 17.11.2026 (власник: «нехай встановлені будуть вверху списку, а не під версією збірки»): спершу все
         // встановлене (чисті версії, копії, модпаки; як зелена крапка у списку), потім решта; усередині кожної частини порядок той самий
         // (від новішої версії, чиста перед своїми копіями і модпаками)
@@ -506,6 +517,15 @@ public class InstanceTableModel extends AbstractTableModel {
     }
 
     /** 17.11.2026: копія чи збірка Modrinth, що стоїть у виборі версії розділу під чистою версією. */
+    /**
+     * 20.11.2026: рядок каталогу («Додати інсталяцію»), який лише ставить нову інсталяцію: ваніль і завантажувачі.
+     * Кнопка завжди «Встановити», стан «встановлено» не показується, повторне встановлення робить ще одну поряд.
+     * Сервери GummerCraft і StalDayZ сюди не входять: у каталозі їх і ставлять, і запускають.
+     */
+    public boolean isFreshInstall(Instance instance) {
+        return !installedOnly && instance != null && instance.isBuiltIn() && !isBrowser(instance);
+    }
+
     public static boolean isDerived(Instance instance) {
         return instance != null && (instance.isCopy() || instance.isMrpack());
     }
@@ -690,7 +710,9 @@ public class InstanceTableModel extends AbstractTableModel {
             if (sb.length() > 0) sb.append(span(GREY, " · "));
             sb.append(span(p[0], p[1]));
         }
-        return " &nbsp;&nbsp;&nbsp;<span style=\"font-size:" + fs(11) + ";\">" + sb + "</span>";
+        // 20.11.2026 (власник: «просканити лаунчер на ... відсутнє вертикальне центрування, кнопки які хуй зна куди
+        // залізли»): відступ той самий, що в назви (один &nbsp; базовим шрифтом), раніше три і другий рядок стояв правіше
+        return "&nbsp;<span style=\"font-size:" + fs(11) + ";\">" + sb + "</span>";
     }
 
     /** Повний текст рядка для підказки, якщо в списку він скорочений; інакше null. */
@@ -850,6 +872,9 @@ public class InstanceTableModel extends AbstractTableModel {
     }
 
     private String fs(int size) {
+        // 20.11.2026: зі шрифтом Inter (FancyLauncher, властивість gummer.font.inter) на 1 менше: Inter 12 за висотою
+        // малих літер як Segoe UI 13, а на тому самому кеглі на ~13% ширший, і назви в списку обрізались би
+        if (Boolean.getBoolean("gummer.font.inter")) size -= 1;
         return zoom == 1.0 ? String.valueOf(size) : String.valueOf((int) Math.round(size * zoom));
     }
 
@@ -1025,13 +1050,17 @@ public class InstanceTableModel extends AbstractTableModel {
                 String groupTitle = groupTitleFor(instance);
                 if (groupTitle != null) {
                     // рядок групи: назва групи, під нею вибрана версія і її стан
+                    // 20.11.2026 (власник: «прибрати написи з описом останньої запущеної збірки під лоадером»): у каталозі
+                    // без другого рядка, вибрану версію видно у виборі версії
                     return "<html>" + titleLine(groupTitle, instance)
-                            + groupLine(instance)
+                            + (installedOnly ? groupLine(instance) : "")
                             + "</html>"; // стан версії (встановлено, оновлення) видно у виборі версії: у вузькому списку не влазить
                 }
                 // «Встановлені»: Vanilla як у виборі версії («Pre-classic rd-132211» без «Minecraft», 17.11.2026)
                 String title = installedOnly && instance.isVanilla() ? pickerTitleOf(instance) : instance.getTitle();
-                return "<html>" + titleLine(title, instance) + getAddendum(instance) + "</html>";
+                // 20.11.2026: у каталозі другий рядок лишається лише в рядків-сторінок (Modrinth, імпорт)
+                String addendum = installedOnly || isBrowser(instance) ? getAddendum(instance) : "";
+                return "<html>" + titleLine(title, instance) + addendum + "</html>";
             default:
                 return null;
         }
