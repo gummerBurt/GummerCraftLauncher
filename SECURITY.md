@@ -70,6 +70,7 @@
 - Реєстр Windows лаунчер **лише читає** (пошук встановленої Java у `WindowsRuntimeFinder`; з 1.36 ще назву відеокарти з класу пристроїв Display для поради пресета ФПС у `FpsPresets`, вона нікуди не надсилається). Автозапуску, служб, задач планувальника, правил брандмауера чи ярликів він не створює.
 - DLL у робочій папці - це native-бібліотеки Minecraft від Mojang (LWJGL тощо), файли Java-рантайму Eclipse Temurin, підписані Eclipse Foundation, і `launcher/natives/flatlaf-windows-*.dll` - службова бібліотека інтерфейсу [FlatLaf](https://www.formdev.com/flatlaf/native-libraries/) (вигляд вікна), яка лежить у самому jar лаунчера.
 - Сандбокси на кшталт Hybrid Analysis можуть показувати для лаунчера «підозрілі» індикатори: зміну прав папки `%ALLUSERSPROFILE%\Oracle\Java\.oracle_jre_usage` через `icacls` (так робить сама Oracle Java 8 для будь-якої Java-програми) і автоматичні співставлення назв системних функцій Java з техніками MITRE. Це не дії лаунчера.
+- Установка для Linux і Steam Deck (`tools/linux/install.sh`, без root): Java, лаунчер і скрипти в `~/GummerCraft/app`, ярлики `~/.local/share/applications/gummercraft.desktop` і на робочому столі, на SteamOS ярлик у бібліотеці Steam через системну `steamos-add-to-steam`. З 1.36.7 ще чотири картинки в `~/.local/share/Steam/userdata/<акаунт>/config/grid/` під номером саме цього ярлика (номер скрипт читає з `shortcuts.vdf`, сам файл не змінює); картинку, яка там уже є, не перезаписує. `~/GummerCraft/app/uninstall.sh` прибирає програму і ярлики, ігри лишає.
 
 ## Відомі обмеження
 

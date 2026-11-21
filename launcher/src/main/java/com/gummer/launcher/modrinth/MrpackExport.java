@@ -78,11 +78,15 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
         this.selfContained = selfContained;
     }
 
-    /** Чи можна експортувати: встановлені Fabric, Quilt, Forge, NeoForge, їхні копії і Modrinth-збірки (не модпаки з CDN). */
+    /**
+     * Чи можна експортувати: встановлені Vanilla, Fabric, Quilt, Forge, NeoForge, їхні копії і Modrinth-збірки (не модпаки
+     * з CDN). 20.11.2026 (власник: «збірка вже давно скачана, майнкрафт 26.3, а експорт недоступний»): Vanilla теж, у файлі
+     * лише версія гри і за вибором ресурспаки; раніше її відсікало, а вікно писало «натисни Грати хоча б раз».
+     */
     public static boolean canExport(Instance instance) {
-        if (instance == null || instance.isVanilla() || !instance.isInstalled()) return false;
+        if (instance == null || !instance.isInstalled()) return false;
         if (!(instance.isBuiltIn() || instance.isCopy())) return false;
-        return loader(instance) != null;
+        return instance.isVanilla() || loader(instance) != null;
     }
 
     /** {завантажувач у форматі .mrpack, версія}, або null. */
@@ -91,6 +95,7 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
             JsonNode i = MrpackPacks.info(instance);
             if (i == null) return null;
             String l = i.path("loader").asText("vanilla"), v = i.path("loaderVersion").asText(null);
+            if ("vanilla".equals(l)) return new String[0]; // 20.11.2026: .mrpack без завантажувача (і наш експорт Vanilla)
             if (v == null) return null;
             if ("forge".equals(l) && v.contains("-")) v = v.substring(v.indexOf('-') + 1);
             String key = "fabric".equals(l) ? "fabric-loader" : "quilt".equals(l) ? "quilt-loader" : l;
@@ -118,7 +123,7 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
     @Override
     public File call() throws Exception {
         String mc = InstanceCopies.minecraftVersionOf(instance);
-        String[] loader = loader(instance);
+        String[] loader = instance.isVanilla() ? new String[0] : loader(instance); // Vanilla: без завантажувача
         if (mc == null || loader == null) throw new IOException("Cannot export " + instance.getName() + ": unknown game or loader version");
         boolean fromPack = new File(instance.getDir(), FROM_PACK).isFile();
         File content = instance.getContentDir();
@@ -181,7 +186,7 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
         }
         ObjectNode deps = index.putObject("dependencies");
         deps.put("minecraft", mc);
-        deps.put(loader[0], loader[1]);
+        if (loader.length == 2) deps.put(loader[0], loader[1]);
 
         // 4. конфіги і за вибором ресурспаки, шейдери
         List<String> dirs = new ArrayList<String>(java.util.Arrays.asList(CONFIG_DIRS));

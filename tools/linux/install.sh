@@ -104,6 +104,16 @@ main() {
     else
         log "Іконка не завантажилась (не страшно)"
     fi
+    # Обкладинки для бібліотеки Steam (з 21.11.2026): кавер, широка плитка, шапка, логотип. Ставить їх steam-art.sh нижче.
+    mkdir -p "$APP/steam-art"
+    local art
+    for art in cover wide hero logo; do
+        if download "$BASE/linux/steam/$art.png" "$TMP/$art.png" && [ "$(head -c 4 "$TMP/$art.png" | tail -c 3)" = "PNG" ]; then
+            mv -f "$TMP/$art.png" "$APP/steam-art/$art.png"
+        else
+            log "Обкладинка $art не завантажилась (не страшно)"
+        fi
+    done
 
     cat > "$APP/gummercraft.sh" <<'RUN'
 #!/usr/bin/env bash
@@ -112,6 +122,10 @@ APP="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 # Java Swing у віконних менеджерах без декорацій (gamescope в ігровому режимі Steam Deck) інакше може показати порожнє вікно.
 export _JAVA_AWT_WM_NONREPARENTING=1
 cd "$HOME" || true
+# Обкладинки Steam: якщо під час установки Steam ще не записав ярлик, поставити їх зараз (у фоні, до успіху один раз).
+if [ -x "$APP/steam-art.sh" ] && [ ! -f "$APP/.steam-art-done" ]; then
+    "$APP/steam-art.sh" >/dev/null 2>&1 &
+fi
 exec "$APP/jre/bin/java" -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true -jar "$APP/Gummer_Craft_launcher.jar" "$@"
 RUN
     chmod +x "$APP/gummercraft.sh"
@@ -127,6 +141,61 @@ rm -rf "$APP"
 echo "Лаунчер видалено. Ігри та світи лишились у $HOME/GummerCraft. Ярлик у Steam приберіть вручну (Керувати -> Видалити ярлик)."
 UNINSTALL
     chmod +x "$APP/uninstall.sh"
+
+    # Обкладинки Steam. Steam дає ярлику «не з Steam» випадковий appid і пише його в userdata/<id>/config/shortcuts.vdf,
+    # а картинки бере з config/grid/<appid>p.png (кавер 600x900), <appid>.png (920x430), <appid>_hero.png (1920x620),
+    # <appid>_logo.png. Скрипт шукає в shortcuts.vdf ярлики на наш gummercraft.sh і кладе картинки лише туди, де їх ще
+    # немає (свої обкладинки гравця не перезаписуються). Steam підхоплює їх після перезапуску (перехід в ігровий режим).
+    cat > "$APP/steam-art.sh" <<'ART'
+#!/usr/bin/env bash
+# Ставить обкладинки GummerCraft у бібліотеку Steam. Створено установкою (install.sh). Аргумент: скільки секунд чекати ярлик.
+APP="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+WAIT="${1:-0}"
+[ -d "$APP/steam-art" ] && command -v python3 >/dev/null 2>&1 || exit 0
+end=$(( $(date +%s) + WAIT ))
+while :; do
+    found="$(python3 - "$APP" <<'PY'
+import glob, os, re, shutil, struct, sys
+app = sys.argv[1]
+needle = (app + "/gummercraft.sh").encode()
+art = {"cover.png": "%dp.png", "wide.png": "%d.png", "hero.png": "%d_hero.png", "logo.png": "%d_logo.png"}
+seen, n = set(), 0
+home = os.path.expanduser("~")
+for vdf in glob.glob(home + "/.local/share/Steam/userdata/*/config/shortcuts.vdf") + glob.glob(home + "/.steam/steam/userdata/*/config/shortcuts.vdf"):
+    real = os.path.realpath(vdf)
+    if real in seen:
+        continue
+    seen.add(real)
+    try:
+        b = open(real, "rb").read()
+    except OSError:
+        continue
+    marks = [m.end() for m in re.finditer(rb"\x02appid\x00", b, re.I)]
+    for k, pos in enumerate(marks):
+        entry = b[pos:marks[k + 1] if k + 1 < len(marks) else len(b)]
+        if needle not in entry or pos + 4 > len(b):
+            continue
+        appid = struct.unpack("<I", b[pos:pos + 4])[0]
+        grid = os.path.join(os.path.dirname(real), "grid")
+        os.makedirs(grid, exist_ok=True)
+        for src, name in art.items():
+            s, d = os.path.join(app, "steam-art", src), os.path.join(grid, name % appid)
+            if os.path.isfile(s) and not os.path.exists(d):
+                shutil.copyfile(s, d)
+        n += 1
+print(n)
+PY
+)"
+    if [ "${found:-0}" -gt 0 ] 2>/dev/null; then
+        touch "$APP/.steam-art-done"
+        echo "Обкладинки Steam: ярликів $found"
+        exit 0
+    fi
+    [ "$(date +%s)" -ge "$end" ] && exit 0
+    sleep 3
+done
+ART
+    chmod +x "$APP/steam-art.sh"
 
     # 3. Ярлики
     ui_progress_text "Створюємо ярлики..."
@@ -171,6 +240,10 @@ ENTRY
         else
             log "steamos-add-to-steam не спрацював"
             STEAM_NOTE=". У Steam додайте вручну: Steam -> Ігри -> Додати сторонню гру -> GummerCraft"
+        fi
+        # обкладинки: Steam пише ярлик у shortcuts.vdf не одразу, тож чекаємо до 90 с у фоні, установка не затримується
+        if [ -f "$APP/.added-to-steam" ] && [ ! -f "$APP/.steam-art-done" ]; then
+            nohup "$APP/steam-art.sh" 90 >>"$LOG" 2>&1 &
         fi
     fi
 

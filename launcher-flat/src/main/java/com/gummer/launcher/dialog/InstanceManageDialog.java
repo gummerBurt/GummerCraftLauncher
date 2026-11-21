@@ -2863,9 +2863,11 @@ public class InstanceManageDialog extends JDialog {
         JPanel c = card();
         c.add(LookUi.title(tr("manage.share.title"), 15f));
         boolean can = com.gummer.launcher.modrinth.MrpackExport.canExport(instance);
-        c.add(LookUi.body(tr(can ? "manage.share.hint" : instance.isBuiltIn() || instance.isCopy()
-                ? "manage.share.notInstalled" : "manage.share.notForModpacks"), true), "wmin 0");
-        if (can) c.add(LookUi.body(tr("manage.share.zipHint"), true), "wmin 0, gaptop 4"); // 17.11.2026
+        // 20.11.2026: «не встановлено» лише коли справді не встановлено; встановлена, але без відомої версії завантажувача: noLoader
+        c.add(LookUi.body(tr(can ? (instance.isVanilla() ? "manage.share.hintVanilla" : "manage.share.hint")
+                : !(instance.isBuiltIn() || instance.isCopy()) ? "manage.share.notForModpacks"
+                : !instance.isInstalled() ? "manage.share.notInstalled" : "manage.share.noLoader"), true), "wmin 0");
+        if (can && !instance.isVanilla()) c.add(LookUi.body(tr("manage.share.zipHint"), true), "wmin 0, gaptop 4"); // 17.11.2026
         final JCheckBox packs = check(tr("manage.share.packs"), false);
         JPanel row = new JPanel(new MigLayout("insets 0, gap 8, fillx", "[][][]push", "[34!]"));
         row.setOpaque(false);
@@ -2879,7 +2881,7 @@ public class InstanceManageDialog extends JDialog {
             JButton zip = LookUi.secondary(new JButton(tr("manage.share.exportZip")));
             zip.setToolTipText(tr("manage.share.zipTip"));
             zip.addActionListener(e -> exportPack(packs.isSelected(), true));
-            row.add(zip, "h 34!");
+            if (!instance.isVanilla()) row.add(zip, "h 34!"); // 20.11.2026: у Vanilla модів немає, .zip був би тим самим файлом
         }
         JButton imp = LookUi.secondary(new JButton(tr("manage.share.import")));
         imp.addActionListener(e -> importPack());

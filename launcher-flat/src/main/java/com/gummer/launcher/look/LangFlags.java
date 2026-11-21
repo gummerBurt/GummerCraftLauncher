@@ -182,14 +182,22 @@ public final class LangFlags extends JComponent {
                         on || hot ? (on ? LookTheme.alpha(p.accent, 200) : new Color(255, 255, 255, 70)) : null, Math.max(1.0, zoom));
                 int fw = px(FLAG_W), fh = px(FLAG_H);
                 String c = code(langs[i]);
-                int content = fw + px(7) + fm.stringWidth(c);
-                int fx = r.x + Math.max(px(4), (r.width - content) / 2), fy = r.y + (r.height - fh) / 2;
+                // 21.11.2026 (власник: «UA наліплено на правий край кнопки»): у склі плашки тягнуться під акаунт і скіни і
+                // бувають вужчі за PILL_W (~57 замість 62). Раніше вміст центрувався за fm.stringWidth з лівим відступом не
+                // менше 4 px, тож нестача ширини і різниця між stringWidth та намальованими літерами йшли з правого боку.
+                // Тепер ширина тексту береться з контуру літер, а вільне місце ділиться порівну: зліва, між прапорцем і
+                // текстом, справа (проміжок не менше 4 px, решта порівну по краях).
+                java.awt.geom.Rectangle2D vb = f.createGlyphVector(g.getFontRenderContext(), c).getVisualBounds();
+                double free = r.width - fw - vb.getWidth();
+                double gap = Math.max(px(4), Math.min(px(7), free / 3.0));
+                double pad = Math.max(0, (free - gap) / 2.0);
+                int fx = r.x + (int) Math.round(pad), fy = r.y + (r.height - fh) / 2;
                 Graphics2D fg = (Graphics2D) g.create();
                 fg.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, on || hot ? 1f : 0.6f));
                 paintFlag(fg, langs[i], fx, fy, fw, fh);
                 fg.dispose();
                 g.setColor(on ? p.text : hot ? p.text : p.text2);
-                int tx = fx + fw + px(7);
+                double tx = fx + fw + gap - vb.getX(); // vb.getX(): лівий відступ першої літери всередині її клітинки
                 // 20.11.2026: по центру за висотою великих літер (як прапорець), базова лінія по цілому фізичному пікселю
                 double cap = f.createGlyphVector(g.getFontRenderContext(), "UAEN").getVisualBounds().getHeight();
                 drawSnapped(g, c, tx, r.y + r.height / 2.0 + cap / 2.0);
