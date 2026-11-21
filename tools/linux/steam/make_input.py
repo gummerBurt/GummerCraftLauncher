@@ -93,8 +93,8 @@ PAD = [("dpad_north", [key("T")]), ("dpad_south", [key("Z")]), ("dpad_east", [ke
 TITLE_EN = "GummerCraft (launcher and game)"
 DESC_EN = ("GummerCraft launcher, Minecraft and StalDayZ: left stick = WASD, right trackpad and right stick = mouse, "
            "R2 / L2 = left / right click, A = jump, B = sneak, X = inventory, Y = reload, D-pad = launcher arrows.")
-TITLE_UK = "GummerCraft (лаунчер і гра)"
-DESC_UK = ("Лаунчер, Minecraft і StalDayZ: лівий стік ходьба, правий тачпад і правий стік миша, R2 / L2 лівий / правий клік, "
+TITLE_UK = "GummerCraft (лаунчер та ігри)"
+DESC_UK = ("Лаунчер, Minecraft та StalDayZ: лівий стік ходьба, правий тачпад і правий стік миша, R2 / L2 лівий / правий клік, "
            "A стрибок, B присісти, X інвентар, Y перезарядка, хрестовина стрілки в лаунчері.")
 
 w.open("controller_mappings")

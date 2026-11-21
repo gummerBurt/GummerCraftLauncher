@@ -6,11 +6,20 @@
 
 # GummerCraft Launcher
 
-Безкоштовний лаунчер Minecraft з відкритим кодом від українського проєкту [GummerCraft](https://gummercraft.fun). Ставить будь-яку версію Minecraft, Fabric, Quilt, Forge і NeoForge, модпаки та моди з Modrinth, а також збірки наших серверів StalDayZ і GummerCraft. Без реклами, українською та англійською.
+<div align="center">
+
+[![Версія](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.gummer.cc%2Flauncher%2Finstall%2Frelease.json&query=%24.version&label=version&color=22b35e)](https://gummercraft.fun/launcher)
+[![License: LGPL-3.0](https://img.shields.io/badge/license-LGPL--3.0-blue)](LICENSE.txt)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Steam%20Deck%20%7C%20macOS-555)](https://gummercraft.fun/launcher)
+[![Мова: UA / EN](https://img.shields.io/badge/UI-%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%81%D1%8C%D0%BA%D0%B0%20%7C%20English-ffd500)](https://gummercraft.fun/launcher)
+
+</div>
+
+Український лаунчер Minecraft з відкритим кодом (LGPL-3.0) від проєкту [GummerCraft](https://gummercraft.fun): безкоштовний, без реклами, для Windows, Linux, Steam Deck та macOS. Ставить будь-яку версію Minecraft, Fabric, Quilt, Forge і NeoForge, модпаки та моди з Modrinth, а також збірки наших серверів StalDayZ і GummerCraft. Інтерфейс українською та англійською.
 
 **[Завантажити для Windows](https://launch.gummercraft.fun/install/GummerCraft.exe)** (один файл, Java вже всередині) · [портативний zip](https://launch.gummercraft.fun/install/GummerCraft-portable.zip) · [Linux і Steam Deck](https://launch.gummercraft.fun/install/linux/GummerCraft-Linux.desktop) · [jar для macOS і Linux](https://launch.gummercraft.fun/install/jar) · [сторінка лаунчера](https://gummercraft.fun/launcher)
 
-*Free, open-source Minecraft launcher by the Ukrainian GummerCraft project. A fork of [SKCraft Launcher](https://github.com/SKCraft/Launcher), licensed under LGPL v3. English summary at the bottom.*
+*Ukrainian open-source Minecraft launcher: free, no ads, for Windows, Linux, Steam Deck and macOS. A Steam Deck Minecraft launcher with Game Mode and gamepad support, Modrinth modpacks, crash analysis and SHA-256 verification of official builds. A fork of [SKCraft Launcher](https://github.com/SKCraft/Launcher), licensed under LGPL-3.0. English summary at the bottom.*
 
 ## Можливості
 
@@ -76,6 +85,7 @@
 - Що лаунчер робить у мережі (кожна адреса і що туди йде), що зберігає на комп'ютері та відомі обмеження: [SECURITY.md](SECURITY.md).
 - Реклами немає. Є анонімна статистика: випадковий ID установки (ні з чого не виводиться, без ніка і акаунта), події «гру запущено» з назвою збірки, «завантаження збірки» та кілька інших, кожна описана в SECURITY.md. Слово `off` у файлі `stats-id.txt` у теці лаунчера вимикає все це.
 - Офіційну збірку на CDN можна перевірити самому: дивись [«Перевірка офіційної збірки»](#перевірка-офіційної-збірки).
+- SHA-256 файлів кожної версії опубліковано в [Releases](https://github.com/gummerBurt/GummerCraftLauncher/releases). Перевірити завантажений файл: `Get-FileHash GummerCraft.exe` у PowerShell або `sha256sum GummerCraft.exe` на Linux і macOS.
 
 ## Походження та ліцензія
 
@@ -164,13 +174,15 @@ python tools/verify-cdn.py
 
 ## English summary
 
-GummerCraft Launcher is a free, open-source Minecraft launcher by the Ukrainian GummerCraft project. It installs any Minecraft release, snapshot or historic version (down to rd-132211), Fabric, Quilt, Forge and NeoForge with the right Java picked automatically, Modrinth modpacks, mods, resource packs and shaders (with dependencies, updates and one-click rollback), imports builds from Prism, ATLauncher, CurseForge, TLauncher and other launchers, and runs the GummerCraft and StalDayZ server packs. A built-in helper checks mods before launch (wrong loader or game version, duplicates, incompatible pairs, missing dependencies) and explains crashes in plain words with one-click fixes. Microsoft or offline accounts, three UI looks, Ukrainian and English. Windows 7-11 (single exe with bundled Java), Linux and Steam Deck (one-click installer that also adds the launcher to the Steam library), macOS (jar, needs Java 8+).
+GummerCraft Launcher is a free, Ukrainian open-source Minecraft launcher (LGPL-3.0) by the GummerCraft project. Download and official page: [gummercraft.fun/launcher](https://gummercraft.fun/launcher). It installs any Minecraft release, snapshot or historic version (down to rd-132211), Fabric, Quilt, Forge and NeoForge with the right Java picked automatically, Modrinth modpacks, mods, resource packs and shaders (with dependencies, updates and one-click rollback), imports builds from Prism, ATLauncher, CurseForge, TLauncher and other launchers, and runs the GummerCraft and StalDayZ server packs. A built-in helper checks mods before launch (wrong loader or game version, duplicates, incompatible pairs, missing dependencies) and explains crashes in plain words with one-click fixes. Microsoft or offline accounts, three UI looks, Ukrainian and English. Windows 7-11 (single exe with bundled Java), Linux and Steam Deck (one-click installer that also adds the launcher to the Steam library), macOS (jar, needs Java 8+).
 
 It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
 
 **Latest, 1.36.9:** the launcher language for a new data folder follows the system (Ukrainian if the Windows display language or region is Ukrainian or Russian, English otherwise; a language already chosen is kept); in "Add" vanilla and loaders show only game versions, without the names of your installed builds and without update arrows (those are in "Installed" only), and installing a version you already have asks whether to open the installed one or add one more; a damaged Forge settings file (`config/fml.toml`, the game closes right after launch) is now recognised with a one-click reset; Steam Deck Game Mode: the launcher is shown again after leaving the game instead of a grey screen (its window is no longer closed while the game runs there), and the shortcut added by the installer shows up in Recent games on the Game Mode home screen.
 
 Full history: [CHANGELOG.md](CHANGELOG.md#english-changelog).
+
+**Security and verification.** The launcher updates itself only over HTTPS and starts a new version only if its SHA-256 matches the published one; Modrinth files are checked against Modrinth hashes. Anyone can check that the official build on our CDN is built from this repository: `./gradlew clean build`, then `python tools/verify-cdn.py` (downloads the official jar, checks its SHA-256 and compares it with your build file by file; only `launcher.properties` differs, because the Microsoft app id is not in the repository). SHA-256 of every release file is listed in [Releases](https://github.com/gummerBurt/GummerCraftLauncher/releases).
 
 Everything lives in one folder (`Documents\GummerCraft` on Windows, `~/GummerCraft` on Linux). The launcher does not write to the registry, with one exception the player turns on: since 1.36.3 the graphics card choice for a build (Build window, shown only on PCs with two graphics cards: "Let the system decide", "name (built-in)", "name (discrete)", the first one by default) writes one value to `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` before the game starts (name: the path to the launcher's own Java, data: `GpuPreference=1;` or `GpuPreference=2;`), exactly what the Windows "Graphics settings" page writes. System Java and choices already made in Windows are left alone, switching back to "Let the system decide" or deleting builds removes the value, and every step is logged. On Linux choosing the discrete card only adds PRIME variables to that one launch. It does not add autostart entries, services or scheduled tasks, or touch files outside that folder. Since 1.36.3, Settings, Advanced, "Delete the launcher and all builds" removes the launcher folders and `bootstrap.yml` and leaves files it did not create alone. Since 1.32 it keeps an anonymous random install ID in `stats-id.txt` (not derived from your name, account or hardware) and sends it only with the modpack list request to our CDN, so we can count players rather than IP addresses. Since 1.33.1 it also tells our CDN which pack was started (our pack name, or the kind and Minecraft version for Vanilla and mod loaders; never your nickname, account, mods or anything about the computer). Write `off` into the file to disable both. Installed modpacks also start without internet (from a saved copy of the modpack list, with the saved Microsoft profile, singleplayer and servers without account checks). Since 1.32 new players can also get a single `GummerCraft.exe` with bundled Java: on first run it unpacks into `%LOCALAPPDATA%\GummerCraft\app` (no shortcuts, no uninstall entry) and then just opens the launcher. Network endpoints, account handling and known limitations are listed in [SECURITY.md](SECURITY.md).
 

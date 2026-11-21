@@ -484,7 +484,7 @@ ENTRY
                 ui_progress_text "Додаємо GummerCraft у бібліотеку Steam..."
                 local restart=""
                 if steam_running; then
-                    if ui_question "Щоб GummerCraft з'явився в бібліотеці Steam (і в ігровому режимі Steam Deck з керуванням геймпадом), Steam треба закрити на кілька секунд. Закрити Steam зараз? Потім він відкриється сам."; then
+                    if ui_question "Щоб GummerCraft з'явився в бібліотеці Steam (і в ігровому режимі Steam Deck з керуванням геймпадом), Steam потрібно закрити на декілька секунд. Закрити Steam зараз? Потім він відкриється сам."; then
                         steam_stop && restart=1
                     fi
                 fi
