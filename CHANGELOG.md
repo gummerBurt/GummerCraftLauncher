@@ -4,6 +4,14 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.9
+
+- **Мова за мовою системи.** Новий лаунчер (без збереженої мови) вибирає її сам: українська, якщо мова чи регіон Windows українські або російські, інакше англійська. Хто вже вибрав мову, у того нічого не зміниться.
+- **«Додати»:** ваніль і завантажувачі показують лише версії гри, без назв твоїх встановлених збірок і без зелених стрілок оновлень (вони тепер лише у «Встановлених»). Якщо така версія вже стоїть, лаунчер питає: відкрити встановлену чи поставити ще одну окрему.
+- **Розбір вильоту:** пошкоджений файл налаштувань самого Forge (`config/fml.toml`, гра закривається одразу після запуску) лаунчер тепер розпізнає і пропонує скинути його однією кнопкою.
+- **Steam Deck:** в ігровому режимі після виходу з гри знову видно лаунчер, а не сірий екран: там вікно лаунчера на час гри більше не закривається.
+- **Steam Deck:** ярлик, який додає установка, одразу з'являється в «Нещодавніх» на головній ігрового режиму, а не лише в бібліотеці (для нової установки ярлика).
+
 ## 1.36.8
 
 - **Статус у Discord.** Поки лаунчер відкритий, друзі в Discord бачать «Грає в GummerCraft»: у лаунчері чи в якій збірці і скільки часу, з кнопками «Скачати лаунчер» і «Discord GummerCraft»; у StalDayZ своя картинка. Лаунчер говорить лише з Discord на твоєму ПК, нічого не йде в мережу. Вимикається в налаштуваннях: «Додатково», «Статус у Discord». На Linux і Steam Deck працює з новою установкою (Java 16+).
@@ -218,6 +226,8 @@
 ---
 
 ## English changelog
+
+**1.36.9:** the launcher language for a new data folder follows the system (Ukrainian if the Windows display language or region is Ukrainian or Russian, English otherwise; a language already chosen is kept); in "Add" vanilla and loaders show only game versions, without the names of your installed builds and without update arrows (those are in "Installed" only), and installing a version you already have asks whether to open the installed one or add one more; a damaged Forge settings file (`config/fml.toml`, the game closes right after launch) is now recognised with a one-click reset; Steam Deck Game Mode: the launcher is shown again after leaving the game instead of a grey screen (its window is no longer closed while the game runs there), and the shortcut added by the installer shows up in Recent games on the Game Mode home screen.
 
 **1.36.8:** Discord status (Rich Presence): while the launcher is open, Discord friends see "Playing GummerCraft", in the launcher or which build and for how long, with "Download the launcher" and "GummerCraft Discord" buttons (StalDayZ has its own picture); only local IPC with Discord on this PC, can be turned off in Settings, Advanced (Linux and Steam Deck need Java 16+, i.e. the new installer); Steam Deck gamepad support: the Linux and Steam Deck installer gives the GummerCraft Steam shortcut a "GummerCraft (launcher and game)" controller layout (in game: left stick to walk, right stick or trackpad to look, R2 / L2 attack and use, A jump, B sneak and more, full table in [tools/linux](tools/linux/README.md); in the launcher: D-pad and left stick move between buttons and builds, A presses, B closes windows, the right trackpad moves the cursor), a layout the player already chose is kept; under Steam on Linux the launcher navigates with arrow keys to the nearest element and draws a focus ring (Windows and macOS unchanged); the Steam shortcut is now really added (the installer used to only ask Steam to add it, which Steam could silently ignore); fixed a grey screen instead of the launcher after leaving the game in Steam Deck Game Mode; the down arrow in the build list no longer opens the "Import build" window.
 

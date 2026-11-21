@@ -109,7 +109,7 @@ public final class CrashAnalyzer {
         Diagnosis path = oldGamePath(instance, t, source);
         if (path != null) return path;
         Diagnosis d = match(t, source);
-        if (d != null && "brokenConfig".equals(d.key)) return withConfig(instance, d);
+        if (d != null && d.action == Action.RESET_CONFIG) return withConfig(instance, d);
         if (d != null) return withMod(instance, d);
         // 20.11.2026 (тікет #88): шлях з літерами, яких немає в кодовій сторінці Windows для програм: Java бачить «?»
         // замість них і не знаходить файлів. Будь-яка версія гри; часто гра падає ще до логу, тож без умови на текст,
@@ -238,6 +238,19 @@ public final class CrashAnalyzer {
             c.depId = cfg.group(2);
             return c;
         }
+        // 21.11.2026 (тікет #98): пошкоджений головний конфіг самого Forge (config/fml.toml). Forge пише про нього інакше,
+        // ніж про конфіги модів («Failed to load FML config from <шлях>», причина ParsingException), і гра закривається
+        // з кодом 1 ще до вікна. Рядок іде через STDERR з рівнем INFO, тож шукаємо в повному тексті. У шляху бувають
+        // пробіли, тому до кінця рядка, а не \S+
+        Matcher fml = Pattern.compile("Failed to load FML config from ([^\\r\\n]+?\\.toml)").matcher(t);
+        if (fml.find()) {
+            String path = fml.group(1).trim();
+            String name = path.substring(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+            Diagnosis c = new Diagnosis("brokenFmlConfig", Action.RESET_CONFIG, name, source);
+            File direct = new File(path);
+            if (direct.isFile()) c.configFile = direct;
+            return c;
+        }
         // 17.11.2026: хто звалив гру. Forge і NeoForge пишуть у звіті «Suspected Mod(s): Назва (modid)», у Fabric
         // помилка в коді мода видна як «... from mod modid» у стеку
         Matcher suspected = Pattern.compile("Suspected Mods?:\\s*([^\\n(]+?)\\s*\\(([a-z0-9_\\-]+)\\)").matcher(t);
@@ -296,6 +309,7 @@ public final class CrashAnalyzer {
     /** Знайти пошкоджений конфіг у теці config збірки (за назвою файлу, до трьох рівнів углиб); один збіг: кнопка. */
     private static Diagnosis withConfig(Instance instance, Diagnosis d) {
         File cfgDir = new File(instance.getContentDir(), "config");
+        if (d.configFile != null) return d; // уже знайдено за повним шляхом з лога (fml.toml)
         java.util.List<File> found = new java.util.ArrayList<File>();
         findByName(cfgDir, d.detail, 0, found);
         if (found.size() == 1) d.configFile = found.get(0);

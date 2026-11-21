@@ -160,7 +160,7 @@ UNINSTALL
 #   status: у скількох акаунтах Steam ярлик уже є і скільки акаунтів загалом ("users=N have=M")
 #   add:    дописати ярлик туди, де його немає (лише при закритому Steam!), і поставити обкладинки
 #   art:    лише обкладинки для наявних ярликів
-import glob, os, re, shutil, struct, sys, zlib
+import glob, os, re, shutil, struct, sys, time, zlib
 
 app, cmd = sys.argv[1], sys.argv[2]
 home = os.path.expanduser("~")
@@ -272,7 +272,9 @@ def entry(index, appid):
         n("appid", appid), s("AppName", NAME), s("Exe", EXE), s("StartDir", '"%s/"' % app),
         s("icon", icon if os.path.isfile(icon) else ""), s("ShortcutPath", ""), s("LaunchOptions", ""),
         n("IsHidden", 0), n("AllowDesktopConfig", 1), n("AllowOverlay", 1), n("OpenVR", 0), n("Devkit", 0),
-        s("DevkitGameID", ""), n("DevkitOverrideAppID", 0), n("LastPlayTime", 0), s("FlatpakAppID", ""),
+        # LastPlayTime зараз, а не 0 (21.11.2026, власник: ярлик «не додався в останні запущені і його треба шукати в
+        # бібліотеці»): з нулем ігровий режим не ставить ярлик у «Нещодавні» на головній, доки його не запустять з Steam
+        s("DevkitGameID", ""), n("DevkitOverrideAppID", 0), n("LastPlayTime", int(time.time())), s("FlatpakAppID", ""),
         [0x00, b"tags", []]]]
 
 

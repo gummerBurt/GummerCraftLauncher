@@ -50,7 +50,8 @@ public class Configuration {
     private int serverPort = 25565;
 
     private String customInstancesDirectory = null; // by default use homedir
-    private String lang = Lang.UKRAINIAN.getName(); // use UA-uk lang by default
+    // 21.11.2026: без значення в config.json (нова тека даних) мову вибирає I18n.load за мовою системи
+    private String lang = null;
     /** 17.11.2026: лівий список «Встановлені» (кожна збірка на диску окремо) замість «Усі». Запам'ятовується. */
     private boolean installedOnly = false;
     private String lastInstance = null; // назва останньої вибраної збірки: її вибрано й оформлено одразу при старті

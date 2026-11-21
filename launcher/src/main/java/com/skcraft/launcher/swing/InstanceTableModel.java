@@ -487,7 +487,10 @@ public class InstanceTableModel extends AbstractTableModel {
     private Instance chosenOf(List<Instance> members) {
         String group = members.get(0).getGroup();
         String byChoice = groupChoice.get(group);
-        String byLast = lastInstance != null ? lastInstance.get() : null;
+        // 21.11.2026: у «Додати» ваніль і завантажувачі не залежать від того, що встановлено: без вибору гравця
+        // показується найновіша версія, а не остання запущена (та живе у «Встановлених»)
+        boolean catalogBuiltIn = !installedOnly && members.get(0).isBuiltIn();
+        String byLast = lastInstance != null && !catalogBuiltIn ? lastInstance.get() : null;
         for (String wanted : new String[]{byChoice, byLast}) {
             if (wanted != null) {
                 for (Instance m : members) {
@@ -497,6 +500,7 @@ public class InstanceTableModel extends AbstractTableModel {
                 }
             }
         }
+        if (catalogBuiltIn) return members.get(0);
         Instance recent = null;
         for (Instance m : members) {
             Date d = m.getLastAccessed();
@@ -514,6 +518,15 @@ public class InstanceTableModel extends AbstractTableModel {
     public static boolean isNamed(Instance instance) {
         return isDerived(instance) || instance != null && instance.getCustomTitle() != null
                 && !instance.getCustomTitle().trim().isEmpty() && instance.isBuiltIn();
+    }
+
+    /**
+     * 21.11.2026 (власник: «Custom name в мене встановлена - чому тут пише встановити?»): {@link #isNamed} з урахуванням
+     * вкладки. У «Додати» ваніль і завантажувачі це версії гри, які лише ставляться, тож назва, яку гравець дав своїй
+     * встановленій версії, там не показується (інакше в каталозі «Fabric / Custom name» і «Встановити»).
+     */
+    public boolean isNamedHere(Instance instance) {
+        return isNamed(instance) && !isFreshInstall(instance);
     }
 
     /** 17.11.2026: копія чи збірка Modrinth, що стоїть у виборі версії розділу під чистою версією. */
@@ -535,14 +548,14 @@ public class InstanceTableModel extends AbstractTableModel {
      * («Pre-classic rd-132211»), для копії і збірки Modrinth її назва («Pixelmon», «Мій Forge»).
      */
     public String pickerTitleOf(Instance instance) {
-        if (isNamed(instance)) return instance.getTitle() != null ? instance.getTitle() : instance.getName();
+        if (isNamedHere(instance)) return instance.getTitle() != null ? instance.getTitle() : instance.getName();
         String v = versionLabelOf(instance);
         return !v.isEmpty() && Character.isDigit(v.charAt(0)) ? "Minecraft " + v : v;
     }
 
     /** Версія Minecraft копії чи збірки Modrinth («1.16.5») для сірого підпису поруч з назвою, або null. */
     public String derivedVersionOf(Instance instance) {
-        if (!isNamed(instance)) return null;
+        if (!isNamedHere(instance)) return null;
         String v = versionLabelOf(instance);
         return v.isEmpty() || !Character.isDigit(v.charAt(0)) ? null : v;
     }
@@ -748,7 +761,7 @@ public class InstanceTableModel extends AbstractTableModel {
     /** Другий рядок групи: «Minecraft 1.21». Опис групи (subtitle з meta) у вузький список не влазить, його не показуємо. */
     private String groupLine(Instance instance) {
         // 17.11.2026: старі версії «музею» («Pre-classic rd-132211») з префіксом «Minecraft» переносились у третій рядок
-        if (isNamed(instance)) {
+        if (isNamedHere(instance)) {
             // копія, збірка Modrinth чи перейменована версія: її назва, поруч сіра версія гри
             String v = derivedVersionOf(instance);
             return line(part("#d6d8dc", pickerTitleOf(instance)), part(GREY, v));
@@ -921,7 +934,8 @@ public class InstanceTableModel extends AbstractTableModel {
         }
         // 17.11.2026 (власник: «а бейдж не влазить»): оновлення збірки це зелена стрілка на куті іконки, а не текст у
         // підписі (там він скорочувався до «є оновленн...»); повний текст у підказці (tooltipAt) і біля «Запуску»
-        if (columnIndex == 0 && v instanceof Icon && updatesText(getInstanceAt(rowIndex)) != null) {
+        // 21.11.2026 (власник: «в "додати" не має бути стрілочок оновлення, лише у "встановлені"»)
+        if (columnIndex == 0 && installedOnly && v instanceof Icon && updatesText(getInstanceAt(rowIndex)) != null) {
             Icon icon = (Icon) v;
             synchronized (badgeIcons) {
                 Icon b = badgeIcons.get(icon);
@@ -1090,6 +1104,11 @@ public class InstanceTableModel extends AbstractTableModel {
     /**
      * 17.11.2026 (власник: «бейдж "є оновлення модів" на картці збірки - го»): є новіша версія модпака Modrinth чи
      * своїх модів гравця (UpdateBadges, перевірка у фоні). Текст бейджа оновлень для вікон («є оновлення модпака 1.2», «оновлення модів: 3»), або null. */
+    /** 21.11.2026: {@link #updatesText} лише у «Встановлених»; у «Додати» про оновлення не кажемо (ні стрілкою, ні текстом). */
+    public String updatesShown(Instance instance) {
+        return installedOnly ? updatesText(instance) : null;
+    }
+
     public static String updatesText(Instance instance) {
         if (instance == null || isBrowser(instance)) return null;
         com.gummer.launcher.manage.UpdateBadges.Info u = com.gummer.launcher.manage.UpdateBadges.of(instance);

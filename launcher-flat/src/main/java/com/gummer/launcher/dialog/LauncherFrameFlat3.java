@@ -733,7 +733,7 @@ public class LauncherFrameFlat3 extends JFrame {
                     // поле версії розпирало під кнопку запуску
                     String mc = com.gummer.launcher.vanilla.VanillaVersions.museumIndex(i) >= 0 ? "" : "Minecraft ";
                     // 17.11.2026: копія чи збірка Modrinth: своя назва, у відкритому списку сіра версія гри перед станом
-                    boolean derived = com.skcraft.launcher.swing.InstanceTableModel.isNamed(i);
+                    boolean derived = instancesModel.isNamedHere(i);
                     String derivedVer = instancesModel.derivedVersionOf(i);
                     if (derived) {
                         version = instancesModel.pickerTitleOf(i);
@@ -755,7 +755,7 @@ public class LauncherFrameFlat3 extends JFrame {
                     } else {
                         String status = !installed ? tr("launcher.versionNotInstalled")
                                 : i.isUpdatePending() ? tr("launcher.versionUpdate") : tr("launcher.versionInstalled");
-                        String updates = installed && !i.isUpdatePending() ? InstanceTableModel.updatesText(i) : null;
+                        String updates = installed && !i.isUpdatePending() ? instancesModel.updatesShown(i) : null;
                         if (updates != null) status = status + " · " + updates; // 17.11.2026: бейдж оновлень
                         String statusColor = !installed ? "#8a8f98" : dotColor;
                         String newest = instancesModel.isNewest(i) ? "&nbsp;&nbsp;<span style=\"color:#5aa9ff;font-size:11\">"
@@ -1122,7 +1122,7 @@ public class LauncherFrameFlat3 extends JFrame {
         heroTag.setVisible(true);
         heroTag.setText(tr(!sel.isBuiltIn() ? "ui3.kind.server" : "ui3.kind.minecraft").toUpperCase(java.util.Locale.ROOT));
         // 17.11.2026: для копії і збірки Modrinth велика назва самої збірки, під нею розділ і версія (як у Класиці)
-        boolean derived = com.skcraft.launcher.swing.InstanceTableModel.isNamed(sel);
+        boolean derived = instancesModel.isNamedHere(sel);
         heroTitle.setText(derived ? instancesModel.pickerTitleOf(sel) : instancesModel.titleOf(sel));
         launchButton.setToolTipText(trFor(sel, "tooltip.launch"));
         quickJoinBox.setVisible(server);
@@ -1242,7 +1242,7 @@ public class LauncherFrameFlat3 extends JFrame {
             String state = i.isOrphaned() ? tr("ui3.state.orphaned") : t.notInstalled ? tr("launcher.versionNotInstalled")
                     : t.update ? tr("launcher.versionUpdate") : tr("launcher.versionInstalled");
             boolean versions = !browser && (instancesModel.getGroupMembers(i).size() >= 2 || i.isBuiltIn());
-            String updates = !browser && !t.update && !t.notInstalled ? InstanceTableModel.updatesText(i) : null;
+            String updates = !browser && !t.update && !t.notInstalled ? instancesModel.updatesShown(i) : null;
             t.updates = updates != null; // 17.11.2026: бейдж оновлень (зелена стрілка на плитці)
             if (updates != null) state = state + " · " + updates;
             t.tooltip = InstanceTableModel.isAddRow(i) ? t.title + " · " + tr("launcher.addBuildSub")
@@ -2212,7 +2212,7 @@ public class LauncherFrameFlat3 extends JFrame {
         @Override
         public void gameStarted() {
             LauncherFrameFlat3 frame = frameRef.get();
-            if (frame != null) {
+            if (frame != null && !com.gummer.launcher.look.GameReturn.keepDuringGame()) { // 21.11.2026: gamescope
                 frame.dispose();
             }
             com.gummer.launcher.look.MemoryTrim.forGame(); // 20.11.2026: не тримати кеш картинок, поки граєш

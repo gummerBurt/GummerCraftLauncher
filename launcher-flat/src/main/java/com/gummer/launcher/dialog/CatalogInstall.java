@@ -38,18 +38,25 @@ public final class CatalogInstall {
 
     /** Скільки встановлених інсталяцій цього типу і версії («Forge 1.16.5») уже є: чиста версія і її копії. */
     public static int haveCount(Launcher launcher, Instance selected) {
-        if (selected == null) return 0;
+        return have(launcher, selected).size();
+    }
+
+    /** Встановлені інсталяції цього типу і версії: спершу сама чиста версія (якщо стоїть), потім копії. */
+    static java.util.List<Instance> have(Launcher launcher, Instance selected) {
+        java.util.List<Instance> out = new java.util.ArrayList<Instance>();
+        if (selected == null) return out;
         String kind = InstanceCopies.kindTitleOf(selected);
-        if (kind == null) return 0;
-        int n = 0;
+        if (kind == null) return out;
         synchronized (launcher.getInstances()) {
             for (Instance i : launcher.getInstances().getInstances()) {
                 if (!i.isLocal() || !i.isInstalled() || i.isMrpack()) continue;
                 if (!i.isBuiltIn() && !i.isCopy()) continue; // модпаки серверів не рахуємо
-                if (kind.equals(InstanceCopies.kindTitleOf(i))) n++;
+                if (kind.equals(InstanceCopies.kindTitleOf(i))) {
+                    if (i == selected) out.add(0, i); else out.add(i);
+                }
             }
         }
-        return n;
+        return out;
     }
 
     /** Підпис під кнопкою в каталозі: «вже є: 2», або null, якщо такої ще немає. */
@@ -69,7 +76,29 @@ public final class CatalogInstall {
             });
             return;
         }
-        int next = haveCount(launcher, selected) + 1;
+        // 21.11.2026 (власник: «я натиснув встановити і мені поставило копію», «неюзерфрендлі трохи»): така версія вже
+        // стоїть, тож спершу питаємо: відкрити її у «Встановлених» чи справді поставити ще одну окрему
+        java.util.List<Instance> existing = have(launcher, selected);
+        if (!existing.isEmpty()) {
+            StringBuilder names = new StringBuilder();
+            for (int k = 0; k < existing.size() && k < 3; k++) {
+                if (k > 0) names.append(", ");
+                names.append('«').append(existing.get(k).getTitle()).append('»');
+            }
+            if (existing.size() > 3) names.append(", ...");
+            Object[] options = {SharedLocale.tr("launcher.catalog.again.open"), SharedLocale.tr("launcher.catalog.again.another"),
+                    SharedLocale.tr("button.cancel")};
+            int answer = javax.swing.JOptionPane.showOptionDialog(owner,
+                    SharedLocale.tr("launcher.catalog.again.text", InstanceCopies.kindTitleOf(selected), names.toString()),
+                    SharedLocale.tr("launcher.catalog.again.title"), javax.swing.JOptionPane.YES_NO_CANCEL_OPTION,
+                    javax.swing.JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+            if (answer == 0) {
+                if (done != null) done.accept(existing.get(0).getName());
+                return;
+            }
+            if (answer != 1) return;
+        }
+        int next = existing.size() + 1;
         final String title = SharedLocale.tr("launcher.catalog.copyTitle", InstanceCopies.kindTitleOf(selected), next);
         final InstanceCopies.Copier copier = new InstanceCopies.Copier(launcher, selected, title,
                 EnumSet.noneOf(InstanceCopies.Part.class));
