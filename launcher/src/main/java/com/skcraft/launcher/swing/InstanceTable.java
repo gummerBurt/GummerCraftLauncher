@@ -53,6 +53,21 @@ public class InstanceTable extends DefaultTable {
         }
         InstanceTableModel m = (InstanceTableModel) getModel();
         if (row >= m.getRowCount() || !InstanceTableModel.isImportRow(m.getInstanceAt(row))) return false;
+        // 21.11.2026: стрілки (клавіатура, геймпад Steam Deck) рядок імпорту перестрибують, вікно не відкривають:
+        // інакше прохід списком униз відкривав «Імпорт з інших лаунчерів» сам. Вікно лише на клік мишею
+        java.awt.AWTEvent ev = java.awt.EventQueue.getCurrentEvent();
+        if (ev instanceof java.awt.event.KeyEvent) {
+            int sel = getSelectedRow();
+            int next = viewRow + (sel >= 0 && sel > viewRow ? -1 : 1);
+            if (next >= 0 && next < getRowCount() && next != sel) {
+                final int n = next;
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    setRowSelectionInterval(n, n);
+                    scrollRectToVisible(getCellRect(n, 0, true));
+                });
+            }
+            return true;
+        }
         Runnable r = onImportRow;
         if (r != null) javax.swing.SwingUtilities.invokeLater(r);
         return true;

@@ -63,6 +63,8 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         final long startedAt = System.currentTimeMillis();
         // 1.36.3: поки гра йде, кнопки видалення в налаштуваннях відмовляють
         com.gummer.launcher.util.Uninstall.RUNNING_GAMES.incrementAndGet();
+        // 21.11.2026: статус у Discord «у грі: <збірка>»
+        com.gummer.launcher.discord.DiscordPresence.gameStarted(instance, startedAt);
 
         try {
             SwingUtilities.invokeAndWait(new Runnable() {
@@ -96,6 +98,7 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         }
 
         com.gummer.launcher.util.Uninstall.RUNNING_GAMES.decrementAndGet();
+        com.gummer.launcher.discord.DiscordPresence.gameEnded();
         log.info("Process ended, re-showing launcher...");
         // 1.36.2: мова чи розмір інтерфейсу, змінені гравцем у грі, стають уподобанням для нових збірок
         if (instance != null) com.gummer.launcher.vanilla.GamePrefs.afterGame(launcher.getBaseDir(), instance);
@@ -156,7 +159,8 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
                         consoleFrame.hideSplash();
                     }
 
-                    consoleFrame.requestFocus();
+                    // 21.11.2026: фокус лише у видиму консоль; невидима забирала його в лаунчера (сірий екран у gamescope)
+                    if (consoleFrame.isShowing()) consoleFrame.requestFocus();
                 }
             }
         });

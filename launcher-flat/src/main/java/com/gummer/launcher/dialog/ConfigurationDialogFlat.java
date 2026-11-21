@@ -69,6 +69,7 @@ public class ConfigurationDialogFlat extends JDialog {
     private final JCheckBox showLauncherConsoleCheck = new JCheckBox(SharedLocale.tr("options.showLauncherConsole"));
     private final JCheckBox showConsoleCheck = new JCheckBox(SharedLocale.tr("options.showConsole"));
     private final JCheckBox enableDebugCheck = new JCheckBox(SharedLocale.tr("options.enableDebug"));
+    private final JCheckBox discordPresenceCheck = new JCheckBox(SharedLocale.tr("settings.discord.check"));
     private final JSpinner widthSpinner = new JSpinner();
     private final JSpinner heightSpinner = new JSpinner();
     private final FormPanel proxySettingsPanel = new FormPanel();
@@ -173,6 +174,7 @@ public class ConfigurationDialogFlat extends JDialog {
         mapper.map(showLauncherConsoleCheck, "showLauncherConsole");
         mapper.map(showConsoleCheck, "showConsole");
         mapper.map(enableDebugCheck, "enableDebug");
+        mapper.map(discordPresenceCheck, "discordPresence");
         mapper.map(widthSpinner, "windowWidth");
         mapper.map(heightSpinner, "windowHeight");
         mapper.map(useProxyCheck, "proxyEnabled");
@@ -286,6 +288,12 @@ public class ConfigurationDialogFlat extends JDialog {
         }
         consoleCard.add(logButton, "growx 0, gaptop 8");
         adv.add(consoleCard);
+
+        // 21.11.2026: статус у Discord
+        JPanel discordCard = section(SharedLocale.tr("settings.discord.title"), SharedLocale.tr("settings.discord.desc"));
+        discordPresenceCheck.setOpaque(false);
+        discordCard.add(discordPresenceCheck, "gaptop 6, wmin 0");
+        adv.add(discordCard);
 
         JPanel betaCard = section(SharedLocale.tr("settings.beta.title"), SharedLocale.tr("options.devBetaDesc"));
         gameKeyText.setEditable(true);
@@ -845,6 +853,7 @@ public class ConfigurationDialogFlat extends JDialog {
     public void save() {
         mapper.copyFromSwing();
         config.setJavaRuntime((JavaRuntime) jvmRuntime.getSelectedItem());
+        com.gummer.launcher.discord.DiscordPresence.setEnabled(config.isDiscordPresence());
 
         Persistence.commitAndForget(config);
         dispose();

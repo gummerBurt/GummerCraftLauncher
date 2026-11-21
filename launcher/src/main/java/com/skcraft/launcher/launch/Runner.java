@@ -266,6 +266,9 @@ public class Runner implements Callable<Process>, ProgressObservable {
         // 1.33: наші моди (GummerVibe, gcreport) бачать, що лаунчер слухає запити в теці гри (gummercraft-report.json, див.
         // DisconnectReport). Без прапорця (гра запущена іншим лаунчером чи старим нашим) мод одразу веде в Telegram-бот підтримки.
         builder.getFlags().add("-Dgummercraft.report=1");
+        // 1.36.8: лаунчер читає з теки гри gummercraft-discord.json (рядок статусу Discord від мода, напр. «Досліджує
+        // Прип'ять», див. DiscordPresence.STATUS_FILE). Без прапорця мод файл не пише.
+        builder.getFlags().add("-Dgummercraft.discord=1");
     }
 
     /**

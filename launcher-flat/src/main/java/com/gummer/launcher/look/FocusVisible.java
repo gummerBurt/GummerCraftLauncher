@@ -41,10 +41,16 @@ public final class FocusVisible {
         }, AWTEvent.MOUSE_EVENT_MASK);
     }
 
+    /** Гравець ходить клавіатурою чи геймпадом ({@link PadNav}): показати рамку. */
+    public static void keyboard() {
+        set(true);
+    }
+
     private static void set(boolean v) {
         if (on == v) return;
         on = v;
         Component f = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
         if (f != null) f.repaint();
+        PadNav.Ring.update();
     }
 }

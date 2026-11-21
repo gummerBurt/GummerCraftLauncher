@@ -2119,9 +2119,10 @@ public class LauncherFrameFlat2 extends JFrame {
             LauncherFrameFlat2 frame = frameRef.get();
             if (frame != null) {
                 frame.setVisible(true);
+                com.gummer.launcher.look.GameReturn.shown(frame); // 21.11.2026: сірий екран після гри в ігровому режимі Steam Deck
                 return;
             }
-            launcher.showLauncherWindow();
+            com.gummer.launcher.look.GameReturn.shown(launcher.showLauncherWindow());
         }
     }
 

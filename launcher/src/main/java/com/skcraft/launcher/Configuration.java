@@ -64,6 +64,8 @@ public class Configuration {
      * наявну Java лаунчер не чіпає, оновлення лише кнопкою в налаштуваннях («Оновлення Java»).
      */
     private boolean javaAutoUpdate = true;
+    /** 21.11.2026: статус у Discord (com.gummer.launcher.discord.DiscordPresence), гравець може вимкнути в налаштуваннях. */
+    private boolean discordPresence = true;
     /** 1.36.3: Java гри, відкочені гравцем («17/windows-x64»): не оновлюються самі, доки гравець не натисне «Оновити». */
     private java.util.Set<String> javaPinned = new java.util.LinkedHashSet<String>();
     private String autoUpdatedTo = null; // версія, яку лаунчер уже ставив автоматично (запобіжник від циклу оновлення-перезапуску)

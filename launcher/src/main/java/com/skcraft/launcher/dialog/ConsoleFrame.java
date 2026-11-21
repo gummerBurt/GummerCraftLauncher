@@ -238,7 +238,9 @@ public class ConsoleFrame extends JFrame {
 
     public synchronized void hideSplash() {
         splash.setAlwaysOnTop(false);
-        splash.setVisible(false);
+        // 21.11.2026: знищуємо, а не ховаємо: у ігровому режимі Steam Deck (gamescope) сховане вікно лишалось сірим
+        // екраном замість лаунчера після виходу з гри. Наступний showSplash створює його заново
+        splash.dispose();
     }
 
 }

@@ -6,7 +6,8 @@
 #   1. ставить Java для самого лаунчера (Temurin 17 JRE, офіційний архів Adoptium, sha256 перевіряється) у ~/GummerCraft/app/jre;
 #   2. кладе лаунчер (Gummer_Craft_launcher.jar, той самий, що і для ручного запуску), іконку і скрипт запуску в ~/GummerCraft/app;
 #   3. додає GummerCraft у меню програм і на робочий стіл;
-#   4. на SteamOS додає GummerCraft у бібліотеку Steam як гру не з Steam (steamos-add-to-steam), щоб грати в ігровому режимі;
+#   4. додає GummerCraft у бібліотеку Steam як гру не з Steam з обкладинками (запис у shortcuts.vdf при закритому Steam,
+#      відкритий Steam закриває лише з дозволу гравця і відкриває знову), щоб грати в ігровому режимі Steam Deck;
 #   5. запускає лаунчер.
 # Прав root не треба, системні файли не змінюються (SteamOS має системний розділ лише для читання, тому все в домашній теці).
 # Повторний запуск оновлює лаунчер і ярлики, Java перекачує лише при зміні версії, у Steam вдруге не додає.
@@ -107,6 +108,11 @@ main() {
     # Обкладинки для бібліотеки Steam (з 21.11.2026): кавер, широка плитка, шапка, логотип. Ставить їх steam-art.sh нижче.
     mkdir -p "$APP/steam-art"
     local art
+    if download "$BASE/linux/steam/gummercraft_neptune.vdf" "$TMP/input.vdf" && [ "$(head -c 21 "$TMP/input.vdf")" = '"controller_mappings"' ]; then
+        mv -f "$TMP/input.vdf" "$APP/steam-art/gummercraft_neptune.vdf"
+    else
+        log "Шаблон керування геймпадом не завантажився (не страшно)"
+    fi
     for art in cover wide hero logo; do
         if download "$BASE/linux/steam/$art.png" "$TMP/$art.png" && [ "$(head -c 4 "$TMP/$art.png" | tail -c 3)" = "PNG" ]; then
             mv -f "$TMP/$art.png" "$APP/steam-art/$art.png"
@@ -142,58 +148,286 @@ echo "Лаунчер видалено. Ігри та світи лишились
 UNINSTALL
     chmod +x "$APP/uninstall.sh"
 
-    # Обкладинки Steam. Steam дає ярлику «не з Steam» випадковий appid і пише його в userdata/<id>/config/shortcuts.vdf,
-    # а картинки бере з config/grid/<appid>p.png (кавер 600x900), <appid>.png (920x430), <appid>_hero.png (1920x620),
-    # <appid>_logo.png. Скрипт шукає в shortcuts.vdf ярлики на наш gummercraft.sh і кладе картинки лише туди, де їх ще
-    # немає (свої обкладинки гравця не перезаписуються). Steam підхоплює їх після перезапуску (перехід в ігровий режим).
+    # Ярлик і обкладинки Steam (з 21.11.2026 напряму, без steamos-add-to-steam: той лише відкриває посилання
+    # steam://addnonsteamgame і завжди повертає 0, навіть коли Steam посилання проігнорував, тож ярлика не було).
+    # Ярлики «не з Steam» лежать у бінарному userdata/<акаунт>/config/shortcuts.vdf. Steam читає його на старті і
+    # перезаписує зі своєї пам'яті, тому писати лише при закритому Steam. appid ярлика як у Steam і Steam ROM Manager:
+    # crc32(Exe + AppName) | 0x80000000. Картинки: config/grid/<appid>p.png (кавер 600x900), <appid>.png (920x430),
+    # <appid>_hero.png (1920x620), <appid>_logo.png; ті, що вже є, не перезаписуються (свої обкладинки гравця).
+    cat > "$APP/steam-shortcut.py" <<'PY'
+# Ярлик GummerCraft у бібліотеці Steam. Створено установкою (install.sh).
+# python3 steam-shortcut.py <app> status | add | art
+#   status: у скількох акаунтах Steam ярлик уже є і скільки акаунтів загалом ("users=N have=M")
+#   add:    дописати ярлик туди, де його немає (лише при закритому Steam!), і поставити обкладинки
+#   art:    лише обкладинки для наявних ярликів
+import glob, os, re, shutil, struct, sys, zlib
+
+app, cmd = sys.argv[1], sys.argv[2]
+home = os.path.expanduser("~")
+EXE = '"%s/gummercraft.sh"' % app
+NAME = "GummerCraft"
+ART = {"cover.png": "%dp.png", "wide.png": "%d.png", "hero.png": "%d_hero.png", "logo.png": "%d_logo.png"}
+FIXED = {0x02: 4, 0x03: 4, 0x06: 4, 0x07: 8, 0x0A: 8}
+
+
+def users():
+    seen, out = set(), []
+    roots = [home + "/.local/share/Steam", home + "/.steam/steam", home + "/.steam/root",
+             home + "/.var/app/com.valvesoftware.Steam/.local/share/Steam"]
+    for r in roots:
+        for d in glob.glob(r + "/userdata/*"):
+            if not os.path.basename(d).isdigit() or os.path.basename(d) == "0":
+                continue
+            if not os.path.isfile(d + "/config/localconfig.vdf"):  # акаунт, яким ще не входили
+                continue
+            real = os.path.realpath(d)
+            if real not in seen:
+                seen.add(real)
+                out.append(real + "/config")
+    return out
+
+
+def cstr(b, i):
+    j = b.index(b"\x00", i)
+    return b[i:j], j + 1
+
+
+def parse(b, i):
+    items = []
+    while True:
+        t = b[i]
+        i += 1
+        if t == 0x08:
+            return items, i
+        k, i = cstr(b, i)
+        if t == 0x00:
+            v, i = parse(b, i)
+        elif t == 0x01:
+            v, i = cstr(b, i)
+        elif t in FIXED:
+            v, i = b[i:i + FIXED[t]], i + FIXED[t]
+        else:
+            raise ValueError("невідомий тип %d" % t)
+        items.append([t, k, v])
+
+
+def dump(items):
+    out = b""
+    for t, k, v in items:
+        out += bytes([t]) + k + b"\x00"
+        if t == 0x00:
+            out += dump(v)
+        elif t == 0x01:
+            out += v + b"\x00"
+        else:
+            out += v
+    return out + b"\x08"
+
+
+def get(entry, key):
+    key = key.encode().lower()
+    for t, k, v in entry:
+        if k.lower() == key:
+            return t, v
+    return None, None
+
+
+def load(cfg):
+    p = cfg + "/shortcuts.vdf"
+    if not os.path.isfile(p) or os.path.getsize(p) == 0:
+        return [[0x00, b"shortcuts", []]]
+    b = open(p, "rb").read()
+    root, end = parse(b, 0)
+    if not root or root[0][1].lower() != b"shortcuts" or root[0][0] != 0x00:
+        raise ValueError("не той формат")
+    return root
+
+
+def ours(root):
+    found = []
+    for t, k, e in root[0][2]:
+        if t != 0x00:
+            continue
+        _, exe = get(e, "Exe")
+        _, aid = get(e, "appid")
+        if exe and (app + "/gummercraft.sh").encode() in exe and aid and len(aid) == 4:
+            found.append(struct.unpack("<I", aid)[0])
+    return found
+
+
+def art(cfg, appid):
+    grid = cfg + "/grid"
+    os.makedirs(grid, exist_ok=True)
+    for src, name in ART.items():
+        s, d = os.path.join(app, "steam-art", src), os.path.join(grid, name % appid)
+        if os.path.isfile(s) and not os.path.exists(d):
+            shutil.copyfile(s, d)
+
+
+def entry(index, appid):
+    s = lambda k, v: [0x01, k.encode(), v.encode()]
+    n = lambda k, v: [0x02, k.encode(), struct.pack("<I", v)]
+    icon = app + "/gummercraft.png"
+    return [0x00, str(index).encode(), [
+        n("appid", appid), s("AppName", NAME), s("Exe", EXE), s("StartDir", '"%s/"' % app),
+        s("icon", icon if os.path.isfile(icon) else ""), s("ShortcutPath", ""), s("LaunchOptions", ""),
+        n("IsHidden", 0), n("AllowDesktopConfig", 1), n("AllowOverlay", 1), n("OpenVR", 0), n("Devkit", 0),
+        s("DevkitGameID", ""), n("DevkitOverrideAppID", 0), n("LastPlayTime", 0), s("FlatpakAppID", ""),
+        [0x00, b"tags", []]]]
+
+
+# Керування геймпадом (з 21.11.2026): наш шаблон Steam Input (steam-art/gummercraft_neptune.vdf, генерує
+# tools/linux/steam/make_input.py) лежить у <Steam>/controller_base/templates/, а ярлик прив'язаний до нього в
+# steamapps/common/Steam Controller Configs/<акаунт>/config/configset_controller_neptune.vdf, ключ: назва ярлика
+# малими літерами (так само робить Steam ROM Manager). Вибір гравця (наш ключ уже є) не чіпаємо.
+TEMPLATE, SHORT = "gummercraft_neptune.vdf", "gummercraft"
+
+
+def tparse(s):
+    toks = re.findall(r'"((?:[^"\\]|\\.)*)"|([{}])', s)
+    stack, key = [[]], None
+    for val, br in toks:
+        if br == "{":
+            if key is None:
+                raise ValueError("{ без ключа")
+            node = []
+            stack[-1].append([key, node])
+            stack.append(node)
+            key = None
+        elif br == "}":
+            stack.pop()
+            if not stack or key is not None:
+                raise ValueError("зайва }")
+        elif key is None:
+            key = val
+        else:
+            stack[-1].append([key, val])
+            key = None
+    if len(stack) != 1 or key is not None:
+        raise ValueError("незакритий текстовий VDF")
+    return stack[0]
+
+
+def tdump(items, d=0):
+    out = ""
+    for k, v in items:
+        if isinstance(v, list):
+            out += "\t" * d + '"%s"\n' % k + "\t" * d + "{\n" + tdump(v, d + 1) + "\t" * d + "}\n"
+        else:
+            out += "\t" * d + '"%s"\t\t"%s"\n' % (k, v)
+    return out
+
+
+def input_paths(cfg):
+    ud = os.path.dirname(cfg)
+    root = os.path.dirname(os.path.dirname(ud))
+    return root, os.path.join(root, "steamapps", "common", "Steam Controller Configs", os.path.basename(ud), "config",
+                              "configset_controller_neptune.vdf")
+
+
+def input_top(items):
+    for k, v in items:
+        if k.lower() == "controller_config" and isinstance(v, list):
+            return v
+    return None
+
+
+def input_has(cfg):
+    if not os.path.isfile(os.path.join(app, "steam-art", TEMPLATE)):
+        return True  # шаблон не завантажився: нема чого ставити
+    root, p = input_paths(cfg)
+    if not os.path.isfile(p):
+        return False
+    top = input_top(tparse(open(p, encoding="utf-8").read()))
+    return top is not None and any(k.lower() == SHORT for k, v in top)
+
+
+def input_add(cfg):
+    src = os.path.join(app, "steam-art", TEMPLATE)
+    if not os.path.isfile(src):
+        return False
+    tparse(open(src, encoding="utf-8").read())  # битий шаблон не кладемо
+    root, p = input_paths(cfg)
+    tdir = os.path.join(root, "controller_base", "templates")
+    os.makedirs(tdir, exist_ok=True)
+    shutil.copyfile(src, os.path.join(tdir, TEMPLATE))
+    items = tparse(open(p, encoding="utf-8").read()) if os.path.isfile(p) else []
+    top = input_top(items)
+    if top is None:
+        top = []
+        items.append(["controller_config", top])
+    if any(k.lower() == SHORT for k, v in top):
+        return False
+    top.append([SHORT, [["template", TEMPLATE]]])
+    data = tdump(items)
+    if not any(k.lower() == SHORT for k, v in input_top(tparse(data))):
+        raise ValueError("перевірка configset не пройшла")
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    if os.path.isfile(p):
+        shutil.copyfile(p, p + ".gc-backup")
+    open(p + ".gc-tmp", "w", encoding="utf-8", newline="\n").write(data)
+    os.replace(p + ".gc-tmp", p)
+    return True
+
+
+us = users()
+have, added, failed, inp, need = 0, 0, 0, 0, 0
+for cfg in us:
+    try:
+        ok = input_has(cfg)
+        if not ok and cmd == "add":
+            ok = input_add(cfg)
+            print("Steam %s: керування геймпадом %s" % (cfg, "прив'язано" if ok else "не прив'язано"), file=sys.stderr)
+        inp += 1 if ok else 0
+        need += 0 if ok else 1
+    except Exception as e:
+        need += 1
+        print("Steam %s: керування геймпадом не вдалося (%s), файл не змінено" % (cfg, e), file=sys.stderr)
+for cfg in us:
+    try:
+        root = load(cfg)
+        ids = ours(root)
+        if ids:
+            have += 1
+            if cmd in ("add", "art"):
+                for a in ids:
+                    art(cfg, a)
+            print("Steam %s: ярлик уже є, appid %s" % (cfg, ", ".join(map(str, ids))), file=sys.stderr)
+            continue
+        if cmd != "add":
+            need += 1
+            continue
+        appid = (zlib.crc32((EXE + NAME).encode()) & 0xFFFFFFFF) | 0x80000000
+        idx = 1 + max([int(k) for t, k, v in root[0][2] if k.isdigit()] or [-1])
+        root[0][2].append(entry(idx, appid))
+        p = cfg + "/shortcuts.vdf"
+        if os.path.isfile(p):
+            shutil.copyfile(p, p + ".gc-backup")
+        data = dump(root)
+        if ours(parse(data, 0)[0]) != [appid]:
+            raise ValueError("перевірка запису не пройшла")
+        tmp = p + ".gc-tmp"
+        open(tmp, "wb").write(data)
+        os.replace(tmp, p)
+        art(cfg, appid)
+        added += 1
+        print("Steam %s: ярлик додано, appid %d, ярликів у файлі %d" % (cfg, appid, len(root[0][2])), file=sys.stderr)
+    except Exception as e:  # чужий чи пошкоджений файл не чіпаємо
+        failed += 1
+        need += 1
+        print("Steam %s: не вдалося (%s), файл не змінено" % (cfg, e), file=sys.stderr)
+print("users=%d have=%d added=%d failed=%d input=%d need=%d" % (len(us), have, added, failed, inp, need))
+PY
+
+    # Запасний виклик при запуску лаунчера (gummercraft.sh): обкладинки для ярлика, який гравець додав у Steam сам.
     cat > "$APP/steam-art.sh" <<'ART'
 #!/usr/bin/env bash
-# Ставить обкладинки GummerCraft у бібліотеку Steam. Створено установкою (install.sh). Аргумент: скільки секунд чекати ярлик.
+# Ставить обкладинки GummerCraft для наявних ярликів у Steam. Створено установкою (install.sh).
 APP="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-WAIT="${1:-0}"
-[ -d "$APP/steam-art" ] && command -v python3 >/dev/null 2>&1 || exit 0
-end=$(( $(date +%s) + WAIT ))
-while :; do
-    found="$(python3 - "$APP" <<'PY'
-import glob, os, re, shutil, struct, sys
-app = sys.argv[1]
-needle = (app + "/gummercraft.sh").encode()
-art = {"cover.png": "%dp.png", "wide.png": "%d.png", "hero.png": "%d_hero.png", "logo.png": "%d_logo.png"}
-seen, n = set(), 0
-home = os.path.expanduser("~")
-for vdf in glob.glob(home + "/.local/share/Steam/userdata/*/config/shortcuts.vdf") + glob.glob(home + "/.steam/steam/userdata/*/config/shortcuts.vdf"):
-    real = os.path.realpath(vdf)
-    if real in seen:
-        continue
-    seen.add(real)
-    try:
-        b = open(real, "rb").read()
-    except OSError:
-        continue
-    marks = [m.end() for m in re.finditer(rb"\x02appid\x00", b, re.I)]
-    for k, pos in enumerate(marks):
-        entry = b[pos:marks[k + 1] if k + 1 < len(marks) else len(b)]
-        if needle not in entry or pos + 4 > len(b):
-            continue
-        appid = struct.unpack("<I", b[pos:pos + 4])[0]
-        grid = os.path.join(os.path.dirname(real), "grid")
-        os.makedirs(grid, exist_ok=True)
-        for src, name in art.items():
-            s, d = os.path.join(app, "steam-art", src), os.path.join(grid, name % appid)
-            if os.path.isfile(s) and not os.path.exists(d):
-                shutil.copyfile(s, d)
-        n += 1
-print(n)
-PY
-)"
-    if [ "${found:-0}" -gt 0 ] 2>/dev/null; then
-        touch "$APP/.steam-art-done"
-        echo "Обкладинки Steam: ярликів $found"
-        exit 0
-    fi
-    [ "$(date +%s)" -ge "$end" ] && exit 0
-    sleep 3
-done
+[ -d "$APP/steam-art" ] && [ -f "$APP/steam-shortcut.py" ] && command -v python3 >/dev/null 2>&1 || exit 0
+r="$(python3 "$APP/steam-shortcut.py" "$APP" art 2>/dev/null)"
+case "$r" in *" have=0 "*|"") exit 0 ;; esac
+touch "$APP/.steam-art-done"
 ART
     chmod +x "$APP/steam-art.sh"
 
@@ -227,24 +461,48 @@ ENTRY
     fi
     log "Ярлики: $ENTRY, $DESKTOP_DIR/GummerCraft.desktop"
 
-    # 4. Steam (лише SteamOS: там є steamos-add-to-steam). Один раз: повторна установка не плодить дублікати в бібліотеці.
-    local STEAM_NOTE=""
-    if [ -z "${GC_NO_STEAM:-}" ] && command -v steamos-add-to-steam >/dev/null 2>&1; then
-        if [ -f "$APP/.added-to-steam" ]; then
-            log "У Steam уже додано раніше"
-            STEAM_NOTE=" та в бібліотеці Steam"
-        elif steamos-add-to-steam "$ENTRY" >>"$LOG" 2>&1; then
-            touch "$APP/.added-to-steam"
-            log "Додано в Steam"
-            STEAM_NOTE=" та в бібліотеці Steam (розділ «Не з Steam»)"
-        else
-            log "steamos-add-to-steam не спрацював"
-            STEAM_NOTE=". У Steam додайте вручну: Steam -> Ігри -> Додати сторонню гру -> GummerCraft"
-        fi
-        # обкладинки: Steam пише ярлик у shortcuts.vdf не одразу, тож чекаємо до 90 с у фоні, установка не затримується
-        if [ -f "$APP/.added-to-steam" ] && [ ! -f "$APP/.steam-art-done" ]; then
-            nohup "$APP/steam-art.sh" 90 >>"$LOG" 2>&1 &
-        fi
+    # 4. Steam: ярлик у бібліотеці (для ігрового режиму Steam Deck) з обкладинками. Будь-який Linux, де Steam уже
+    # входив в акаунт. Вдруге не додає (шукає наш gummercraft.sh у shortcuts.vdf), тож повторна установка лише
+    # дописує, чого бракує. Steam відкритий: питаємо дозволу закрити його на кілька секунд і відкриваємо знову.
+    local STEAM_NOTE="" MANUAL=". У Steam можна додати вручну: «Ігри», «Додати сторонню гру», GummerCraft"
+    rm -f "$APP/.added-to-steam" "$APP/.steam-art-done"  # маркери старої установки (до 21.11.2026)
+    if [ -z "${GC_NO_STEAM:-}" ] && command -v python3 >/dev/null 2>&1; then
+        local st
+        st="$(python3 "$APP/steam-shortcut.py" "$APP" status 2>>"$LOG")"
+        log "Steam: $st"
+        case "$st" in
+            users=0*|"")
+                log "Steam не знайдено або ще не входив в акаунт"
+                ;;
+            *" need=0"*)
+                python3 "$APP/steam-shortcut.py" "$APP" art >>"$LOG" 2>&1
+                STEAM_NOTE=" та в бібліотеці Steam"
+                ;;
+            *)
+                ui_progress_text "Додаємо GummerCraft у бібліотеку Steam..."
+                local restart=""
+                if steam_running; then
+                    if ui_question "Щоб GummerCraft з'явився в бібліотеці Steam (і в ігровому режимі Steam Deck з керуванням геймпадом), Steam треба закрити на кілька секунд. Закрити Steam зараз? Потім він відкриється сам."; then
+                        steam_stop && restart=1
+                    fi
+                fi
+                if steam_running; then
+                    log "Steam відкритий, ярлик або керування геймпадом не додано"
+                    case "$st" in
+                        *" have=0 "*) STEAM_NOTE="$MANUAL (або запустіть цю установку ще раз при закритому Steam)" ;;
+                        *) STEAM_NOTE=" та в бібліотеці Steam" ;;  # ярлик уже є, бракує лише шаблону геймпада
+                    esac
+                else
+                    st="$(python3 "$APP/steam-shortcut.py" "$APP" add 2>>"$LOG")"
+                    log "Steam: $st"
+                    case "$st" in
+                        *" have=0 added=0 "*) STEAM_NOTE="$MANUAL" ;;
+                        *) STEAM_NOTE=" та в бібліотеці Steam" ;;
+                    esac
+                    [ -n "$restart" ] && steam_start
+                fi
+                ;;
+        esac
     fi
 
     ui_progress_close
@@ -287,6 +545,47 @@ ui_info() {
         kdialog --title "GummerCraft" --msgbox "$1" 2>/dev/null
     else
         echo "$1"
+    fi
+}
+
+# Так / ні. Без вікон (немає GUI) відповідь «ні»: Steam без дозволу гравця не закриваємо.
+ui_question() {
+    if has_gui && command -v zenity >/dev/null 2>&1; then
+        zenity --question --title="GummerCraft" --width=420 --ok-label="Закрити Steam" --cancel-label="Не зараз" --text="$1" 2>/dev/null
+    elif has_gui && command -v kdialog >/dev/null 2>&1; then
+        kdialog --title "GummerCraft" --yesno "$1" 2>/dev/null
+    else
+        return 1
+    fi
+}
+
+# Steam (звичайний і Flatpak). Процес клієнта зветься steam (ubuntu12_32/steam), steamwebhelper закривається з ним.
+steam_running() {
+    pgrep -x steam >/dev/null 2>&1 || pgrep -f 'ubuntu12_32/steam' >/dev/null 2>&1
+}
+
+steam_stop() {
+    log "Закриваємо Steam"
+    if command -v steam >/dev/null 2>&1; then
+        steam -shutdown >/dev/null 2>&1 &
+    elif command -v flatpak >/dev/null 2>&1; then
+        flatpak run com.valvesoftware.Steam -shutdown >/dev/null 2>&1 &
+    fi
+    local i
+    for i in $(seq 1 40); do
+        steam_running || { sleep 2; log "Steam закрито"; return 0; }
+        sleep 1
+    done
+    log "Steam не закрився за 40 с"
+    return 1
+}
+
+steam_start() {
+    log "Відкриваємо Steam"
+    if command -v steam >/dev/null 2>&1; then
+        setsid steam >/dev/null 2>&1 < /dev/null &
+    elif command -v flatpak >/dev/null 2>&1; then
+        setsid flatpak run com.valvesoftware.Steam >/dev/null 2>&1 < /dev/null &
     fi
 }
 

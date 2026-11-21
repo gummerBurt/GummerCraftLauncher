@@ -96,6 +96,7 @@ public class FancyLauncher {
                     enforceUIManagerDefaults();
                     com.gummer.launcher.look.EscCloses.install(); // 20.11.2026: Esc закриває вікна-діалоги, як хрестик
                     com.gummer.launcher.look.FocusVisible.install(); // 20.11.2026: рамка фокусу лише після Tab і стрілок
+                    com.gummer.launcher.look.PadNav.install(); // 21.11.2026: стрілки між кнопками, Enter натискає (геймпад Steam Deck)
                     // 20.11.2026 (власник: «всюди "скасувати"»): стандартні кнопки вікон підтвердження Java теж з мови
                     // лаунчера (українського перекладу в самій Java немає, і там були англійські Cancel, Yes, No)
                     UIManager.put("OptionPane.cancelButtonText", tr("button.cancel"));
@@ -111,6 +112,8 @@ public class FancyLauncher {
                     first.validate();
                     SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(() -> first.setVisible(true)));
                     prewarmOptions(launcher, first);
+                    // 21.11.2026: статус у Discord (тихо нічого не робить, якщо Discord не запущено)
+                    com.gummer.launcher.discord.DiscordPresence.start(launcher);
 
                     // show launcher console if config option enabled
                     if (launcher.getConfig().isShowLauncherConsole()) {

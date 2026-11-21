@@ -4,6 +4,15 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.8
+
+- **Статус у Discord.** Поки лаунчер відкритий, друзі в Discord бачать «Грає в GummerCraft»: у лаунчері чи в якій збірці і скільки часу, з кнопками «Скачати лаунчер» і «Discord GummerCraft»; у StalDayZ своя картинка. Лаунчер говорить лише з Discord на твоєму ПК, нічого не йде в мережу. Вимикається в налаштуваннях: «Додатково», «Статус у Discord». На Linux і Steam Deck працює з новою установкою (Java 16+).
+- **Steam Deck: керування геймпадом.** Установка для Linux і Steam Deck тепер ставить ярлику GummerCraft у Steam розкладку геймпада «GummerCraft (лаунчер і гра)»: в іграх ходьба лівим стіком, камера правим стіком чи тачпадом, R2 / L2 удар і використати, A стрибок, B присісти та інше (повна таблиця в [tools/linux](tools/linux/README.md)), а в лаунчері хрестовина і лівий стік ходять по кнопках і збірках, A натискає, B закриває вікна, правий тачпад рухає курсор. Свою розкладку гравця установка не змінює.
+- **Steam Deck: лаунчер з геймпада.** Під Steam на Linux лаунчер ходить стрілками до найближчого елемента (кнопки, плашки, список збірок, поля, вкладки, вікна) і показує зелену рамку навколо вибраного. На Windows і macOS усе як раніше.
+- **Steam Deck:** ярлик у бібліотеці Steam тепер справді додається (раніше установка лише просила Steam додати його, і Steam міг це мовчки проігнорувати).
+- Виправлено: після виходу з гри в ігровому режимі Steam Deck замість лаунчера міг бути сірий екран.
+- Виправлено: стрілка вниз у списку збірок більше не відкриває вікно «Імпорт збірки», рядок імпорту відкривається лише кліком.
+
 ## 1.36.7
 
 - **Експорт Vanilla:** встановлену ванільну збірку тепер можна зберегти в `.mrpack` (у файлі лише версія гри, за бажанням ресурспаки). Раніше вкладка «Імпорт/Експорт» писала, що збірка не встановлена, хоч вона давно стояла.
@@ -209,6 +218,8 @@
 ---
 
 ## English changelog
+
+**1.36.8:** Discord status (Rich Presence): while the launcher is open, Discord friends see "Playing GummerCraft", in the launcher or which build and for how long, with "Download the launcher" and "GummerCraft Discord" buttons (StalDayZ has its own picture); only local IPC with Discord on this PC, can be turned off in Settings, Advanced (Linux and Steam Deck need Java 16+, i.e. the new installer); Steam Deck gamepad support: the Linux and Steam Deck installer gives the GummerCraft Steam shortcut a "GummerCraft (launcher and game)" controller layout (in game: left stick to walk, right stick or trackpad to look, R2 / L2 attack and use, A jump, B sneak and more, full table in [tools/linux](tools/linux/README.md); in the launcher: D-pad and left stick move between buttons and builds, A presses, B closes windows, the right trackpad moves the cursor), a layout the player already chose is kept; under Steam on Linux the launcher navigates with arrow keys to the nearest element and draws a focus ring (Windows and macOS unchanged); the Steam shortcut is now really added (the installer used to only ask Steam to add it, which Steam could silently ignore); fixed a grey screen instead of the launcher after leaving the game in Steam Deck Game Mode; the down arrow in the build list no longer opens the "Import build" window.
 
 **1.36.7:** installed Vanilla builds can be exported to `.mrpack` (Minecraft version only, resource packs optional), instead of "not installed"; the UA label on the Liquid Glass language switch no longer touches the right border; hints no longer ask to press "Play" where the button is called "Launch"; the Linux and Steam Deck installer now adds GummerCraft artwork to the Steam library (cover, wide capsule, hero, logo) without replacing artwork the player set; the README was rewritten for the current state and the full history moved to CHANGELOG.md.
 
