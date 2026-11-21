@@ -4,6 +4,10 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.10
+
+- **Імпорт з інших лаунчерів переносить збірку повністю.** Модпаки SKlauncher, TLauncher та офіційного лаунчера, що мають свою теку гри, тепер копіюються цілком: оформлення меню модпака, квести, дані модів у їхніх власних теках (CustomNPCs і подібні). Раніше переносились лише моди, налаштування, світи, ресурспаки і шейдери. Із самої теки `.minecraft` теж береться все, крім файлів гри та лаунчерів.
+
 ## 1.36.9
 
 - **Мова за мовою системи.** Новий лаунчер (без збереженої мови) вибирає її сам: українська, якщо мова чи регіон Windows українські або російські, інакше англійська. Хто вже вибрав мову, у того нічого не зміниться.
@@ -226,6 +230,8 @@
 ---
 
 ## English changelog
+
+**1.36.10:** import from other launchers copies the whole build: SKlauncher, TLauncher and official launcher modpacks with their own game folder are copied entirely (modpack menu design, quests, mod data in mods' own folders such as CustomNPCs); before only mods, configs, worlds, resource packs and shaders were copied. From the shared `.minecraft` everything is taken except game and launcher files.
 
 **1.36.9:** the launcher language for a new data folder follows the system (Ukrainian if the Windows display language or region is Ukrainian or Russian, English otherwise; a language already chosen is kept); in "Add" vanilla and loaders show only game versions, without the names of your installed builds and without update arrows (those are in "Installed" only), and installing a version you already have asks whether to open the installed one or add one more; a damaged Forge settings file (`config/fml.toml`, the game closes right after launch) is now recognised with a one-click reset; Steam Deck Game Mode: the launcher is shown again after leaving the game instead of a grey screen (its window is no longer closed while the game runs there), and the shortcut added by the installer shows up in Recent games on the Game Mode home screen.
 

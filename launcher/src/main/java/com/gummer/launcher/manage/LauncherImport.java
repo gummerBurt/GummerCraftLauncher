@@ -55,8 +55,8 @@ import java.util.regex.Pattern;
  * <li>Modrinth App: {@code profile.json} у теці профілю (старі версії App). Нові версії тримають усе в базі SQLite, тож
  * такий профіль показується з поясненням, що його краще експортувати з Modrinth App у .mrpack;</li>
  * <li>офіційний лаунчер, SKlauncher і TLauncher: профілі з {@code launcher_profiles.json}, версія з {@code versions/<id>/<id>.json}
- * (inheritsFrom і бібліотеки завантажувача). Копіюються лише теки гравця (моди, конфіги, світи, ресурспаки, шейдери,
- * налаштування), не файли самої гри.</li>
+ * (inheritsFrom і бібліотеки завантажувача). Окрема тека гри профілю копіюється цілком; із самої .minecraft усе, крім
+ * файлів гри (versions, libraries, assets), лаунчерів і тек інших профілів.</li>
  * </ul>
  * Чого не вміє (і чесно пише): збірки з невідомим форматом, снапшоти і «latest-release» без конкретної версії.
  */
@@ -73,10 +73,18 @@ public final class LauncherImport implements ProgressObservable {
             "usernamecache.json", "launcher_profiles.json", "launcher_accounts.json", "launcher_log.txt",
             "launcher_msa_credentials.bin", "launcher_ui_state.json", "launcher_settings.json", "runtime", "bin",
             "TlauncherProfiles.json", "tlauncher_profiles.json", "webcache", "webcache2", "realms_persistence.json"));
-    /** З теки .minecraft офіційного лаунчера і TLauncher беремо лише своє гравця. */
-    static final List<String> DOT_MINECRAFT = Arrays.asList("mods", "config", "defaultconfigs", "kubejs", "resourcepacks",
-            "shaderpacks", "saves", "schematics", "screenshots", "options.txt", "optionsof.txt", "optionsshaders.txt",
-            "servers.dat");
+    /**
+     * Спільна .minecraft офіційного лаунчера, SKlauncher і TLauncher: копіюється все, крім {@link #SKIP} і файлів самих
+     * лаунчерів. 21.11.2026 (тікет #97, власник: «зроби імпорт універсальним, ... багато модів люблять робити свої
+     * власні теки, як от кастомнпс»): раніше тут був білий список (mods, config, saves...), і губилось усе інше:
+     * оформлення меню модпака (resources, fancymenu_data), дані модів у своїх теках (customnpcs, ftbquests,
+     * serverconfig, local...). Модів, що пишуть свої теки, сотні, тож чорний список, а не білий.
+     */
+    static final Set<String> DOT_SKIP = new HashSet<String>(Arrays.asList(
+            "jre", "jre-x64", "jre-legacy", "java", "launcher", "skins", "profiles", "updates", "treatment_tags.json"));
+    /** Початки назв файлів і тек самих лаунчерів у .minecraft (launcher_*, sklauncher*, tlauncher*, звіти JVM). */
+    static final String[] DOT_SKIP_PREFIX = {"launcher_", "launcher-", "sklauncher", ".sklauncher", "tlauncher", ".tlauncher",
+            "hs_err_pid"};
 
     private static final Pattern VERSION = Pattern.compile("[0-9A-Za-z._+-]+");
 
@@ -88,7 +96,10 @@ public final class LauncherImport implements ProgressObservable {
         public String loader = "vanilla";
         public String loaderVersion;
         public File gameDir;
+        /** Тека гри це сама спільна .minecraft (а не окрема тека профілю): відкидаються ще й файли лаунчерів. */
         public boolean dotMinecraft;
+        /** Теки інших профілів усередині .minecraft: їх не тягнемо в цю збірку. */
+        public List<File> nested = new ArrayList<File>();
         public String problem;
         public long bytes = -1;
 
@@ -377,13 +388,20 @@ public final class LauncherImport implements ProgressObservable {
             String who = sk ? "SKlauncher" : new File(dot, "TlauncherProfiles.json").isFile() ? "TLauncher" : "Minecraft Launcher";
             if (vs != null) for (File v : vs) if (new File(v, v.getName() + ".json").isFile()) profiles.add(new String[]{v.getName(), v.getName(), null, who});
         }
+        // Окрема тека гри профілю (SKlauncher і TLauncher так ставлять модпаки) належить лише цій збірці і копіюється
+        // цілком, як збірка Prism. Сама .minecraft спільна: без файлів лаунчерів і без тек інших профілів у ній.
+        List<File> own = new ArrayList<File>();
+        for (String[] p : profiles) {
+            File gd = gameDirOf(dot, p[2]);
+            if (!same(gd, dot)) own.add(gd);
+        }
         for (String[] p : profiles) {
             Found f = new Found();
             f.source = p[3];
             f.title = p[0].isEmpty() ? p[1] : p[0];
-            f.dotMinecraft = true;
-            File gd = p[2] != null && !p[2].trim().isEmpty() ? new File(p[2].trim()) : dot;
-            f.gameDir = gd.isDirectory() ? gd : dot;
+            f.gameDir = gameDirOf(dot, p[2]);
+            f.dotMinecraft = same(f.gameDir, dot);
+            if (f.dotMinecraft) f.nested.addAll(own);
             versionJson(f, dot, p[1], 0);
             if (f.mc == null) parseVersionId(f, p[1]);
             out.add(finish(f));
@@ -482,6 +500,44 @@ public final class LauncherImport implements ProgressObservable {
         return f;
     }
 
+    /** Тека гри профілю launcher_profiles.json: своя, якщо задана і існує (відносна від .minecraft), інакше .minecraft. */
+    static File gameDirOf(File dot, String gameDir) {
+        if (gameDir == null || gameDir.trim().isEmpty()) return dot;
+        File gd = new File(gameDir.trim());
+        if (!gd.isAbsolute()) gd = new File(dot, gameDir.trim());
+        return gd.isDirectory() ? gd : dot;
+    }
+
+    static boolean same(File a, File b) {
+        try {
+            return a.getCanonicalFile().equals(b.getCanonicalFile());
+        } catch (IOException e) {
+            return a.getAbsoluteFile().equals(b.getAbsoluteFile());
+        }
+    }
+
+    /** Чи лежить {@code inner} у {@code outer} (або це вона сама). */
+    static boolean inside(File inner, File outer) {
+        try {
+            return inner.getCanonicalFile().toPath().startsWith(outer.getCanonicalFile().toPath());
+        } catch (IOException e) {
+            return inner.getAbsoluteFile().toPath().startsWith(outer.getAbsoluteFile().toPath());
+        }
+    }
+
+    /** Чи копіювати файл чи теку верхнього рівня теки гри. */
+    static boolean copyTop(Found f, File k) {
+        String n = k.getName();
+        String low = n.toLowerCase(Locale.ROOT);
+        if (SKIP.contains(n) || SKIP.contains(low) || low.endsWith(".log") || low.endsWith(".tmp")) return false;
+        if (!f.dotMinecraft) return true;
+        if (DOT_SKIP.contains(low)) return false;
+        for (String p : DOT_SKIP_PREFIX) if (low.startsWith(p)) return false;
+        if (k.isFile() && (low.endsWith(".jar") || low.endsWith(".exe"))) return false; // sklauncher-fx.jar, TLauncher.exe
+        for (File o : f.nested) if (inside(o, k)) return false; // тека іншого профілю чи тека з ними
+        return true;
+    }
+
     /** Значення з ini-подібного файлу (instance.cfg, prismlauncher.cfg), або null. */
     static String cfg(File f, String key) {
         if (!f.isFile()) return null;
@@ -506,7 +562,7 @@ public final class LauncherImport implements ProgressObservable {
         for (File k : kids) {
             String n = k.getName();
             if (!worlds && n.equals("saves")) continue;
-            if (f.dotMinecraft ? DOT_MINECRAFT.contains(n) : !SKIP.contains(n) && !n.endsWith(".log")) out.add(k);
+            if (copyTop(f, k)) out.add(k);
         }
         return out;
     }

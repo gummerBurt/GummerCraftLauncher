@@ -70,13 +70,9 @@
 
 Зайти на сервер можна прямо з лаунчера: вибираєш збірку, натискаєш «Запуск», а всі потрібні моди лаунчер завантажить і оновлюватиме сам. Біля збірки видно онлайн сервера, а галочка «Одразу на сервер» запускає гру одразу з входом на сервер.
 
-## Що нового в 1.36.9
+## Що нового в 1.36.10
 
-- **Мова за мовою системи.** Новий лаунчер (без збереженої мови) вибирає її сам: українська, якщо мова чи регіон Windows українські або російські, інакше англійська. Хто вже вибрав мову, у того нічого не зміниться.
-- **«Додати»:** ваніль і завантажувачі показують лише версії гри, без назв твоїх встановлених збірок і без зелених стрілок оновлень (вони тепер лише у «Встановлених»). Якщо така версія вже стоїть, лаунчер питає: відкрити встановлену чи поставити ще одну окрему.
-- **Розбір вильоту:** пошкоджений файл налаштувань самого Forge (`config/fml.toml`, гра закривається одразу після запуску) лаунчер тепер розпізнає і пропонує скинути його однією кнопкою.
-- **Steam Deck:** в ігровому режимі після виходу з гри знову видно лаунчер, а не сірий екран: там вікно лаунчера на час гри більше не закривається.
-- **Steam Deck:** ярлик, який додає установка, одразу з'являється в «Нещодавніх» на головній ігрового режиму, а не лише в бібліотеці (для нової установки ярлика).
+- **Імпорт з інших лаунчерів переносить збірку повністю.** Модпаки SKlauncher, TLauncher та офіційного лаунчера, що мають свою теку гри, тепер копіюються цілком: оформлення меню модпака, квести, дані модів у їхніх власних теках (CustomNPCs і подібні). Раніше переносились лише моди, налаштування, світи, ресурспаки і шейдери. Із самої теки `.minecraft` теж береться все, крім файлів гри та лаунчерів.
 
 **Усі зміни всіх версій: [CHANGELOG.md](CHANGELOG.md).**
 
@@ -178,7 +174,7 @@ GummerCraft Launcher is a free, Ukrainian open-source Minecraft launcher (LGPL-3
 
 It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt); third-party contributions are also covered by the BSD terms in [licenses/BSD-contributors.txt](licenses/BSD-contributors.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
 
-**Latest, 1.36.9:** the launcher language for a new data folder follows the system (Ukrainian if the Windows display language or region is Ukrainian or Russian, English otherwise; a language already chosen is kept); in "Add" vanilla and loaders show only game versions, without the names of your installed builds and without update arrows (those are in "Installed" only), and installing a version you already have asks whether to open the installed one or add one more; a damaged Forge settings file (`config/fml.toml`, the game closes right after launch) is now recognised with a one-click reset; Steam Deck Game Mode: the launcher is shown again after leaving the game instead of a grey screen (its window is no longer closed while the game runs there), and the shortcut added by the installer shows up in Recent games on the Game Mode home screen.
+**Latest, 1.36.10:** import from other launchers copies the whole build: SKlauncher, TLauncher and official launcher modpacks with their own game folder are copied entirely (modpack menu design, quests, mod data in mods' own folders such as CustomNPCs); before only mods, configs, worlds, resource packs and shaders were copied. From the shared `.minecraft` everything is taken except game and launcher files.
 
 Full history: [CHANGELOG.md](CHANGELOG.md#english-changelog).
 
