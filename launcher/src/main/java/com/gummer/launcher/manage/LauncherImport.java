@@ -81,7 +81,9 @@ public final class LauncherImport implements ProgressObservable {
      * serverconfig, local...). Модів, що пишуть свої теки, сотні, тож чорний список, а не білий.
      */
     static final Set<String> DOT_SKIP = new HashSet<String>(Arrays.asList(
-            "jre", "jre-x64", "jre-legacy", "java", "launcher", "skins", "profiles", "updates", "treatment_tags.json"));
+            "jre", "jre-x64", "jre-legacy", "java", "launcher", "skins", "profiles", "updates", "treatment_tags.json",
+            // 22.11.2026: Java офіційного лаунчера (runtime) і кеш браузера лаунчера (webcache2), не потрібні збірці
+            "runtime", "webcache", "webcache2"));
     /** Початки назв файлів і тек самих лаунчерів у .minecraft (launcher_*, sklauncher*, tlauncher*, звіти JVM). */
     static final String[] DOT_SKIP_PREFIX = {"launcher_", "launcher-", "sklauncher", ".sklauncher", "tlauncher", ".tlauncher",
             "hs_err_pid"};
@@ -141,22 +143,35 @@ public final class LauncherImport implements ProgressObservable {
             data.add(xdg != null && !xdg.isEmpty() ? new File(xdg) : new File(home, ".local/share"));
             data.add(new File(home, ".var/app/org.prismlauncher.PrismLauncher/data")); // Flatpak
         }
+        // 22.11.2026: кожне місце окремо: помилка в одному (дивний instance.cfg, профіль TLauncher) лише в лог, решта знайдеться
         for (File d : data) {
             for (String n : new String[]{"PrismLauncher", "prismlauncher", "PolyMC", "polymc"}) {
                 File root = new File(d, n); // PolyMC: попередник Prism, той самий формат
-                scanPrism(root, n.toLowerCase(Locale.ROOT).startsWith("poly") ? "PolyMC" : "Prism Launcher", out);
+                safely(root, () -> scanPrism(root, n.toLowerCase(Locale.ROOT).startsWith("poly") ? "PolyMC" : "Prism Launcher", out));
             }
-            scanEach(new File(d, "ATLauncher/instances"), out);
-            scanEach(new File(d, "atlauncher/instances"), out);
-            scanEach(new File(d, "ModrinthApp/profiles"), out);
-            scanEach(new File(d, "com.modrinth.theseus/profiles"), out);
+            for (String rel : new String[]{"ATLauncher/instances", "atlauncher/instances", "ModrinthApp/profiles",
+                    "com.modrinth.theseus/profiles"}) {
+                File dir = new File(d, rel);
+                safely(dir, () -> scanEach(dir, out));
+            }
         }
-        scanEach(new File(home, "curseforge/minecraft/Instances"), out);
-        scanEach(new File(home, "Documents/curseforge/minecraft/Instances"), out);
+        for (String rel : new String[]{"curseforge/minecraft/Instances", "Documents/curseforge/minecraft/Instances"}) {
+            File dir = new File(home, rel);
+            safely(dir, () -> scanEach(dir, out));
+        }
         File dot = pl == Platform.WINDOWS && appdata != null ? new File(appdata, ".minecraft")
                 : pl == Platform.MAC_OS_X ? new File(home, "Library/Application Support/minecraft") : new File(home, ".minecraft");
-        scanDotMinecraft(dot, out);
+        safely(dot, () -> scanDotMinecraft(dot, out));
         return dedupe(out);
+    }
+
+    private static void safely(File where, Runnable r) {
+        try {
+            r.run();
+        } catch (RuntimeException e) {
+            java.util.logging.Logger.getLogger(LauncherImport.class.getName())
+                    .log(java.util.logging.Level.WARNING, "Import: scanning " + where + " failed", e);
+        }
     }
 
     private static List<Found> dedupe(List<Found> in) {

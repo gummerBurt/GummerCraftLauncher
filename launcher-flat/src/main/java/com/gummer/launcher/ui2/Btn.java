@@ -91,7 +91,7 @@ public class Btn extends JButton {
         if (isPreferredSizeSet()) return super.getPreferredSize();
         if (iconOnly()) return new Dimension(height, height);
         FontMetrics fm = getFontMetrics(getFont());
-        int w = Ui.S3 + (glyph != null ? 18 + Ui.S2 : 0) + fm.stringWidth(getText()) + Ui.S3 + badgeSpace;
+        int w = Ui.S3 + (glyph != null ? 18 + Ui.S2 : 0) + com.gummer.launcher.look.TextFit.widest(fm.getFont(), getText()) + Ui.S3 + badgeSpace; // 22.11.2026: з запасом на масштаб Windows
         return new Dimension(w, height);
     }
 

@@ -90,7 +90,7 @@ public final class ListModeSwitch extends JComponent {
     /** Межа між вкладками для ширини w: пропорційно ширині підписів (з однаковим запасом по боках кожного). */
     private int split(int w) {
         FontMetrics fm = getFontMetrics(getFont());
-        double a = fm.stringWidth(labels[0]) + 20, b = fm.stringWidth(labels[1]) + 20;
+        double a = TextFit.widest(fm.getFont(), labels[0]) + 20, b = TextFit.widest(fm.getFont(), labels[1]) + 20;
         return (int) Math.round(w * a / (a + b));
     }
 
@@ -111,7 +111,7 @@ public final class ListModeSwitch extends JComponent {
         FontMetrics fm = getFontMetrics(getFont());
         // 17.11.2026 (власник: «"встановлені" трохи погано в кнопку залазять»): по 10 px запасу з боків тексту (більше
         // не влазить верхня панель Бібліотеки у найменшому вікні: «Змінити скін» виїжджала за край)
-        int w = fm.stringWidth(labels[0]) + fm.stringWidth(labels[1]) + 2 * 20; // 20.11.2026: половини за довжиною підписів
+        int w = TextFit.widest(fm.getFont(), labels[0]) + TextFit.widest(fm.getFont(), labels[1]) + 2 * 20; // 20.11.2026: половини за довжиною підписів
         double z = Zoom.of(this); // 17.11.2026: збільшення в розгорнутому склі
         return new Dimension(Zoom.px(z, w), Zoom.px(z, 32));
     }

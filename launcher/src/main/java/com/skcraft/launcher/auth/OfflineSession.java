@@ -46,6 +46,14 @@ public class OfflineSession implements Session {
 
     private final String uuid;
 
+    /**
+     * 22.11.2026: UUID не заданий (звичайний офлайн-акаунт, а не збережений акаунт Microsoft без інтернету). Тоді
+     * Runner вибирає UUID для збірки сам ({@link com.gummer.launcher.util.OfflineUuid#forBuild}).
+     */
+    public boolean isGeneratedUuid() {
+        return uuid == null;
+    }
+
     @Override
     public String getUuid() {
         //return (new UUID(0, 0)).toString(); // try to fix accounts duplication

@@ -82,6 +82,34 @@ public final class Ui {
         com.gummer.launcher.look.Edge.pill(g2, 0, 0, w, h, arc + 2, null, FOCUS, 2.0);
     }
 
+    /**
+     * 22.11.2026 (власник: «пошукай де ще щось недоназване, в кінці слова крапки»): текст в один рядок, якщо влазить,
+     * інакше у два з розривом на пробілі або після дефіса (назви модпаків на кшталт «mrpack-the-scp»), так щоб довший
+     * рядок був найкоротшим. «…» лише в кінці другого рядка, коли й двох не досить.
+     */
+    public static String[] fit2(String text, FontMetrics fm, int width) {
+        if (text == null) return new String[]{""};
+        if (fm.stringWidth(text) <= width) return new String[]{text};
+        String a = null, b = null;
+        int best = Integer.MAX_VALUE;
+        for (int i = 1; i < text.length(); i++) {
+            char ch = text.charAt(i - 1);
+            if (ch != ' ' && ch != '-') continue;
+            String l1 = text.substring(0, i).trim(), l2 = text.substring(i).trim();
+            if (l1.isEmpty() || l2.isEmpty()) continue;
+            int w1 = fm.stringWidth(l1);
+            if (w1 > width) break;
+            int w = Math.max(w1, fm.stringWidth(l2));
+            if (w < best) {
+                best = w;
+                a = l1;
+                b = l2;
+            }
+        }
+        if (a == null) return new String[]{fit(text, fm, width)};
+        return new String[]{a, fit(b, fm, width)};
+    }
+
     /** Текст, що не влазить у ширину, обрізається з «…». */
     public static String fit(String text, FontMetrics fm, int width) {
         if (text == null) return "";

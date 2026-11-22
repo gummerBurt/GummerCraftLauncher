@@ -43,6 +43,11 @@ public class HttpRequest implements Closeable, ProgressObservable {
     private static final int READ_TIMEOUT = 1000 * 60;
     private static final int READ_BUFFER_SIZE = 1024 * 8;
 
+    static {
+        // 22.11.2026: пул з'єднань keep-alive (див. close()): 16 на сервер, бо завантажувачі качають у 6+ потоків
+        if (System.getProperty("http.maxConnections") == null) System.setProperty("http.maxConnections", "16");
+    }
+
     private final ObjectMapper mapper = com.gummer.launcher.util.Json.newMapper();
     private final Map<String, String> headers = new HashMap<String, String>();
     private String method;
@@ -57,6 +62,8 @@ public class HttpRequest implements Closeable, ProgressObservable {
     private PartialDownloadInfo resumeInfo = null;
     private long contentLength = -1;
     private long readBytes = 0;
+    /** 22.11.2026: тіло відповіді прочитане до кінця, тож з'єднання можна віддати назад для наступних запитів. */
+    private boolean fullyRead;
 
     /**
      * Create a new HTTP request.
@@ -337,12 +344,16 @@ public class HttpRequest implements Closeable, ProgressObservable {
         }
 
         try {
+            // 22.11.2026: блоками, а не по байту (кожен read() по байту йшов через синхронізований потік з'єднання)
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            int b = 0;
-            while ((b = inputStream.read()) != -1) {
+            byte[] buf = new byte[READ_BUFFER_SIZE];
+            int n;
+            while ((n = inputStream.read(buf)) != -1) {
                 checkInterrupted();
-                bos.write(b);
+                bos.write(buf, 0, n);
+                readBytes += n;
             }
+            fullyRead = true;
             return new BufferedResponse(bos.toByteArray());
         } finally {
             close();
@@ -412,6 +423,7 @@ public class HttpRequest implements Closeable, ProgressObservable {
                 throw new IOException(String.format("Connection closed with %d bytes transferred, expected %d",
                         readBytes, contentLength));
             }
+            fullyRead = true;
         } finally {
             close();
         }
@@ -477,8 +489,25 @@ public class HttpRequest implements Closeable, ProgressObservable {
     }
 
     @Override
+    /**
+     * 22.11.2026 (власник у брата: збірки Modrinth качались ~0,1 МБ/с, наші ~10 МБ/с): раніше тут завжди був
+     * {@code disconnect()}, і кожен файл відкривав нове з'єднання з новим TLS-рукостисканням. Збірки Modrinth, ваніль і
+     * завантажувачі це тисячі дрібних файлів (ресурси гри з resources.download.minecraft.net, моди з Modrinth), тож
+     * більшість часу йшла на рукостискання, а антивірус з перевіркою HTTPS (AVG, Avast) робив кожне ще довшим. Тепер,
+     * якщо відповідь прочитана до кінця, лише закриваємо потік: Java повертає з'єднання в пул і бере його для
+     * наступного файлу з того самого сервера. Обрив, помилка чи недочитана відповідь: як раніше, {@code disconnect()}.
+     */
     public void close() throws IOException {
-        if (conn != null) conn.disconnect();
+        if (conn == null) return;
+        if (fullyRead && inputStream != null) {
+            try {
+                inputStream.close();
+                return;
+            } catch (IOException e) {
+                // нижче disconnect
+            }
+        }
+        conn.disconnect();
     }
 
     /**

@@ -34,20 +34,48 @@ public final class ImportOtherDialog {
     private ImportOtherDialog() {
     }
 
-    /** @param onImported назва останньої імпортованої збірки (вибрати її і перечитати список); null: була помилка, лише перечитати */
+    private static final java.util.logging.Logger log = java.util.logging.Logger.getLogger(ImportOtherDialog.class.getName());
+
+    /**
+     * @param onImported назва останньої імпортованої збірки (вибрати її і перечитати список); null: була помилка, лише перечитати
+     *
+     * <p>22.11.2026 (власник тестував у брата з кількома лаунчерами: «лаунчер підвисав і вікно імпорта не відкривалось»):
+     * раніше вікно відкривалось лише після пошуку і підрахунку розміру кожної збірки зі світами (обхід усіх файлів), а
+     * помилка в цьому фоновому завданні губилась без логу, і вікно не відкривалось зовсім. Тепер вікно одразу, пошук у
+     * ньому з написом «Шукаю...», розміри дописуються пізніше, помилки в лог.</p>
+     */
     public static void show(Window owner, Launcher launcher, Consumer<String> onImported) {
-        owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        open(owner, launcher, onImported);
+    }
+
+    /** Розміри знайдених збірок у фоні, підпис рядка оновлюється, коли розмір готовий. */
+    private static void sizesLater(Launcher launcher, List<LauncherImport.Found> found, Map<LauncherImport.Found, JLabel> subs) {
         launcher.getExecutor().submit(() -> {
-            List<LauncherImport.Found> found = LauncherImport.scan();
-            for (LauncherImport.Found f : found) if (f.problem == null) f.bytes = LauncherImport.size(f, true);
-            SwingUtilities.invokeLater(() -> {
-                owner.setCursor(Cursor.getDefaultCursor());
-                open(owner, launcher, found, onImported);
-            });
+            long t0 = System.currentTimeMillis();
+            for (LauncherImport.Found f : found) {
+                if (f.problem != null) continue;
+                try {
+                    f.bytes = LauncherImport.size(f, true);
+                } catch (RuntimeException e) {
+                    log.log(java.util.logging.Level.WARNING, "Import: size of " + f.gameDir + " failed", e);
+                    continue;
+                }
+                SwingUtilities.invokeLater(() -> {
+                    JLabel l = subs.get(f);
+                    if (l != null) l.setText(subText(f));
+                });
+            }
+            log.info("Import: sizes of " + found.size() + " builds in " + (System.currentTimeMillis() - t0) + " ms");
         });
     }
 
-    private static void open(Window owner, Launcher launcher, List<LauncherImport.Found> initial, Consumer<String> onImported) {
+    private static String subText(LauncherImport.Found f) {
+        return f.source + "  ·  " + (f.mc != null ? f.loaderTitle() + " " + f.mc : "?")
+                + (f.bytes > 0 ? "  ·  " + com.gummer.launcher.util.Uninstall.human(f.bytes,
+                SharedLocale.tr("settings.danger.gb"), SharedLocale.tr("settings.danger.mb")) : "");
+    }
+
+    private static void open(Window owner, Launcher launcher, Consumer<String> onImported) {
         final JDialog d = new JDialog(owner, SharedLocale.tr("import.title"), Dialog.ModalityType.DOCUMENT_MODAL);
         LookTheme.Palette pal = LookTheme.palette();
         JPanel root = new JPanel(new MigLayout("insets 18 20 16 20, wrap 1, gap 0 8, fill", "[grow,fill]", "[][][grow,fill][][]"));
@@ -58,6 +86,7 @@ public final class ImportOtherDialog {
         final JPanel list = new JPanel(new MigLayout("insets 4, wrap 1, gap 0 6, fillx", "[grow,fill]", ""));
         list.setOpaque(false);
         final Map<LauncherImport.Found, JCheckBox> boxes = new LinkedHashMap<LauncherImport.Found, JCheckBox>();
+        final Map<LauncherImport.Found, JLabel> subs = new java.util.concurrent.ConcurrentHashMap<LauncherImport.Found, JLabel>();
         final JButton go = LookUi.primary(new JButton(SharedLocale.tr("import.go")));
         go.putClientProperty("FlatLaf.styleClass", null);
         Runnable refreshGo = () -> {
@@ -66,6 +95,7 @@ public final class ImportOtherDialog {
             go.setEnabled(any);
         };
         Consumer<List<LauncherImport.Found>> fill = found -> {
+            if (boxes.isEmpty()) list.removeAll(); // напис «Шукаю...» або «не знайдено»
             for (LauncherImport.Found f : found) {
                 if (boxes.containsKey(f) || containsSame(boxes, f)) continue;
                 JPanel row = new JPanel(new MigLayout("insets 0, wrap 1, gap 0 0, fillx", "[grow,fill]", ""));
@@ -73,10 +103,8 @@ public final class ImportOtherDialog {
                 JCheckBox b = new JCheckBox(f.title);
                 b.setOpaque(false);
                 b.setFont(b.getFont().deriveFont(Font.BOLD));
-                String what = f.source + "  ·  " + (f.mc != null ? f.loaderTitle() + " " + f.mc : "?")
-                        + (f.bytes > 0 ? "  ·  " + com.gummer.launcher.util.Uninstall.human(f.bytes,
-                        SharedLocale.tr("settings.danger.gb"), SharedLocale.tr("settings.danger.mb")) : "");
-                JLabel sub = new JLabel(what);
+                JLabel sub = new JLabel(subText(f));
+                subs.put(f, sub);
                 sub.setForeground(pal.text3);
                 sub.setFont(sub.getFont().deriveFont(12f));
                 row.add(b);
@@ -99,7 +127,7 @@ public final class ImportOtherDialog {
             list.revalidate();
             list.repaint();
         };
-        fill.accept(initial);
+        list.add(LookUi.body(SharedLocale.tr("import.searching"), true), "wmin 0");
         JScrollPane scroll = new JScrollPane(list);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.setOpaque(false);
@@ -130,22 +158,30 @@ public final class ImportOtherDialog {
             File dir = chooser.getSelectedFile();
             d.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
             launcher.getExecutor().submit(() -> {
-                List<LauncherImport.Found> found = LauncherImport.detect(dir);
-                for (LauncherImport.Found f : found) if (f.problem == null) f.bytes = LauncherImport.size(f, true);
+                List<LauncherImport.Found> found;
+                try {
+                    found = LauncherImport.detect(dir);
+                } catch (RuntimeException ex) {
+                    log.log(java.util.logging.Level.WARNING, "Import: detect " + dir + " failed", ex);
+                    found = new ArrayList<LauncherImport.Found>();
+                }
+                final List<LauncherImport.Found> got = found;
+                log.info("Import: " + got.size() + " builds in the chosen folder " + dir);
                 SwingUtilities.invokeLater(() -> {
+                    List<LauncherImport.Found> found2 = got;
                     d.setCursor(Cursor.getDefaultCursor());
-                    if (found.isEmpty()) {
+                    if (found2.isEmpty()) {
                         JOptionPane.showMessageDialog(d, SharedLocale.tr("import.notFound", dir.getAbsolutePath()),
                                 SharedLocale.tr("import.title"), JOptionPane.INFORMATION_MESSAGE);
                         return;
                     }
-                    if (boxes.isEmpty()) list.removeAll();
-                    fill.accept(found);
-                    for (LauncherImport.Found f : found) {
+                    fill.accept(found2);
+                    for (LauncherImport.Found f : found2) {
                         JCheckBox b = boxes.get(f);
-                        if (b != null && b.isEnabled() && found.size() == 1) b.setSelected(true);
+                        if (b != null && b.isEnabled() && found2.size() == 1) b.setSelected(true);
                     }
                     refreshGo.run();
+                    sizesLater(launcher, found2, subs);
                 });
             });
         });
@@ -158,6 +194,24 @@ public final class ImportOtherDialog {
             if (chosen.isEmpty()) return;
             d.dispose();
             run(owner, launcher, chosen, worlds.isSelected(), onImported);
+        });
+
+        // пошук у фоні, поки вікно вже відкрите
+        launcher.getExecutor().submit(() -> {
+            long t0 = System.currentTimeMillis();
+            List<LauncherImport.Found> found;
+            try {
+                found = LauncherImport.scan();
+            } catch (RuntimeException ex) {
+                log.log(java.util.logging.Level.WARNING, "Import: scan failed", ex);
+                found = new ArrayList<LauncherImport.Found>();
+            }
+            final List<LauncherImport.Found> got = found;
+            log.info("Import: " + got.size() + " builds found in " + (System.currentTimeMillis() - t0) + " ms");
+            SwingUtilities.invokeLater(() -> {
+                fill.accept(got);
+                sizesLater(launcher, got, subs);
+            });
         });
 
         d.setContentPane(root);

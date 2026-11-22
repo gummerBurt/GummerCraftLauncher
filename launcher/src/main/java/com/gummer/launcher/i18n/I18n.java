@@ -39,7 +39,7 @@ public class I18n {
      * часто має український регіон, тож українська, якщо uk чи ru хоч у чомусь. Решта мов (і англійська) отримує
      * англійську, бо інших перекладів поки немає. Гравець, який уже вибрав мову, цього не помітить: вона в config.json.
      */
-    static Lang detect() {
+    public static Lang detect() {
         for (Locale.Category c : Locale.Category.values()) {
             String l = Locale.getDefault(c).getLanguage();
             if ("uk".equals(l) || "ru".equals(l)) return Lang.UKRAINIAN;

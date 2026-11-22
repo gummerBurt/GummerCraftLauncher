@@ -46,7 +46,16 @@ public final class VanillaDefaults {
     }
 
     public static void apply(Instance instance) {
-        if (!instance.isBuiltIn()) return; // 1.33: Fabric теж (та сама чиста гра)
+        if (!instance.isBuiltIn()) {
+            // 22.11.2026: модпаки GummerCraft приносять options.txt з українською; на неукраїнській системі перший
+            // запуск англійською (власник: «в кого укр/рус - тому українська, всім іншим англ»)
+            try {
+                englishForModpack(instance.getContentDir());
+            } catch (Exception e) {
+                log.log(Level.WARNING, "Modpack: could not set the game language", e);
+            }
+            return;
+        }
         File dir = instance.getContentDir();
         try {
             applyLanguage(dir, instance.isFabric() ? com.gummer.launcher.fabric.FabricVersions.versionIdOf(instance)
@@ -62,6 +71,44 @@ public final class VanillaDefaults {
         } catch (Exception e) {
             log.log(Level.WARNING, "Vanilla: could not add the GummerCraft server", e);
         }
+    }
+
+    /**
+     * 22.11.2026 (власник: брат з чеською Windows отримав гру українською; «мова самого майну, в кого укр/рус - тому
+     * українська, всім іншим англ»): чи система українська чи російська, так само, як мова лаунчера для нової теки
+     * даних ({@link com.gummer.launcher.i18n.I18n#detect}).
+     */
+    static boolean ukrainianSystem() {
+        return com.gummer.launcher.i18n.I18n.detect() == com.gummer.launcher.i18n.Lang.UKRAINIAN;
+    }
+
+    /** Мова гри за замовчуванням для версії: українська на системі uk/ru, інакше англійська. */
+    static String defaultLang(String versionId) {
+        if (ukrainianSystem()) return langCode(versionId);
+        return "uk_UA".equals(langCode(versionId)) ? "en_US" : "en_us";
+    }
+
+    /** Модпак GummerCraft, перший запуск на неукраїнській системі: lang з uk на англійську, решту options.txt не чіпати. */
+    static void englishForModpack(File dir) throws IOException {
+        File options = new File(dir, "options.txt");
+        File marker = new File(dir, FIRST_MARKER);
+        if (ukrainianSystem() || marker.exists() || new File(dir, "logs").exists() || !options.isFile()) return;
+        java.util.List<String> lines = new ArrayList<String>(java.nio.file.Files.readAllLines(options.toPath(), StandardCharsets.UTF_8));
+        boolean changed = false;
+        for (int i = 0; i < lines.size(); i++) {
+            String l = lines.get(i);
+            if (l.startsWith("lang:") && l.substring(5).trim().toLowerCase(java.util.Locale.ROOT).startsWith("uk_")) {
+                lines.set(i, "lang:" + (l.substring(5).trim().equals("uk_UA") ? "en_US" : "en_us"));
+                changed = true;
+            }
+        }
+        if (changed) {
+            try (Writer w = new OutputStreamWriter(new FileOutputStream(options), StandardCharsets.UTF_8)) {
+                for (String l : lines) w.write(l + "\n");
+            }
+            log.info("Modpack: not a Ukrainian or Russian system, first launch in English");
+        }
+        marker.createNewFile();
     }
 
     /** Код мови для версії: до 1.11 Minecraft знав лише uk_UA, з 1.11 коди в нижньому регістрі. */
@@ -94,7 +141,11 @@ public final class VanillaDefaults {
         java.util.Map<String, String> prefs = GamePrefs.load(base);
         if (prefs.containsKey(GamePrefs.LANG)) other[0] = prefs.get(GamePrefs.LANG);
         if (prefs.containsKey(GamePrefs.GUI)) other[1] = prefs.get(GamePrefs.GUI);
-        String lang = other[0] != null ? langFor(other[0], versionId) : langCode(versionId);
+        // 22.11.2026: на неукраїнській системі українська з інших збірок не береться (це могла бути мова модпака
+        // GummerCraft за замовчуванням, а не вибір гравця; вибір гравця в грі вже в prefs вище)
+        if (other[0] != null && !prefs.containsKey(GamePrefs.LANG) && !ukrainianSystem()
+                && other[0].toLowerCase(java.util.Locale.ROOT).startsWith("uk_")) other[0] = null;
+        String lang = other[0] != null ? langFor(other[0], versionId) : defaultLang(versionId);
         java.util.List<String> lines = options.isFile()
                 ? new ArrayList<String>(java.nio.file.Files.readAllLines(options.toPath(), StandardCharsets.UTF_8))
                 : new ArrayList<String>();

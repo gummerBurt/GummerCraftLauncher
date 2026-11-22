@@ -307,6 +307,7 @@ public class FancyLauncher {
 
     public static void enforceUIManagerDefaults() {
         UIManager.getDefaults().put("SplitPane.border", BorderFactory.createEmptyBorder());
+        com.gummer.launcher.look.TextFit.install(); // 22.11.2026: написи не обрізаються з масштабом Windows 125-150%
 
         UIManager.put( "ProgressBar.arc", 0 );
         UIManager.put( "TextComponent.arc", 5 );

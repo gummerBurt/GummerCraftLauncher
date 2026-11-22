@@ -383,7 +383,7 @@ public final class DesignVote extends JPanel {
         @Override
         public Dimension getPreferredSize() {
             FontMetrics fm = getFontMetrics(getFont());
-            return zoomed(fm.stringWidth(tr("design.feedback")) + 2 * PAD, 28);
+            return zoomed(com.gummer.launcher.look.TextFit.widest(fm.getFont(), tr("design.feedback")) + 2 * PAD, 28);
         }
 
         /**

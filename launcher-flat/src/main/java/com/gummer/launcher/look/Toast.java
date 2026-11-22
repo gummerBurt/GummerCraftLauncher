@@ -237,8 +237,8 @@ public final class Toast extends JComponent {
     private Dimension measure(int maxW) {
         FontMetrics fm = text.getFontMetrics(text.getFont());
         int natural = 0;
-        for (String line : text.getText().split("\n")) natural = Math.max(natural, fm.stringWidth(line));
-        int titleW = title == null ? 0 : getFontMetrics(titleFont()).stringWidth(title);
+        for (String line : text.getText().split("\n")) natural = Math.max(natural, TextFit.widest(fm.getFont(), line));
+        int titleW = title == null ? 0 : TextFit.widest(titleFont(), title); // 22.11.2026: з запасом на масштаб Windows
         int w = Math.min(maxW, Math.max(natural, titleW) + padL() + 44);
         text.setSize(w - padL() - 40, Short.MAX_VALUE);
         int th = text.getPreferredSize().height;

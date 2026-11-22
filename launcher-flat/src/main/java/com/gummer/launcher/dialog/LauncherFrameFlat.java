@@ -443,6 +443,13 @@ public class LauncherFrameFlat extends JFrame {
         // вужче (260 -> 204), а в кнопки-картинки «Запуск» прибрано бічні поля 14 px: сяйво однаково малюється навколо картинки
         JPanel manageBar = HotbarSlot.bar();
         manageBar.add(manageButton);
+        // 22.11.2026 («Налаштування збірки» у два рядки): слот ширший за 72 на стільки, скільки займає «Налаштування»
+        // (українською +19 px). На найменшому вікні з полем версії ряд заповнений впритул, тож на ту саму ширину вужче
+        // поле версії, інакше «Запуск» вилазив за правий край (проба з полем версії 22.11 ~21:00)
+        int extra = Math.max(0, manageButton.getPreferredSize().width - 72);
+        if (extra > 0 && versionPanel.getLayout() instanceof MigLayout) {
+            ((MigLayout) versionPanel.getLayout()).setColumnConstraints("[" + (196 - extra) + "!]");
+        }
         launchButton.setMargin(new Insets(2, 0, 2, 0));
         launchGroup.add(versionPanel, "aligny center, hidemode 3, gapright 4");
         launchGroup.add(manageBar, "aligny center, gapright 2");
@@ -1500,7 +1507,9 @@ public class LauncherFrameFlat extends JFrame {
 
     /** Куди веде кнопка "Вікі та FAQ" (за замовчуванням - з налаштувань лаунчера; FlatLauncherFrame підставляє вікі вибраної збірки). */
     protected String wikiUrl() {
-        return launcher.getConfig().getWikiUrl();
+        // 22.11.2026 (власник: «кнопка FAQ в лаунчері має вести на https://gummercraft.fun/launcher, а не на faq гк»):
+        // сторінка лаунчера мовою інтерфейсу (link.launcherPage); вікі збірки (StalDayZ) як і раніше підставляє FlatLauncherFrame
+        return com.skcraft.launcher.util.SharedLocale.tr("link.launcherPage");
     }
 
     protected JPanel createContainerPanel() {

@@ -1562,7 +1562,9 @@ public class LauncherFrameFlat2 extends JFrame {
 
     /** Куди веде кнопка "Вікі та FAQ" (за замовчуванням - з налаштувань лаунчера; FlatLauncherFrame2 підставляє вікі вибраної збірки). */
     protected String wikiUrl() {
-        return launcher.getConfig().getWikiUrl();
+        // 22.11.2026 (власник: «кнопка FAQ в лаунчері має вести на https://gummercraft.fun/launcher, а не на faq гк»):
+        // сторінка лаунчера мовою інтерфейсу (link.launcherPage); вікі збірки (StalDayZ) як і раніше підставляє FlatLauncherFrame
+        return com.skcraft.launcher.util.SharedLocale.tr("link.launcherPage");
     }
 
     protected JPanel createContainerPanel() {

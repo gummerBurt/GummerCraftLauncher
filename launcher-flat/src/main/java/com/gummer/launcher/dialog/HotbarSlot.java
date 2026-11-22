@@ -43,6 +43,18 @@ public class HotbarSlot extends JButton {
         setOpaque(false);
         setRolloverEnabled(true);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        // 22.11.2026 («Налаштування збірки» замість «Збірка»): довгий підпис у два рядки тим самим шрифтом, що в інших
+        // слотах (жирний 11), слот ширшає лише під довший рядок («Налаштування»), а не під весь підпис (так спершу
+        // «Запуск» у віконному режимі вилазив за край вікна)
+        if (caption != null) {
+            Font cf = getFont().deriveFont(Font.BOLD, 11f);
+            FontMetrics cfm = getFontMetrics(cf);
+            int need = 0;
+            // 22.11.2026 ~22:00 (власник: на його екрані знову «Налаштуван…»): рядок міряється найширшим з можливих
+            // малювань (масштаб Windows 100-200%, дробові метрики і без), бо Swing міряє вужче, ніж потім малює
+            for (String l : captionLines(cfm, Integer.MAX_VALUE / 2, width - 10)) need = Math.max(need, com.gummer.launcher.look.TextFit.widest(cf, l));
+            width = Math.max(width, need + 8); // по 4 px з боків, щоб текст не лягав на рамку слота
+        }
         Dimension d = new Dimension(width, HEIGHT);
         setPreferredSize(d);
         setMinimumSize(d);
@@ -82,6 +94,29 @@ public class HotbarSlot extends JButton {
         }
     }
 
+    /** Підпис в один рядок, якщо влазить в oneLine; інакше два рядки з розривом на пробілі, що дає найвужчий довший рядок. */
+    private String[] captionLines(FontMetrics fm, int max, int oneLine) {
+        String c = caption == null ? "" : caption;
+        if (fm.stringWidth(c) <= oneLine) return new String[]{c};
+        String[] best = null;
+        int bestW = Integer.MAX_VALUE;
+        for (int i = c.indexOf(' '); i > 0; i = c.indexOf(' ', i + 1)) {
+            String a = c.substring(0, i).trim(), b = c.substring(i + 1).trim();
+            int bw = Math.max(fm.stringWidth(a), fm.stringWidth(b));
+            if (bw < bestW) {
+                bestW = bw;
+                best = new String[]{a, b};
+            }
+        }
+        if (best == null) best = new String[]{c};
+        for (int k = 0; k < best.length; k++) {
+            String t = best[k];
+            while (fm.stringWidth(t) > max && t.length() > 3) t = t.substring(0, t.length() - 2) + "…";
+            best[k] = t;
+        }
+        return best;
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
@@ -104,23 +139,30 @@ public class HotbarSlot extends JButton {
 
             // іконка (білий силует 48x48, зменшений до 38) і підпис
             int dy = pressed ? 1 : 0;
-            if (icon != null) {
-                int s = 38;
-                // 16.11.2026: зменшена іконка готується один раз (у фізичних пікселях), а не на кожному кадрі
-                double ds = com.gummer.launcher.look.DevicePixels.scale(g2);
-                int px = com.gummer.launcher.look.DevicePixels.px(s, ds);
-                com.gummer.launcher.look.DevicePixels.draw(g2, com.gummer.launcher.look.DevicePixels.cached(icon, px, px, true), (w - s) / 2, 12 + dy, s, s);
-            }
             Font font = getFont().deriveFont(Font.BOLD, 11f);
             g2.setFont(font);
             FontMetrics fm = g2.getFontMetrics();
-            String text = caption;
-            while (fm.stringWidth(text) > w - 10 && text.length() > 3) text = text.substring(0, text.length() - 2) + "…";
-            int tx = (w - fm.stringWidth(text)) / 2, ty = h - 15 + dy;
-            g2.setColor(new Color(40, 40, 40));
-            g2.drawString(text, tx + 1, ty + 1);
-            g2.setColor(hover ? Color.WHITE : new Color(225, 225, 225));
-            g2.drawString(text, tx, ty);
+            // 22.11.2026: довгий підпис у два рядки (див. конструктор); для двох рядків іконка трохи менша і вище,
+            // щоб текст її не торкався
+            // «…» лише якщо рядок справді не влазить у слот з відступом 2 px з боків (слот уже міряний з запасом)
+            String[] lines = captionLines(fm, w - 4, w - 10);
+            boolean two = lines.length > 1;
+            if (icon != null) {
+                int s = two ? 32 : 38;
+                // 16.11.2026: зменшена іконка готується один раз (у фізичних пікселях), а не на кожному кадрі
+                double ds = com.gummer.launcher.look.DevicePixels.scale(g2);
+                int px = com.gummer.launcher.look.DevicePixels.px(s, ds);
+                com.gummer.launcher.look.DevicePixels.draw(g2, com.gummer.launcher.look.DevicePixels.cached(icon, px, px, true), (w - s) / 2, (two ? 8 : 12) + dy, s, s);
+            }
+            int lineH = fm.getAscent() + 1;
+            for (int i = 0; i < lines.length; i++) {
+                String text = lines[i];
+                int tx = (w - fm.stringWidth(text)) / 2, ty = h - 15 - (lines.length - 1 - i) * lineH + dy;
+                g2.setColor(new Color(40, 40, 40));
+                g2.drawString(text, tx + 1, ty + 1);
+                g2.setColor(hover ? Color.WHITE : new Color(225, 225, 225));
+                g2.drawString(text, tx, ty);
+            }
 
             // вибраний слот: біла рамка в 3 пікселі, як у хотбарі
             if (hover) {

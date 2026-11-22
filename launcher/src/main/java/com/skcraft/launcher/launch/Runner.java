@@ -717,6 +717,22 @@ public class Runner implements Callable<Process>, ProgressObservable {
      * @return the map of substitutions
      * @throws JsonProcessingException on error
      */
+    private String playerUuid;
+
+    /**
+     * 22.11.2026: UUID гравця для цього запуску. Офлайн-акаунт: за файлами гравця у світах збірки (OfflineUuid, тікет
+     * #97), один раз на запуск; інакше UUID сесії.
+     */
+    private String playerUuid() {
+        if (playerUuid == null) {
+            playerUuid = session instanceof com.skcraft.launcher.auth.OfflineSession
+                    && ((com.skcraft.launcher.auth.OfflineSession) session).isGeneratedUuid()
+                    ? com.gummer.launcher.util.OfflineUuid.forBuild(instance.getContentDir(), session.getName())
+                    : session.getUuid();
+        }
+        return playerUuid;
+    }
+
     private Map<String, String> getCommandSubstitutions() throws JsonProcessingException {
         Map<String, String> map = new HashMap<String, String>();
 
@@ -726,7 +742,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
         map.put("auth_access_token", session.getAccessToken());
         map.put("auth_session", session.getSessionToken());
         map.put("auth_player_name", session.getName());
-        map.put("auth_uuid", session.getUuid());
+        map.put("auth_uuid", playerUuid());
 
         map.put("profile_name", session.getName());
         map.put("user_type", session.getUserType().getId());

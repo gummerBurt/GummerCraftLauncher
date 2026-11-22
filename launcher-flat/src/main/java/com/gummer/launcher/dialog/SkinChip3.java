@@ -32,7 +32,24 @@ final class SkinChip3 extends JPanel {
         super(new MigLayout("insets 0 12 0 12, gap 8", "push[][]push", "[grow,center]"));
         setOpaque(false);
         JLabel icon = new JLabel(com.skcraft.launcher.swing.CrispIcon.of(Launcher.class, "default_skin.png", 20, 20));
-        JLabel text = new JLabel(tr("serverAccount.skinChip"));
+        // 22.11.2026: на знімку найменшого вікна «Змінити скін» обрізалось на останній літері всередині самої плашки.
+        // JLabel міряє текст без дробових метрик (Inter bold 13: 82 px), а малюється він ширшим (до ~90 px при сірому
+        // згладжуванні). Ширина напису тепер найбільша з трьох можливих вимірів, тож літери не обрізаються ні за якого
+        // згладжування і масштабу Windows
+        JLabel text = new JLabel(tr("serverAccount.skinChip")) {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension d = super.getPreferredSize();
+                String s = getText();
+                if (s == null || s.isEmpty()) return d;
+                Font f = getFont();
+                double w = d.width;
+                for (boolean frac : new boolean[]{true, false}) {
+                    w = Math.max(w, f.getStringBounds(s, new java.awt.font.FontRenderContext(null, true, frac)).getWidth());
+                }
+                return new Dimension((int) Math.ceil(w) + 2, d.height);
+            }
+        };
         text.setForeground(com.gummer.launcher.ui3.Ui.TEXT);
         text.setFont(com.gummer.launcher.ui3.Ui.font(Font.BOLD, 13f));
         add(icon, "w 20!, h 20!");

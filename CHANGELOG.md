@@ -1,8 +1,17 @@
 # Зміни GummerCraft Launcher
 
-Усі зміни лаунчера, нові вгорі. Короткий опис лаунчера і посилання на завантаження в [README](README.md), що він робить у мережі і на комп'ютері в [SECURITY.md](SECURITY.md).
+Усі зміни лаунчера, нові вгорі. Короткий опис лаунчера і посилання на завантаження в [README](README.uk.md), що він робить у мережі і на комп'ютері в [SECURITY.md](SECURITY.md).
 
 *English history is at the bottom: [English changelog](#english-changelog).*
+
+## 1.36.12
+
+- **Прогрес у світах збірок з інших лаунчерів.** Офлайн-акаунт тепер грає з тим самим ідентифікатором (UUID), що і SKlauncher, TLauncher, інші лаунчери та сервери (`OfflinePlayer:нік`). У збірці, імпортованій з іншого лаунчера, повертаються квести, дані модів і доступ до своїх приватів у світах. Світи, у які ти вже грав у нашому лаунчері, лаунчер розпізнає за файлами гравця і грає в них зі старим ідентифікатором. Акаунт Microsoft це не зачіпає.
+- **Моди Modrinth і файли гри качаються значно швидше.** Лаунчер більше не відкриває нове з'єднання на кожен з тисяч дрібних файлів, а використовує вже відкрите (keep-alive). Особливо помітно з антивірусом, що перевіряє HTTPS.
+- **Імпорт з інших лаунчерів відкривається одразу,** а збірки шукає у фоні, розміри дописує пізніше. Раніше на ПК з великими збірками вікно могло не відкритись зовсім, а лаунчер підвисав. Помилка в одному місці пошуку більше не зупиняє весь пошук.
+- **Мова гри.** На неукраїнській системі збірки GummerCraft при першому запуску відкриваються англійською, а ваніль більше не бере українську з інших збірок.
+- **Жодних обрізаних написів** з масштабом Windows 125-150% у всіх трьох виглядах. Кнопка «Збірка» тепер «Налаштування збірки» (у Склі у два рядки), «Оптимізована збірка» замість довгого підпису над вибором версії, назви збірок у Бібліотеці у два рядки.
+- **Кнопка FAQ** веде на сторінку лаунчера твоєю мовою.
 
 ## 1.36.11
 
@@ -238,6 +247,8 @@
 ---
 
 ## English changelog
+
+**1.36.12:** an offline account now plays with the standard offline UUID (`OfflinePlayer:name`, the same as SKlauncher, TLauncher, other launchers and servers), so in builds imported from another launcher quests, mod data and access to your own claims come back; worlds already played in our launcher are recognised by their player files and keep the old ID; Microsoft accounts are not affected; Modrinth mods and game files download much faster, because connections are reused (keep-alive) instead of a new one for each of thousands of small files, most noticeable with an antivirus that inspects HTTPS; import from other launchers opens at once and looks for builds in the background, and an error in one place no longer stops the whole search; on a non-Ukrainian system GummerCraft packs open in English on the first launch, and vanilla no longer picks up Ukrainian from other builds; no more cut-off labels with Windows scaling at 125-150% in all three looks ("Build" is now "Build settings", "Optimized build" above the version choice, two-line build names in Library); the FAQ button opens the launcher page in your language.
 
 **1.36.11:** memory and Java for a build right in the Build window (a new card at the top of General: own memory, Java, JVM arguments, and how much memory the game gets and why); the memory you chose is now exact and no longer raised by the mod count advice, while unset memory gets a generous recommendation of at most half the PC memory, and a choice that is surely too little for the build (like 1 GB for hundreds of mods) is raised to a minimum with a note; the memory slider moves in 0.5 GB steps; on PCs with two graphics cards the game now starts on the discrete one by default, checked before every launch (can be changed in the Build window, Graphics card); fewer micro-stutters on Minecraft 1.18+ with a tuned G1 garbage collector unless you set your own in JVM arguments; sections of "Installed" collapse with a click on their caption, and the state is kept.
 

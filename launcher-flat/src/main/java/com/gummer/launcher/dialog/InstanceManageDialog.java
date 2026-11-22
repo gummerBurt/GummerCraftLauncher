@@ -2030,7 +2030,7 @@ public class InstanceManageDialog extends JDialog {
         public Dimension getPreferredSize() {
             FontMetrics fm = getFontMetrics(getFont().deriveFont(Font.BOLD));
             int w = 0;
-            for (String l : labels) w = Math.max(w, fm.stringWidth(l) + 40);
+            for (String l : labels) w = Math.max(w, com.gummer.launcher.look.TextFit.widest(fm.getFont(), l) + 40);
             return new Dimension(w * labels.length + 8, 36);
         }
 

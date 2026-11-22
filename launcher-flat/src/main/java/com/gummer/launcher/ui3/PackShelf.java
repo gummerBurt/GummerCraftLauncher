@@ -257,6 +257,13 @@ public final class PackShelf extends JComponent implements Scrollable {
         return w;
     }
 
+        /** Рядки назви плитки (ті самі, що малюються нижче): ширина як у paintTile, від іконки до правого відступу. */
+        private String[] titleLines(Tile t, Rectangle r) {
+            FontMetrics fm = getFontMetrics(Ui.font(Font.BOLD, 13f));
+            int tx = r.x + Ui.S2 + 2 + 20 + Ui.S2;
+            return Ui.fit2(t.title, fm, r.x + r.width - tx - Ui.S2);
+        }
+
         private void paintTile(Graphics2D g, Tile t, Rectangle r0, boolean sel, boolean hov) {
         Rectangle r = new Rectangle(r0);
         if (hov && !sel) r.y -= 2;
@@ -278,9 +285,10 @@ public final class PackShelf extends JComponent implements Scrollable {
                 c.setColor(new Color(0, 0, 0, hov ? 30 : 110));
                 c.fill(clip);
             }
-            // низ плитки під назву
-            c.setPaint(new GradientPaint(0, r.y + r.height - 46, new Color(0, 0, 0, 0), 0, r.y + r.height, new Color(0, 0, 0, 215)));
-            c.fillRect(r.x, r.y + r.height - 46, r.width, 46);
+            // низ плитки під назву (для назви у два рядки вище, щоб верхній рядок теж був на темному)
+            int shade = titleLines(t, r).length > 1 ? 60 : 46;
+            c.setPaint(new GradientPaint(0, r.y + r.height - shade, new Color(0, 0, 0, 0), 0, r.y + r.height, new Color(0, 0, 0, 215)));
+            c.fillRect(r.x, r.y + r.height - shade, r.width, shade);
         } finally {
             c.dispose();
         }
@@ -301,7 +309,13 @@ public final class PackShelf extends JComponent implements Scrollable {
         FontMetrics fm = g.getFontMetrics();
         int tx = ix + 20 + Ui.S2;
         g.setColor(sel || hov ? Color.WHITE : Ui.alpha(Color.WHITE, 220));
-        g.drawString(Ui.fit(t.title, fm, r.x + r.width - tx - Ui.S2), tx, iy + 10 + fm.getAscent() / 2 - 1);
+        // 22.11.2026: назва, що не влазить («StalDayZ [АЛЬФА]» на вузькій плитці), у два рядки, а не з «…»
+        String[] lines = Ui.fit2(t.title, fm, r.x + r.width - tx - Ui.S2);
+        int lineH = fm.getAscent() + 2;
+        int base = iy + 10 + fm.getAscent() / 2 - 1 + (lines.length - 1) * lineH / 2;
+        for (int i = 0; i < lines.length; i++) {
+            g.drawString(lines[i], tx, base - (lines.length - 1 - i) * lineH);
+        }
 
         // праворуч угорі: онлайн, оновлення, не встановлено
         int bx = r.x + r.width - Ui.S2;

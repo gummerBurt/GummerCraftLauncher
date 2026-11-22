@@ -257,6 +257,16 @@ public class LauncherFrameFlat3 extends JFrame {
      * (FlatLauncherFrame3, вибір версії, онлайн, меню) працює як раніше.
      */
     /** 20.11.2026: стиснути кнопки верхнього ряду до значків, доки ряд не влізе в ширину вікна (див. initComponents). */
+    /** Найбільший правий край плашок верхньої панелі (без рядка прапорців мов, він вирівняний праворуч окремо). */
+    private static int rightEdge(JPanel bar) {
+        int r = 0;
+        for (Component c : bar.getComponents()) {
+            if (!c.isVisible() || c instanceof com.gummer.launcher.look.LangFlags) continue;
+            r = Math.max(r, c.getX() + c.getWidth());
+        }
+        return r;
+    }
+
     private void fitTopBar(JPanel bar) {
         if (bar.getWidth() <= 0) return;
         java.util.List<Btn> order = new java.util.ArrayList<>();
@@ -264,9 +274,13 @@ public class LauncherFrameFlat3 extends JFrame {
             if (c instanceof Btn) order.add((Btn) c);
         }
         for (Btn b : order) b.setCompact(false);
+        // 22.11.2026: preferredLayoutSize казав «влазить», а «Змінити скін» українською все одно виходила за правий
+        // край на мінімальній ширині (проба: знімок вікна 1194 px). Тепер міряємо справжню розкладку: правий край
+        // найправішої плашки першого рядка має бути в межах панелі мінус правий відступ (24)
         for (Btn b : order) {
             bar.invalidate();
-            if (bar.getLayout().preferredLayoutSize(bar).width <= bar.getWidth()) break;
+            bar.doLayout();
+            if (rightEdge(bar) <= bar.getWidth() - 24) break;
             b.setCompact(true);
         }
         bar.revalidate();
@@ -1612,7 +1626,9 @@ public class LauncherFrameFlat3 extends JFrame {
 
     /** Куди веде кнопка "Вікі та FAQ" (за замовчуванням - з налаштувань лаунчера; FlatLauncherFrame3 підставляє вікі вибраної збірки). */
     protected String wikiUrl() {
-        return launcher.getConfig().getWikiUrl();
+        // 22.11.2026 (власник: «кнопка FAQ в лаунчері має вести на https://gummercraft.fun/launcher, а не на faq гк»):
+        // сторінка лаунчера мовою інтерфейсу (link.launcherPage); вікі збірки (StalDayZ) як і раніше підставляє FlatLauncherFrame
+        return com.skcraft.launcher.util.SharedLocale.tr("link.launcherPage");
     }
 
     protected JPanel createContainerPanel() {
