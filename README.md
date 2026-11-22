@@ -172,6 +172,12 @@ python tools/verify-cdn.py
 
 GummerCraft Launcher is a free, Ukrainian open-source Minecraft launcher (LGPL-3.0) by the GummerCraft project. Download and official page: [gummercraft.fun/launcher](https://gummercraft.fun/launcher). It installs any Minecraft release, snapshot or historic version (down to rd-132211), Fabric, Quilt, Forge and NeoForge with the right Java picked automatically, Modrinth modpacks, mods, resource packs and shaders (with dependencies, updates and one-click rollback), imports builds from Prism, ATLauncher, CurseForge, TLauncher and other launchers, and runs the GummerCraft and StalDayZ server packs. A built-in helper checks mods before launch (wrong loader or game version, duplicates, incompatible pairs, missing dependencies) and explains crashes in plain words with one-click fixes. Microsoft or offline accounts, three UI looks, Ukrainian and English. Windows 7-11 (single exe with bundled Java), Linux and Steam Deck (one-click installer that also adds the launcher to the Steam library), macOS (jar, needs Java 8+).
 
+English website: [gummercraft.fun/en/launcher](https://gummercraft.fun/en/launcher) (also [Steam Deck](https://gummercraft.fun/en/steamdeck), [Linux](https://gummercraft.fun/en/linux), [Mac](https://gummercraft.fun/en/mac)).
+
+| Main window (Liquid Glass) | Modrinth modpacks | Build window: FPS presets |
+|---|---|---|
+| ![GummerCraft Launcher main window in English](docs/images/launcher-en-main.png) | ![Modrinth modpacks in GummerCraft Launcher](docs/images/launcher-en-modrinth.png) | ![FPS presets in the Build window](docs/images/launcher-en-fps-presets.png) |
+
 It is a fork of SKCraft Launcher and is licensed under the **GNU LGPL v3** (see [LICENSE.txt](LICENSE.txt); third-party contributions are also covered by the BSD terms in [licenses/BSD-contributors.txt](licenses/BSD-contributors.txt)); upstream history lives in the [SKCraft repository](https://github.com/SKCraft/Launcher).
 
 **Latest, 1.36.10:** import from other launchers copies the whole build: SKlauncher, TLauncher and official launcher modpacks with their own game folder are copied entirely (modpack menu design, quests, mod data in mods' own folders such as CustomNPCs); before only mods, configs, worlds, resource packs and shaders were copied. From the shared `.minecraft` everything is taken except game and launcher files.
