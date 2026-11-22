@@ -175,7 +175,7 @@ public class FlatBackgroundPanel extends JPanel {
         // 18.11.2026: зі спільного кешу трьох виглядів (раніше свій примірник у кожному вікні, тож кеш масштабованих
         // фонів після перемикання вигляду не знаходив готового)
         defaultBackground = cached("ui/frame/bg.jpg");
-        defaultLogo = cached("ui/frame/logo.png");
+        defaultLogo = cached(com.gummer.launcher.look.FrameImages.logoPath()); // 22.11.2026: англійською своє лого
         current = new Scene("default", defaultBackground, false, defaultLogo, new Properties());
 
         fadeTimer = new Timer(16, e -> {

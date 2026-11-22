@@ -53,6 +53,30 @@ public class Btn extends JButton {
         return this;
     }
 
+    /**
+     * 22.11.2026: підпис з кількох слів у два рядки (розрив на першому пробілі), щоб довга назва («Налаштування
+     * збірки») не забирала ширину в сусідів. Кнопка має бути заввишки під два рядки (44).
+     */
+    public Btn twoLines() {
+        twoLines = true;
+        revalidate();
+        return this;
+    }
+
+    private boolean twoLines;
+
+    private String[] lines() {
+        String t = getText();
+        int sp = twoLines && t != null ? t.indexOf(' ') : -1;
+        return sp > 0 ? new String[]{t.substring(0, sp), t.substring(sp + 1)} : new String[]{t};
+    }
+
+    private int textWidth(Font f) {
+        int tw = 0;
+        for (String l : lines()) tw = Math.max(tw, com.gummer.launcher.look.TextFit.widest(f, l));
+        return tw;
+    }
+
     public Btn height(int h) {
         height = h;
         return this;
@@ -91,7 +115,7 @@ public class Btn extends JButton {
         if (isPreferredSizeSet()) return super.getPreferredSize();
         if (iconOnly()) return new Dimension(height, height);
         FontMetrics fm = getFontMetrics(getFont());
-        int w = Ui.S3 + (glyph != null ? 18 + Ui.S2 : 0) + com.gummer.launcher.look.TextFit.widest(fm.getFont(), getText()) + Ui.S3 + badgeSpace; // 22.11.2026: з запасом на масштаб Windows
+        int w = Ui.S3 + (glyph != null ? 18 + Ui.S2 : 0) + textWidth(fm.getFont()) + Ui.S3 + badgeSpace; // 22.11.2026: з запасом на масштаб Windows
         return new Dimension(w, height);
     }
 
@@ -150,17 +174,22 @@ public class Btn extends JButton {
                 if (glyph != null) glyph.paint(g2, (w - 18) / 2, (h - 18) / 2 + dy, 18, fg);
             } else {
                 int x = Ui.S3;
-                int contentW = (glyph != null ? 18 + Ui.S2 : 0) + fm.stringWidth(getText());
+                String[] ls = lines();
+                int lw = 0;
+                for (String l : ls) lw = Math.max(lw, fm.stringWidth(l));
+                int contentW = (glyph != null ? 18 + Ui.S2 : 0) + lw;
                 if (getHorizontalAlignment() == CENTER || w > getPreferredSize().width + Ui.S2) x = (w - badgeSpace - contentW) / 2;
                 if (glyph != null) {
                     glyph.paint(g2, x, (h - 18) / 2 + dy, 18, fg);
                     x += 18 + Ui.S2;
                 }
                 g2.setFont(getFont());
-                int ty = (h - fm.getHeight()) / 2 + fm.getAscent() + dy;
-                String text = Ui.fit(getText(), fm, w - x - Ui.S2 - badgeSpace);
+                int lineH = fm.getHeight() - 2;
+                int ty = (h - lineH * ls.length) / 2 + fm.getAscent() - 1 + dy;
                 g2.setColor(fg);
-                g2.drawString(text, x, ty);
+                for (int i = 0; i < ls.length; i++) {
+                    g2.drawString(Ui.fit(ls[i], fm, w - x - Ui.S2 - badgeSpace), x, ty + i * lineH);
+                }
             }
             // нові відповіді підтримки: червоний значок з числом у правому верхньому куті
             com.gummer.launcher.dialog.SupportUnread.paint(g2, badge, w - 2, 2, Ui.BG);

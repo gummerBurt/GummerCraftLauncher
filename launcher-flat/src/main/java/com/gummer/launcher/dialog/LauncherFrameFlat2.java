@@ -90,7 +90,7 @@ public class LauncherFrameFlat2 extends JFrame {
     // init bottom buttons
     private final JButton optionsButton;
     /** 17.11.2026: «Збірка» біля «Грати»: вікно «Керування збіркою». */
-    private final Btn manageButton = new Btn(tr("ui2.manage"), Glyph.BOX, Btn.Style.TONAL).height(44);
+    private final Btn manageButton = new Btn(tr("ui2.manage"), Glyph.BOX, Btn.Style.TONAL).height(44).twoLines(); // 22.11.2026: «Налаштування збірки» в один рядок стискала назву збірки
     private final JButton wikiButton;
     /** 1.32: звернення в підтримку (null, якщо в launcher.properties немає supportInboxId). */
     private final com.gummer.launcher.support.SupportService supportService;
@@ -113,7 +113,58 @@ public class LauncherFrameFlat2 extends JFrame {
     /** Онлайн серверів (адреса -> стан), оновлюється раз на хвилину. */
     private final java.util.Map<String, com.gummer.launcher.server.ServerPing.Status> online = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<String> offlineServers = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
-    private final JLabel onlineLabel = new JLabel(" ");
+    private final ShortLabel onlineLabel = new ShortLabel();
+
+    /**
+     * 22.11.2026: рядок онлайну під назвою збірки. Після «Build settings» (ширша за «Build») у віконному режимі
+     * англійською він обрізався до «2 of 200 players on...». Якщо повний текст не влазить у ширину, яку дала
+     * розкладка, показується короткий ({@code launcher.onlineStatusShort}); бажана ширина завжди за повним, тож
+     * розкладка не стрибає між двома варіантами.
+     */
+    static final class ShortLabel extends JLabel {
+        private String full = " ", alt;
+
+        ShortLabel() {
+            super(" ");
+        }
+
+        void setTexts(String full, String alt) {
+            this.full = full;
+            this.alt = alt;
+            pick();
+        }
+
+        @Override
+        public void setText(String text) {
+            this.full = text;
+            this.alt = null;
+            super.setText(text);
+        }
+
+        @Override
+        public void setBounds(int x, int y, int w, int h) {
+            super.setBounds(x, y, w, h);
+            pick();
+        }
+
+        private void pick() {
+            String t = full;
+            if (alt != null && getWidth() > 0 && getFont() != null) {
+                java.awt.Insets in = getInsets();
+                if (com.gummer.launcher.look.TextFit.widest(getFont(), full) > getWidth() - in.left - in.right) t = alt;
+            }
+            if (!t.equals(super.getText())) super.setText(t);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            String shown = super.getText();
+            if (shown == null || shown.equals(full)) return super.getPreferredSize();
+            Dimension d = super.getPreferredSize();
+            int dw = com.gummer.launcher.look.TextFit.widest(getFont(), full) - com.gummer.launcher.look.TextFit.widest(getFont(), shown);
+            return new Dimension(d.width + Math.max(0, dw), d.height);
+        }
+    }
     private final JCheckBox quickJoinBox = new JCheckBox(tr("launcher.quickJoin"));
     //private final JButton refreshButton;  // disable for now refreshBurron
     /** 1.33: плашка необов'язкового акаунта сервера вгорі справа; null, якщо serverAccount=false у launcher.properties. */
@@ -1086,7 +1137,7 @@ public class LauncherFrameFlat2 extends JFrame {
         if (server) {
             com.gummer.launcher.server.ServerPing.Status st = online.get(address);
             if (st != null) {
-                onlineLabel.setText("● " + tr("launcher.onlineStatus", st.online, st.max));
+                onlineLabel.setTexts("● " + tr("launcher.onlineStatus", st.online, st.max), "● " + tr("launcher.onlineStatusShort", st.online, st.max));
                 onlineLabel.setForeground(Ui.ONLINE);
                 onlineLabel.setVisible(true);
             } else if (offlineServers.contains(address)) {

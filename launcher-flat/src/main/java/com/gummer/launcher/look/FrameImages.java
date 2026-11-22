@@ -48,6 +48,15 @@ public final class FrameImages {
         return o != null ? o.orElse(null) : null;
     }
 
+    /**
+     * 22.11.2026 (власник: «перекласти "З України, з любов'ю!" на "From Ukraine with love!"»): стандартне лого за мовою
+     * лаунчера. Шлях у файлі мови (ключ {@code frame.logo}, є лише в англійському), без ключа українське {@code logo.png}.
+     * Мова міняється перевідкриттям вікна, тож панелі беруть шлях при створенні.
+     */
+    public static String logoPath() {
+        return com.skcraft.launcher.util.SharedLocale.trOr("frame.logo", "ui/frame/logo.png");
+    }
+
     /** Картинка з ресурсів лаунчера (шлях відносно Launcher.class) або null, якщо її немає чи вона бита. */
     public static Image get(String path) {
         return CACHE.computeIfAbsent(path, FrameImages::read).orElse(null);
@@ -67,7 +76,7 @@ public final class FrameImages {
         Thread t = new Thread(() -> {
             // 18.11.2026: і стандартні фон та логотип (GummerCraft, свої збірки): раніше кожен вигляд читав їх сам
             get("ui/frame/bg.jpg");
-            get("ui/frame/logo.png");
+            get(logoPath());
             for (String key : KEYS) {
                 get("ui/frame/bg_" + key + ".jpg");
                 get("ui/frame/logo_" + key + ".png");

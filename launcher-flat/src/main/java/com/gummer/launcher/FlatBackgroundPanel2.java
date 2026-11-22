@@ -96,7 +96,7 @@ public class FlatBackgroundPanel2 extends JPanel {
 
     public FlatBackgroundPanel2() {
         defaultBackground = cached("ui/frame/bg.jpg"); // 18.11.2026: спільний кеш трьох виглядів
-        defaultLogo = cached("ui/frame/logo.png");
+        defaultLogo = cached(com.gummer.launcher.look.FrameImages.logoPath()); // 22.11.2026: англійською своє лого
         current = new Scene(null, defaultBackground, defaultLogo);
         // 18.11.2026: фони всіх збірок під розмір вікна наперед (PackPrewarm)
         com.gummer.launcher.look.PackPrewarm.hook(this, this::prewarmBackgrounds);

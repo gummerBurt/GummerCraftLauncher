@@ -4,6 +4,11 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.13
+
+- **Англійське лого.** В англійській версії лаунчера на збірках GummerCraft і власних збірках напис під логотипом тепер «From Ukraine with love!», в українській як і раніше «З України, з любов'ю!». Змінюється разом з мовою.
+- **Класика: нічого не обрізається біля назви збірки.** У віконному режимі 1.36.12 обрізала назву збірки, рядок онлайну і «Одразу на сервер». Тепер кнопка «Налаштування збірки» у два рядки, а рядок онлайну, якщо не влазить, показується коротко («2/200 онлайн»).
+
 ## 1.36.12
 
 - **Прогрес у світах збірок з інших лаунчерів.** Офлайн-акаунт тепер грає з тим самим ідентифікатором (UUID), що і SKlauncher, TLauncher, інші лаунчери та сервери (`OfflinePlayer:нік`). У збірці, імпортованій з іншого лаунчера, повертаються квести, дані модів і доступ до своїх приватів у світах. Світи, у які ти вже грав у нашому лаунчері, лаунчер розпізнає за файлами гравця і грає в них зі старим ідентифікатором. Акаунт Microsoft це не зачіпає.
@@ -247,6 +252,8 @@
 ---
 
 ## English changelog
+
+**1.36.13:** the English launcher shows its own logo caption "From Ukraine with love!" on GummerCraft packs and your own builds (the Ukrainian one keeps «З України, з любов'ю!»), switching together with the language; Classic look: in a window the build name, the online line and "Join the server" were cut off in 1.36.12, now "Build settings" takes two lines and the online line shortens to "2/200 online" when it does not fit.
 
 **1.36.12:** an offline account now plays with the standard offline UUID (`OfflinePlayer:name`, the same as SKlauncher, TLauncher, other launchers and servers), so in builds imported from another launcher quests, mod data and access to your own claims come back; worlds already played in our launcher are recognised by their player files and keep the old ID; Microsoft accounts are not affected; Modrinth mods and game files download much faster, because connections are reused (keep-alive) instead of a new one for each of thousands of small files, most noticeable with an antivirus that inspects HTTPS; import from other launchers opens at once and looks for builds in the background, and an error in one place no longer stops the whole search; on a non-Ukrainian system GummerCraft packs open in English on the first launch, and vanilla no longer picks up Ukrainian from other builds; no more cut-off labels with Windows scaling at 125-150% in all three looks ("Build" is now "Build settings", "Optimized build" above the version choice, two-line build names in Library); the FAQ button opens the launcher page in your language.
 
