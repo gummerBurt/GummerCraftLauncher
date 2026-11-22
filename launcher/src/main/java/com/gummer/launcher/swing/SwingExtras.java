@@ -154,6 +154,8 @@ public final class SwingExtras {
         // Configure slider appearance.
         memorySlider.setPaintTicks(true);
         memorySlider.setPaintLabels(true);
+        // 22.11.2026 (тікет #97: «вибір пам'яті не лише 4/6/8»): прилипає до кожних 0,5 ГБ, підписи як були
+        memorySlider.setMinorTickSpacing(512);
         memorySlider.setSnapToTicks(true);
 
         // Create a label table that displays the tick marks in GB.

@@ -34,6 +34,8 @@ public final class PackList {
         public String header;
         /** Підказка під мишкою (17.11.2026: що є оновлення), або null. */
         public String tooltip;
+        /** 21.11.2026: підпис розділу згортається кліком (стрілка поруч), розділ згорнутий, рядок лише підпис згорнутого розділу. */
+        public boolean collapsible, collapsed, stub;
     }
 
     private PackList() {
@@ -95,7 +97,7 @@ public final class PackList {
     public static void updateHeights(JTable table, IntFunction<Row> rows) {
         for (int r = 0; r < table.getRowCount(); r++) {
             Row row = rows.apply(r);
-            int h = ROW_H + (row != null && row.header != null ? HEADER_H : 0);
+            int h = row != null && row.stub ? HEADER_H : ROW_H + (row != null && row.header != null ? HEADER_H : 0);
             if (table.getRowHeight(r) != h) table.setRowHeight(r, h);
         }
     }
@@ -137,8 +139,12 @@ public final class PackList {
                         g2.drawString(String.valueOf(c), x, y);
                         x += fm.charWidth(c) + 1;
                     }
+                    if (row.collapsible) {
+                        com.gummer.launcher.dialog.CardInstanceTable.caret(g2, x + Ui.S3, y, fm.getAscent() - 3, row.collapsed);
+                    }
                     top = HEADER_H;
                 }
+                if (row.stub) return; // 21.11.2026: згорнутий розділ, лише підпис
                 int rx = Ui.S3, rw = w - Ui.S3 * 2, rh = ROW_H - Ui.S1, ry = top + Ui.S1 / 2;
                 if (selected || hovered) {
                     g2.setColor(selected ? Ui.SURFACE_3 : Ui.SURFACE_2);

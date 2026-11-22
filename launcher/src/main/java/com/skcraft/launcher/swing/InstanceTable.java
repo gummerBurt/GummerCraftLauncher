@@ -27,17 +27,73 @@ public class InstanceTable extends DefaultTable {
         setSelectionModel(new javax.swing.DefaultListSelectionModel() {
             @Override
             public void setSelectionInterval(int index0, int index1) {
-                if (importRowAt(index1)) return;
+                if (importRowAt(index1) || stubRowAt(index1)) return;
                 super.setSelectionInterval(index0, index1);
             }
 
             @Override
             public void addSelectionInterval(int index0, int index1) {
-                if (importRowAt(index1)) return;
+                if (importRowAt(index1) || stubRowAt(index1)) return;
                 super.addSelectionInterval(index0, index1);
             }
         });
         setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION); // як у DefaultTable, для нової моделі
+    }
+
+    /**
+     * 21.11.2026 (власник: «згортати та розгортати категорії кліканням на назву категорії»): висота підпису розділу над
+     * рядком у пікселях (0, якщо підпису немає). Задає вигляд, що вміє згортати розділи «Встановлених»; null: згортання немає.
+     * Клік лівою по підпису згортає чи розгортає розділ і рядок не вибирає; згорнутий розділ це рядок-заглушка лише з підписом.
+     */
+    public java.util.function.IntUnaryOperator captionHeight;
+
+    @Override
+    protected void processMouseEvent(java.awt.event.MouseEvent e) {
+        if (captionHeight != null && getModel() instanceof InstanceTableModel) {
+            int viewRow = rowAtPoint(e.getPoint());
+            if (viewRow >= 0) {
+                InstanceTableModel m = (InstanceTableModel) getModel();
+                final int row = convertRowIndexToModel(viewRow);
+                if (m.isToggleCaptionAt(row)) {
+                    java.awt.Rectangle r = getCellRect(viewRow, 0, true);
+                    if (m.isCollapsedStubAt(row) || e.getY() - r.y < captionHeight.applyAsInt(viewRow)) {
+                        if (e.getID() == java.awt.event.MouseEvent.MOUSE_PRESSED && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                            javax.swing.SwingUtilities.invokeLater(() -> m.toggleSectionAt(row));
+                        }
+                        e.consume();
+                        return;
+                    }
+                }
+            }
+        }
+        super.processMouseEvent(e);
+    }
+
+    /** 21.11.2026: рядок-заглушка згорнутого розділу не вибирається; стрілки його перестрибують. */
+    private boolean stubRowAt(int viewRow) {
+        if (viewRow < 0 || !(getModel() instanceof InstanceTableModel)) return false;
+        InstanceTableModel m = (InstanceTableModel) getModel();
+        int row;
+        try {
+            row = convertRowIndexToModel(viewRow);
+        } catch (IndexOutOfBoundsException e) {
+            return false;
+        }
+        if (!m.isCollapsedStubAt(row)) return false;
+        if (java.awt.EventQueue.getCurrentEvent() instanceof java.awt.event.KeyEvent) {
+            int sel = getSelectedRow();
+            int dir = sel >= 0 && sel > viewRow ? -1 : 1;
+            int next = viewRow + dir;
+            while (next >= 0 && next < getRowCount() && m.isCollapsedStubAt(convertRowIndexToModel(next))) next += dir;
+            if (next >= 0 && next < getRowCount() && next != sel) {
+                final int n = next;
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    setRowSelectionInterval(n, n);
+                    scrollRectToVisible(getCellRect(n, 0, true));
+                });
+            }
+        }
+        return true;
     }
 
     /** 19.11.2026: що робити, коли гравець натиснув рядок «Імпорт збірки» (вікно імпорту). */

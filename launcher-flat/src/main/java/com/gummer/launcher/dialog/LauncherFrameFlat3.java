@@ -611,10 +611,12 @@ public class LauncherFrameFlat3 extends JFrame {
         String remembered = com.gummer.launcher.manage.ListMemory.recall(launcher.getConfig(), instancesModel.isInstalledOnly());
         if (instancesModel.chooseByName(remembered)) instancesModel.refreshChoice();
         int row = instancesModel.rowOf(remembered);
-        if (row < 0) row = Math.max(0, instancesModel.rowOf(launcher.getConfig().getLastInstance()));
+        if (row < 0) row = instancesModel.rowOf(launcher.getConfig().getLastInstance());
+        if (row < 0) row = instancesModel.firstSelectableRow(); // 21.11.2026: не заглушка згорнутого розділу
         restoringSelection = true;
         try {
-            instancesTable.setRowSelectionInterval(row, row);
+            if (row >= 0) instancesTable.setRowSelectionInterval(row, row);
+            else instancesTable.clearSelection(); // 22.11.2026: згорнуто все, вибирати нічого
         } finally {
             restoringSelection = false;
         }

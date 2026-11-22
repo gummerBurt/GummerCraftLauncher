@@ -188,6 +188,9 @@ public class LauncherFrameFlat extends JFrame {
         // встановленої збірки, тоді selectRememberedInstance перемкне на «Додати інсталяцію»
         launcher.getConfig().setInstalledOnly(true);
         instancesModel.setInstalledOnly(true);
+        // 21.11.2026: розділи «Встановлених» згортаються кліком по підпису, стан у налаштуваннях лаунчера
+        instancesModel.setCollapsibleSections(launcher.getConfig().getCollapsedSections(),
+                () -> com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig()));
         rootFrame = this;
 
         // Initialize lang from this.launcher config
@@ -610,10 +613,16 @@ public class LauncherFrameFlat extends JFrame {
         String remembered = com.gummer.launcher.manage.ListMemory.recall(launcher.getConfig(), instancesModel.isInstalledOnly());
         if (instancesModel.chooseByName(remembered)) instancesModel.refreshChoice();
         int row = instancesModel.rowOf(remembered);
-        if (row < 0) row = Math.max(0, instancesModel.rowOf(launcher.getConfig().getLastInstance()));
+        if (row < 0) row = instancesModel.rowOf(launcher.getConfig().getLastInstance());
+        if (row < 0) row = instancesModel.firstSelectableRow(); // 21.11.2026: не заглушка згорнутого розділу
         restoringSelection = true;
         try {
-            instancesTable.setRowSelectionInterval(row, row);
+            if (row >= 0) instancesTable.setRowSelectionInterval(row, row);
+            else { // 22.11.2026: згорнуто все, вибирати нічого, «Запуск» і «Збірка» неактивні
+                instancesTable.clearSelection();
+                launchButton.setEnabled(false);
+                manageButton.setEnabled(false);
+            }
         } finally {
             restoringSelection = false;
         }

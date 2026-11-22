@@ -14,4 +14,6 @@ public class InstanceSettings {
 	/** 19.11.2026: галочка «Запускати цю збірку на дискретній відеокарті» (картка «Відеокарта»), див. Gpu.
 	 *  null і false: вимкнено (так за замовчуванням). */
 	private Boolean highPerformanceGpu;
+	/** 22.11.2026: вибір відеокарти «auto», «integrated» або «discrete»; null за замовчуванням (дискретна, див. Gpu.choice). */
+	private String gpu;
 }

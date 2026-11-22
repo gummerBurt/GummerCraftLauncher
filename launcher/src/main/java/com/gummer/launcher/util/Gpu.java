@@ -56,8 +56,16 @@ import java.util.regex.Pattern;
  * На ПК з однією відеокартою картки не видно взагалі. Ручний спосіб (кнопки «Відкрити параметри графіки» і
  * «Скопіювати шлях до Java») лишився в картці на Windows.
  *
- * <p>Вибір зберігається в {@code InstanceSettings.highPerformanceGpu}: null «Як вирішить система», false
- * інтегрована, true дискретна.
+ * <p>Вибір зберігається в {@code InstanceSettings.gpu}: «auto» «Як вирішить система», «integrated», «discrete».
+ * Старі збірки мають {@code highPerformanceGpu} (true дискретна, false інтегрована), воно читається, якщо {@code gpu}
+ * немає.
+ *
+ * <p><b>За замовчуванням дискретна</b> (22.11.2026, власник після тікета #97: Project Architect 2 у гравця йшов на Intel UHD
+ * поруч з NVIDIA MX130, у SKlauncher на NVIDIA; «якщо є інтегрована та дискретна відеокарта - лаунчер перед запуском ...
+ * ЩОРАЗУ перевіряти ... та запускати завжди з дискретної, якщо гравець в налаштуваннях САМ не вкаже інакше»). Тому
+ * перед кожним запуском гри список відеокарт читається заново ({@link #refreshAsync()} на початку запуску, поки йде
+ * вхід і перевірка файлів), а не раз за запуск лаунчера. «Сам вказав» це вибір у картці або свій вибір для цієї Java на
+ * сторінці Windows «Параметри графіки»: його лаунчер, як і раніше, не чіпає.
  */
 public final class Gpu {
 
@@ -85,14 +93,44 @@ public final class Gpu {
     private static final Pattern LSPCI = Pattern.compile("(?i)(VGA compatible controller|3D controller|Display controller)[^:]*:\\s*(.+)");
 
     private static volatile List<String> names;
+    /** Свіже читання списку відеокарт для поточного запуску гри ({@link #refreshAsync()}), або null. */
+    private static volatile java.util.concurrent.Future<List<String>> fresh;
 
     private Gpu() {
     }
 
-    /** Відеокарти ПК (кешовано на весь запуск лаунчера). Не з потоку інтерфейсу: перший раз ~1 с. */
+    /**
+     * 22.11.2026: прочитати список відеокарт заново у фоні (на початку кожного запуску гри: гравець міг поставити чи зняти
+     * відеокарту, перемкнути режим ноутбука). {@link #adapters()} після цього чекає саме на це читання.
+     */
+    public static void refreshAsync() {
+        if (!isWindows() && !isLinux()) return;
+        java.util.concurrent.FutureTask<List<String>> task = new java.util.concurrent.FutureTask<List<String>>(Gpu::detect);
+        fresh = task;
+        Thread t = new Thread(task, "GPU detect");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Відеокарти ПК: свіже читання цього запуску гри, якщо було, інакше кеш запуску лаунчера. Не з потоку інтерфейсу: ~0,5-1 с. */
     public static List<String> adapters() {
+        java.util.concurrent.Future<List<String>> f = fresh;
+        if (f != null) {
+            try {
+                List<String> got = f.get(15, TimeUnit.SECONDS);
+                fresh = null;
+                return names = got;
+            } catch (Exception e) {
+                log.info("GPU list refresh failed: " + e);
+                fresh = null;
+            }
+        }
         List<String> n = names;
         if (n != null) return n;
+        return names = detect();
+    }
+
+    private static List<String> detect() {
         List<String> out = new ArrayList<String>();
         try {
             if (isWindows()) {
@@ -110,7 +148,7 @@ public final class Gpu {
             log.info("GPU list unavailable: " + e);
         }
         log.info("GPUs: " + out);
-        return names = Collections.unmodifiableList(out);
+        return Collections.unmodifiableList(out);
     }
 
     /** Окрема відеокарта, якщо поруч є і вбудована (дві відеокарти), інакше null. */
@@ -151,18 +189,23 @@ public final class Gpu {
         return isWindows() || isLinux();
     }
 
-    /** Вибір для збірки: {@link #AUTO}, {@link #INTEGRATED_GPU} або {@link #DISCRETE_GPU}. */
+    /** Вибір для збірки: {@link #AUTO}, {@link #INTEGRATED_GPU} або {@link #DISCRETE_GPU} (за замовчуванням, 22.11.2026). */
     public static int choice(Instance instance) {
         InstanceSettings s = instance == null ? null : instance.getSettings();
-        Boolean b = s == null ? null : s.getHighPerformanceGpu();
-        return b == null ? AUTO : b ? DISCRETE_GPU : INTEGRATED_GPU;
+        String g = s == null ? null : s.getGpu();
+        if ("auto".equals(g)) return AUTO;
+        if ("integrated".equals(g)) return INTEGRATED_GPU;
+        if ("discrete".equals(g)) return DISCRETE_GPU;
+        Boolean b = s == null ? null : s.getHighPerformanceGpu(); // збірки до 22.11.2026
+        if (b != null) return b ? DISCRETE_GPU : INTEGRATED_GPU;
+        return DISCRETE_GPU;
     }
 
     /** Зберегти вибір у налаштуваннях збірки (сам instance.json зберігає той, хто кличе). */
     public static void setChoice(Instance instance, int choice) {
         if (instance.getSettings() == null) instance.setSettings(new InstanceSettings());
-        instance.getSettings().setHighPerformanceGpu(choice == DISCRETE_GPU ? Boolean.TRUE
-                : choice == INTEGRATED_GPU ? Boolean.FALSE : null);
+        instance.getSettings().setGpu(choice == DISCRETE_GPU ? "discrete" : choice == INTEGRATED_GPU ? "integrated" : "auto");
+        instance.getSettings().setHighPerformanceGpu(null);
     }
 
     // ------------------------------------------------------------------ перед запуском
@@ -186,6 +229,7 @@ public final class Gpu {
                 // «Як вирішить система»: прибрати те, що лаунчер міг записати раніше (нічого, якщо записів немає)
                 if (c == AUTO) forget(baseDir, instance);
                 else if (exe != null && discreteOfHybrid() != null) applyWindows(baseDir, instance, exe, c);
+                else forget(baseDir, instance); // 22.11.2026: відеокарта тепер одна, запис лаунчера більше не потрібен
             } else if (isLinux() && c == DISCRETE_GPU && discreteOfHybrid() != null) {
                 applyLinux(env);
             }
@@ -211,8 +255,9 @@ public final class Gpu {
         }
         if (!want.equals(now)) {
             int code = reg("add", KEY, "/v", path, "/t", "REG_SZ", "/d", want, "/f");
-            log.info("GPU: wrote " + KEY + " \"" + path + "\" = " + want + " because the player chose the "
+            log.info("GPU: wrote " + KEY + " \"" + path + "\" = " + want + " for the "
                     + (choice == DISCRETE_GPU ? "discrete" : "integrated") + " graphics card for " + instance.getName()
+                    + (instance.getSettings() != null && instance.getSettings().getGpu() != null ? "" : " (launcher default)")
                     + " (exit " + code + ")");
             if (code != 0) return;
         }

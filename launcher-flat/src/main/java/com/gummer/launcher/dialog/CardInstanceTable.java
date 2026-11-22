@@ -34,6 +34,8 @@ public class CardInstanceTable extends InstanceTable {
     private int GAP = BASE_GAP;
 
     private int hoverRow = -1;
+    /** 21.11.2026: вміст клітинки заглушки згорнутого розділу виштовхується за межі рядка (видно лише підпис). */
+    private static final javax.swing.border.Border STUB_BORDER = BorderFactory.createEmptyBorder(4000, 0, 0, 0);
 
     private static final Color TEXT = new Color(222, 222, 222);
     /** Рамки клітинок: [є підпис розділу][перша колонка]. */
@@ -97,6 +99,32 @@ public class CardInstanceTable extends InstanceTable {
         addMouseListener(hover);
         addMouseMotionListener(hover);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        captionHeight = row -> captionFor(row) != null ? CAPTION_H : 0; // 21.11.2026: клік по підпису згортає розділ
+    }
+
+    /** 21.11.2026: рядок-заглушка згорнутого розділу «Встановлених» (лише підпис, без картки). */
+    private boolean stubAt(int row) {
+        Instance inst = instanceAt(row);
+        return inst != null && ((InstanceTableModel) getModel()).isCollapsedStub(inst);
+    }
+
+    /**
+     * 21.11.2026: трикутник біля підпису розділу, що згортається: вниз, коли розгорнутий, вправо, коли згорнутий.
+     * Малюється, а не символом шрифту: у Inter немає гарантованих ▸ і ▾.
+     */
+    public static void caret(Graphics2D g2, int x, int baseline, int size, boolean collapsed) {
+        int cy = baseline - size / 2 - 1;
+        Polygon p = new Polygon();
+        if (collapsed) {
+            p.addPoint(x, cy - size / 2);
+            p.addPoint(x + size * 2 / 3, cy);
+            p.addPoint(x, cy + size / 2);
+        } else {
+            p.addPoint(x - 1, cy - size / 3);
+            p.addPoint(x + size - 1, cy - size / 3);
+            p.addPoint(x + size / 2 - 1, cy + size / 3);
+        }
+        g2.fillPolygon(p);
     }
 
     /** 17.11.2026: модель скорочує текст під ширину колонки (довге переносилось і обрізалось знизу). */
@@ -166,7 +194,7 @@ public class CardInstanceTable extends InstanceTable {
 
     private void updateRowHeights() {
         for (int row = 0; row < getRowCount(); row++) {
-            int h = ROW_H + (captionFor(row) != null ? CAPTION_H : 0);
+            int h = stubAt(row) ? CAPTION_H + GAP : ROW_H + (captionFor(row) != null ? CAPTION_H : 0);
             if (getRowHeight(row) != h) setRowHeight(row, h);
         }
     }
@@ -202,7 +230,7 @@ public class CardInstanceTable extends InstanceTable {
             JComponent jc = (JComponent) c;
             jc.setOpaque(false);
             // картка ширша за клітинку на GAP згори і знизу: текст по центру картки
-            jc.setBorder(BORDERS[captionFor(row) != null ? 1 : 0][column == 0 ? 1 : 0]);
+            jc.setBorder(stubAt(row) ? STUB_BORDER : BORDERS[captionFor(row) != null ? 1 : 0][column == 0 ? 1 : 0]);
         }
         c.setForeground(isRowSelected(row) ? Color.WHITE : TEXT);
         return c;
@@ -224,8 +252,18 @@ public class CardInstanceTable extends InstanceTable {
                 if (caption != null) {
                     g2.setFont(getFont().deriveFont(Font.BOLD, (float) (11 * zoom)));
                     g2.setColor(new Color(255, 255, 255, 135));
-                    g2.drawString(caption, (int) Math.round(4 * zoom), r.y + CAPTION_H - (int) Math.round(7 * zoom));
+                    int cx = (int) Math.round(4 * zoom), cb = r.y + CAPTION_H - (int) Math.round(7 * zoom);
+                    InstanceTableModel m = (InstanceTableModel) getModel();
+                    int mrow = convertRowIndexToModel(row);
+                    if (m.isToggleCaptionAt(mrow)) {
+                        // 22.11.2026: стрілка перед підписом, як у дереві тек: після «ГаммерКрафт» вона налазила на «т» (на
+                        // екрані слово ширше, ніж міряє шрифт), перед підписом відстань не залежить від ширини букв
+                        caret(g2, cx + 1, cb, (int) Math.round(6 * zoom), m.isCollapsedStubAt(mrow));
+                        cx += (int) Math.round(12 * zoom);
+                    }
+                    g2.drawString(caption, cx, cb);
                 }
+                if (stubAt(row)) continue; // згорнутий розділ: лише підпис
                 int x = 1, y = top + GAP / 2, w = width - 2, h = ROW_H - GAP;
                 int arc = (int) Math.round(10 * zoom), bar = (int) Math.round(7 * zoom);
                 boolean selected = isRowSelected(row);

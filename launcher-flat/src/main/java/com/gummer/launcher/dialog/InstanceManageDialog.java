@@ -342,6 +342,10 @@ public class InstanceManageDialog extends JDialog {
             p.add(installCard, "hidemode 3");
         }
 
+        // 22.11.2026 (власник: «джава для збірки має бути винесено одразу в налаштування збірки під "загальне" ... а не
+        // лізти ... в самому низу маленька кнопочка»): пам'ять і Java одразу, першою карткою
+        p.add(memJavaCard());
+
         // назва
         JPanel nameCard = card();
         nameCard.add(LookUi.title(tr("manage.name.title"), 15f));
@@ -442,12 +446,7 @@ public class InstanceManageDialog extends JDialog {
         else if (!instance.isVanilla() || vanillaHasResourcePacks()) grid.add(folderButton(tr("manage.folders.packs"), new File(content, "resourcepacks")), "wmin 0");
         grid.add(folderButton(tr("manage.folders.crashes"), new File(content, "crash-reports")), "wmin 0");
         grid.add(folderButton(tr("manage.folders.logs"), new File(content, "logs")), "wmin 0");
-        JButton java = LookUi.secondary(new JButton(tr("manage.folders.java")));
-        java.addActionListener(e -> InstanceSettingsDialogFlat.open(this, instance));
-        grid.add(java, "wmin 0");
         foldersCard.add(grid, "wmin 0, gaptop 6");
-        // 17.11.2026 (власник: «пам'ять під модпак ... радити об'єм за кількістю модів»)
-        if (!instance.isVanilla()) foldersCard.add(LookUi.body(memoryAdvice(instance), true), "wmin 0, gaptop 6");
         p.add(foldersCard);
 
         // видалити копію
@@ -471,6 +470,118 @@ public class InstanceManageDialog extends JDialog {
     }
 
     /** Текст поради щодо пам'яті для збірки: скільки модів, скільки радимо, скільки на ПК. */
+    /**
+     * 22.11.2026: картка «Пам'ять і Java» нагорі «Загального». Пам'ять: галочка «своя для цієї збірки» з повзунком (крок
+     * 0,5 ГБ) і рядок, скільки гра отримає і чому (MemoryAdvice.effective, та сама логіка, що при запуску). Java: список
+     * одразу тут («Автоматично» або встановлена Java), аргументи JVM за кнопкою (старе вікно InstanceSettingsDialogFlat).
+     * Усе зберігається одразу, як і відеокарта.
+     */
+    private JPanel memJavaCard() {
+        final JPanel c = card();
+        c.add(LookUi.title(tr("manage.memjava.title"), 15f));
+        final com.skcraft.launcher.InstanceSettings s = instance.getSettings();
+        final com.skcraft.launcher.Configuration config = launcher.getConfig();
+
+        final JCheckBox own = check(tr("manage.memjava.own"), s.getMemorySettings() != null);
+        c.add(own, "gaptop 4, wmin 0");
+        final JSlider slider = new JSlider();
+        final JSpinner minSp = new JSpinner(), maxSp = new JSpinner();
+        int start = com.gummer.launcher.manage.MemoryAdvice.effective(config, instance)[0];
+        minSp.setValue(start);
+        maxSp.setValue(start);
+        com.gummer.launcher.swing.SwingExtras.configureMemorySlider(slider, minSp, maxSp);
+        slider.setValue(start);
+        slider.setOpaque(false);
+        c.add(slider, "hidemode 3, wmin 0");
+        final JTextArea now = LookUi.body(" ", true);
+        c.add(now, "wmin 0");
+        final Runnable refresh = () -> {
+            int[] e = com.gummer.launcher.manage.MemoryAdvice.effective(config, instance);
+            String gb = com.gummer.launcher.manage.MemoryAdvice.gb(e[0]);
+            String text;
+            if (e[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_BUILD) text = tr("manage.memjava.fromBuild", gb);
+            else if (e[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_LIST) text = tr("manage.memjava.fromList", gb,
+                    com.gummer.launcher.manage.MemoryAdvice.gb(config.getMaxMemory()));
+            else if (e[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_MODS) text = tr("manage.memjava.fromMods", gb,
+                    com.gummer.launcher.manage.MemoryAdvice.modCount(instance), com.gummer.launcher.manage.MemoryAdvice.gb(config.getMaxMemory()));
+            else if (e[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_FLOOR) text = tr("manage.memjava.floor", gb,
+                    com.gummer.launcher.manage.MemoryAdvice.gb(e[2]), com.gummer.launcher.manage.MemoryAdvice.modCount(instance));
+            else text = tr("manage.memjava.fromSettings", gb);
+            boolean much = com.gummer.launcher.manage.MemoryAdvice.tooMuch(e[0]);
+            if (much) text += "\n" + tr("memory.tooMuchSetting", gb,
+                    com.gummer.launcher.manage.MemoryAdvice.gb(com.gummer.launcher.manage.MemoryAdvice.totalMb()));
+            now.setText(text);
+            now.setForeground(much || e[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_FLOOR ? pal.warn : pal.text2);
+            slider.setVisible(own.isSelected());
+            c.revalidate();
+            c.repaint();
+        };
+        own.addActionListener(e -> {
+            if (own.isSelected()) {
+                com.skcraft.launcher.launch.MemorySettings m = new com.skcraft.launcher.launch.MemorySettings();
+                m.setMinMemory(Math.min(config.getMinMemory(), slider.getValue()));
+                m.setMaxMemory(slider.getValue());
+                s.setMemorySettings(m);
+            } else {
+                s.setMemorySettings(null);
+            }
+            Persistence.commitAndForget(instance);
+            changed = true;
+            refresh.run();
+        });
+        slider.addChangeListener(e -> {
+            if (!own.isSelected()) return;
+            com.skcraft.launcher.launch.MemorySettings m = s.getMemorySettings();
+            if (m == null) return;
+            m.setMaxMemory(slider.getValue());
+            if (m.getMinMemory() > slider.getValue()) m.setMinMemory(slider.getValue());
+            refresh.run();
+            if (!slider.getValueIsAdjusting()) {
+                Persistence.commitAndForget(instance);
+                changed = true;
+            }
+        });
+
+        // Java
+        java.util.List<Object> items = new java.util.ArrayList<Object>();
+        items.add(tr("manage.memjava.javaAuto"));
+        items.addAll(com.skcraft.launcher.launch.runtime.JavaRuntimeFinder.getAvailableRuntimes());
+        if (s.getRuntime() != null && !items.contains(s.getRuntime())) items.add(s.getRuntime());
+        final JComboBox<Object> javaBox = new JComboBox<Object>(items.toArray());
+        javaBox.setSelectedItem(s.getRuntime() != null ? s.getRuntime() : items.get(0));
+        JPanel row = new JPanel(new MigLayout("insets 0, gap 8, fillx", "[][grow,fill][]", "[32!]"));
+        row.setOpaque(false);
+        JLabel jl = new JLabel(tr("manage.memjava.java"));
+        jl.setForeground(pal.text2);
+        row.add(jl);
+        row.add(javaBox, "wmin 0, h 32!");
+        JButton more = LookUi.secondary(new JButton(tr("manage.memjava.args")));
+        row.add(more, "h 32!");
+        c.add(row, "wmin 0, gaptop 8");
+        javaBox.addActionListener(e -> {
+            Object sel = javaBox.getSelectedItem();
+            com.skcraft.launcher.launch.runtime.JavaRuntime rt = sel instanceof com.skcraft.launcher.launch.runtime.JavaRuntime
+                    ? (com.skcraft.launcher.launch.runtime.JavaRuntime) sel : null;
+            if (rt == null ? s.getRuntime() == null : rt.equals(s.getRuntime())) return;
+            s.setRuntime(rt);
+            Persistence.commitAndForget(instance);
+            changed = true;
+            toast(tr("manage.memjava.saved"));
+        });
+        more.addActionListener(e -> {
+            if (InstanceSettingsDialogFlat.open(this, instance)) {
+                // старе вікно могло змінити і пам'ять, і Java: показати як є
+                own.setSelected(s.getMemorySettings() != null);
+                if (s.getMemorySettings() != null) slider.setValue(s.getMemorySettings().getMaxMemory());
+                javaBox.setSelectedItem(s.getRuntime() != null ? s.getRuntime() : items.get(0));
+                changed = true;
+                refresh.run();
+            }
+        });
+        refresh.run();
+        return c;
+    }
+
     static String memoryAdvice(Instance instance) {
         int mods = com.gummer.launcher.manage.MemoryAdvice.modCount(instance);
         int advice = com.gummer.launcher.manage.MemoryAdvice.recommended(instance);

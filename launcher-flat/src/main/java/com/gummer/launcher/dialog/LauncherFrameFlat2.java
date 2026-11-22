@@ -145,6 +145,9 @@ public class LauncherFrameFlat2 extends JFrame {
         // встановленої збірки, тоді selectRememberedInstance перемкне на «Додати інсталяцію»
         launcher.getConfig().setInstalledOnly(true);
         instancesModel.setInstalledOnly(true);
+        // 21.11.2026: розділи «Встановлених» згортаються кліком по підпису, стан у налаштуваннях лаунчера
+        instancesModel.setCollapsibleSections(launcher.getConfig().getCollapsedSections(),
+                () -> com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig()));
         rootFrame = this;
         LauncherFrameFlat.rootFrame = this; // діалоги (налаштування, збірка) шукають вікно тут, хоч який вигляд вибрано
 
@@ -419,6 +422,11 @@ public class LauncherFrameFlat2 extends JFrame {
         // instancesTable events
         instancesTable.setModel(instancesModel);
         PackList.install(instancesTable, this::packRow);
+        // 21.11.2026: клік по підпису розділу «Встановлених» згортає його (InstanceTable.captionHeight)
+        instancesTable.captionHeight = r -> {
+            PackList.Row row = packRow(r);
+            return row != null && row.header != null ? PackList.HEADER_H : 0;
+        };
         instancesTable.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), "ui2.launch");
         instancesTable.getActionMap().put("ui2.launch", new AbstractAction() {
             @Override
@@ -528,10 +536,16 @@ public class LauncherFrameFlat2 extends JFrame {
         String remembered = com.gummer.launcher.manage.ListMemory.recall(launcher.getConfig(), instancesModel.isInstalledOnly());
         if (instancesModel.chooseByName(remembered)) instancesModel.refreshChoice();
         int row = instancesModel.rowOf(remembered);
-        if (row < 0) row = Math.max(0, instancesModel.rowOf(launcher.getConfig().getLastInstance()));
+        if (row < 0) row = instancesModel.rowOf(launcher.getConfig().getLastInstance());
+        if (row < 0) row = instancesModel.firstSelectableRow(); // 21.11.2026: не заглушка згорнутого розділу
         restoringSelection = true;
         try {
-            instancesTable.setRowSelectionInterval(row, row);
+            if (row >= 0) instancesTable.setRowSelectionInterval(row, row);
+            else { // 22.11.2026: згорнуто все, вибирати нічого, «Запуск» і «Збірка» неактивні
+                instancesTable.clearSelection();
+                launchButton.setEnabled(false);
+                manageButton.setEnabled(false);
+            }
         } finally {
             restoringSelection = false;
         }
@@ -1146,6 +1160,10 @@ public class LauncherFrameFlat2 extends JFrame {
         }
         if (InstanceTableModel.isBrowser(i) && !InstanceTableModel.isAddRow(i)) row.header = tr("launcher.section.modrinth"); // 17.11.2026
         if (InstanceTableModel.isImportRow(i)) row.header = null; // 19.11.2026: під Modrinth, у тому ж розділі
+        if (row.header != null && instancesModel.isToggleCaptionAt(r)) { // 21.11.2026: згортання розділів
+            row.collapsible = true;
+            row.collapsed = row.stub = instancesModel.isCollapsedStubAt(r);
+        }
         boolean grouped = instancesModel.getGroupMembers(i).size() >= 2;
         if (InstanceTableModel.isBrowser(i)) {
             row.sub = tr(InstanceTableModel.isAddRow(i) ? "launcher.addBuildSub" : InstanceTableModel.isImportRow(i)

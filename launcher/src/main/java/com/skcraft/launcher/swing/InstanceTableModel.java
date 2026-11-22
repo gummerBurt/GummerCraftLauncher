@@ -335,6 +335,7 @@ public class InstanceTableModel extends AbstractTableModel {
         }
         for (int i = 0; i < getRowCount(); i++) {
             Instance shown = getInstanceAt(i);
+            if (isCollapsedStub(shown)) continue; // 21.11.2026: рядок згорнутого розділу не вибирається
             if (instanceName.equalsIgnoreCase(shown.getName())) {
                 return i;
             }
@@ -419,6 +420,9 @@ public class InstanceTableModel extends AbstractTableModel {
 
     private void rebuildRows() {
         rows.clear();
+        // 22.11.2026: позначки згорнутих розділів лише для «Встановлених». Раніше лишались і в «Додати»: StalDayZ (той самий
+        // об'єкт в обох списках) малювався там порожнім рядком, доки мережеве оновлення не давало нові об'єкти
+        collapsedStubs.clear();
         if (!grouped) {
             return;
         }
@@ -438,6 +442,7 @@ public class InstanceTableModel extends AbstractTableModel {
                 }
             }
             for (List<Instance> list : byKey.values()) rows.addAll(list);
+            collapseRows();
             if (filter == null) rows.add(ADD);
             return;
         }
@@ -470,6 +475,86 @@ public class InstanceTableModel extends AbstractTableModel {
         if (!instance.isBuiltIn()) return "gummercraft";
         String g = instance.getGroup();
         return g != null && INSTALLED_SECTIONS.contains(g) ? g : "other";
+    }
+
+    /**
+     * 21.11.2026 (власник: «згортати та розгортати категорії кліканням на назву категорії»): згорнуті розділи «Встановлених».
+     * Набір живе в налаштуваннях лаунчера ({@code Configuration.collapsedSections}), {@code save} їх зберігає. Вмикає вигляд,
+     * що вміє малювати згорнутий розділ (Liquid Glass, Класика); без виклику (Бібліотека) нічого не згортається.
+     */
+    private java.util.Set<String> collapsedSections;
+    private Runnable collapsedSave;
+    /** Перший рядок згорнутого розділу: лишається в таблиці лише заради підпису, вибрати чи запустити його не можна. */
+    private final java.util.Set<Instance> collapsedStubs = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Instance, Boolean>());
+
+    public void setCollapsibleSections(java.util.Set<String> store, Runnable save) {
+        this.collapsedSections = store;
+        this.collapsedSave = save;
+    }
+
+    public boolean isCollapsible() {
+        return collapsedSections != null && installedOnly;
+    }
+
+    /** Рядок-заглушка згорнутого розділу (лише підпис). */
+    public boolean isCollapsedStub(Instance instance) {
+        return instance != null && installedOnly && collapsedStubs.contains(instance);
+    }
+
+    public boolean isCollapsedStubAt(int row) {
+        return row >= 0 && row < getRowCount() && isCollapsedStub(getInstanceAt(row));
+    }
+
+    /** Розділ рядка згорнутий (для стрілки біля підпису). */
+    public boolean isSectionCollapsed(Instance instance) {
+        return isCollapsible() && instance != null && collapsedSections.contains(installedSectionOf(instance));
+    }
+
+    /** Над рядком row стоїть підпис розділу «Встановлених», який згортається кліком. */
+    public boolean isToggleCaptionAt(int row) {
+        if (!isCollapsible() || row < 0 || row >= getRowCount()) return false;
+        Instance i = getInstanceAt(row);
+        return installedCaption(i, row > 0 ? getInstanceAt(row - 1) : null) != null;
+    }
+
+    /** Згорнути чи розгорнути розділ рядка row, зберегти і перебудувати список. */
+    public void toggleSectionAt(int row) {
+        if (!isToggleCaptionAt(row)) return;
+        String key = installedSectionOf(getInstanceAt(row));
+        if (!collapsedSections.remove(key)) collapsedSections.add(key);
+        if (collapsedSave != null) collapsedSave.run();
+        update();
+    }
+
+    /**
+     * Перший рядок, який можна вибрати за замовчуванням. 22.11.2026: якщо згорнуто все, то -1 (нічого не вибирати), а не
+     * «+ Додати збірку»: вибір того рядка у «Встановлених» перемикає на «Додати», і клік по «Встановлених» перекидав назад.
+     * Справді порожні «Встановлені» (лише «+ Додати збірку») дають 0, як раніше: там картка з поясненням.
+     */
+    public int firstSelectableRow() {
+        boolean stubs = false;
+        for (int r = 0; r < getRowCount(); r++) {
+            Instance i = getInstanceAt(r);
+            if (isCollapsedStub(i)) stubs = true;
+            else if (!stubs && isAddRow(i)) continue;
+            else if (!isAddRow(i)) return r;
+        }
+        return stubs ? -1 : 0;
+    }
+
+    /** Згорнуті розділи: від кожного лишається перший рядок-заглушка з підписом. */
+    private void collapseRows() {
+        collapsedStubs.clear();
+        if (!isCollapsible() || collapsedSections.isEmpty()) return;
+        java.util.Set<String> seen = new java.util.HashSet<String>();
+        for (java.util.Iterator<Instance> it = rows.iterator(); it.hasNext(); ) {
+            Instance i = it.next();
+            if (isBrowser(i)) continue;
+            String s = installedSectionOf(i);
+            if (!collapsedSections.contains(s)) continue;
+            if (seen.add(s)) collapsedStubs.add(i);
+            else it.remove();
+        }
     }
 
     /**

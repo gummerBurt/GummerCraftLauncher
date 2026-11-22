@@ -180,7 +180,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
         java.util.List<String> command = builder.buildCommand();
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         // 19.11.2026: картка «Відеокарта» у вікні «Збірка»: запам'ятати Java збірки для кнопки «Скопіювати шлях до
-        // Java» і, лише якщо гравець поставив галочку «на дискретній відеокарті», попросити систему дати її грі
+        // Java» і дати грі вибрану відеокарту (з 22.11.2026 за замовчуванням дискретну, якщо їх дві)
         // (Windows: те саме значення, що пише сторінка «Параметри графіки»; Linux: змінні PRIME лише для цього
         // процесу). Що саме і чому: опис класу Gpu
         com.gummer.launcher.util.Gpu.beforeLaunch(launcher.getBaseDir(), instance, command.isEmpty() ? null : command.get(0),
@@ -317,36 +317,24 @@ public class Runner implements Callable<Process>, ProgressObservable {
                 .map(MemorySettings::getMinMemory)
                 .orElse(config.getMinMemory());
 
-        int maxMemory = memorySettings
-                .map(MemorySettings::getMaxMemory)
-                .orElse(config.getMaxMemory());
-
-        // 1.32: у паку немає своїх налаштувань пам'яті, а список v2 рекомендує більше, ніж загальне налаштування:
-        // піднімаємо до рекомендованого, але лишаємо системі щонайменше 2 ГБ. Менше за загальне налаштування не ставимо.
-        Integer recommended = instance.getRecommendedMemory();
-        if (!memorySettings.isPresent() && recommended != null && recommended > maxMemory) {
-            long totalMb = com.skcraft.launcher.util.Environment.getTotalSystemMemory() / (1024L * 1024L);
-            int cap = totalMb > 0 ? (int) Math.max(0, totalMb - 2048) : recommended;
-            int raised = Math.min(recommended, cap);
-            if (raised > maxMemory) {
-                log.info("Max memory raised from " + maxMemory + " to " + raised + " MB (recommended by the modpack list)");
-                maxMemory = raised;
-            }
+        // 22.11.2026: скільки і звідки рахує MemoryAdvice.effective (та сама логіка показується в картці «Пам'ять і Java»):
+        // своя пам'ять збірки; інакше загальне налаштування, яке, поки гравець його не змінював, лаунчер піднімає до
+        // рекомендованого списком модпаків (1.32) і до поради за кількістю модів (17-18.11.2026)
+        int[] plan = com.gummer.launcher.manage.MemoryAdvice.effective(config, instance);
+        int maxMemory = plan[0];
+        if (plan[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_LIST) {
+            log.info("Max memory raised from " + config.getMaxMemory() + " to " + maxMemory + " MB (recommended by the modpack list)");
+        } else if (plan[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_MODS) {
+            log.info("Max memory raised from " + config.getMaxMemory() + " to " + maxMemory + " MB ("
+                    + com.gummer.launcher.manage.MemoryAdvice.modCount(instance) + " mods)");
+        } else if (plan[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_FLOOR) {
+            log.warning("Max memory raised from the chosen " + plan[2] + " to the minimum " + maxMemory + " MB ("
+                    + com.gummer.launcher.manage.MemoryAdvice.modCount(instance) + " mods, less would surely crash)");
+        } else {
+            log.info("Max memory " + maxMemory + " MB (" + (plan[1] == com.gummer.launcher.manage.MemoryAdvice.FROM_BUILD
+                    ? "this build's own setting" : "launcher setting" + (config.isMemoryChosen() ? ", chosen by the player" : "")) + ")");
         }
-
-        // 17.11.2026 (власник: «пам'ять під модпак ... радити об'єм за кількістю модів»): збірка без своїх налаштувань
-        // пам'яті з багатьма модами отримує стільки, скільки радить MemoryAdvice (не більше половини пам'яті ПК), якщо
-        // загальне налаштування менше. Менше за загальне налаштування не ставимо.
-        // 18.11.2026 (власник: «чому для модпаків з модрінта дається всього 2 гб ... вже другий модпак мені впав»): раніше
-        // лише розділи завантажувачів; тепер і збірки Modrinth та копії (у них найбільше модів)
-        if (!memorySettings.isPresent() && (instance.isBuiltIn() || instance.isMrpack() || instance.isCopy()) && !instance.isVanilla()) {
-            int advice = com.gummer.launcher.manage.MemoryAdvice.recommended(instance);
-            if (advice > maxMemory) {
-                log.info("Max memory raised from " + maxMemory + " to " + advice + " MB ("
-                        + com.gummer.launcher.manage.MemoryAdvice.modCount(instance) + " mods)");
-                maxMemory = advice;
-            }
-        }
+        if (minMemory > maxMemory) minMemory = maxMemory;
 
         int permGen = config.getPermGen();
 
@@ -441,6 +429,8 @@ public class Runner implements Callable<Process>, ProgressObservable {
         }
         // 1.36.1 (java4shell): -XX:-UseBASE64Intrinsics для Java 17+, якщо гравець сам не задав
         com.gummer.launcher.util.JavaSecurity.addGameFlags(builder.getRuntime(), flags);
+        // 22.11.2026: налаштований G1 для Java 17+, якщо гравець не задав свій збирач (тікет #97, як у SKlauncher)
+        com.gummer.launcher.util.GcFlags.addGameFlags(builder.getRuntime(), maxMemory, flags);
 
         List<GameArgument> javaArguments = versionManifest.getArguments().getJvmArguments();
         StrSubstitutor substitutor = new StrSubstitutor(getCommandSubstitutions());

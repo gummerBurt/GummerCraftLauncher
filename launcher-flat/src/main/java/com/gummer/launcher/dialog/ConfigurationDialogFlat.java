@@ -185,7 +185,11 @@ public class ConfigurationDialogFlat extends JDialog {
         mapper.map(gameKeyText, "gameKey");
 
         mapper.copyFromObject();
+        initialMaxMemory = config.getMaxMemory();
     }
+
+    /** 22.11.2026: пам'ять до відкриття вікна; змінена гравцем стає точною для всіх збірок (Configuration.memoryChosen). */
+    private int initialMaxMemory;
 
     /**
      * 16.11.2026: нова розкладка. Раніше вкладки (на малому екрані і з масштабом Windows переносились у два ряди)
@@ -249,8 +253,12 @@ public class ConfigurationDialogFlat extends JDialog {
         final JTextArea memWarn = LookUi.body(" ", true);
         memWarn.setForeground(LookTheme.palette().warn);
         memCard.add(memWarn, "gaptop 2, wmin 0, hidemode 3");
+        // 22.11.2026: вибране число (крок тепер 0,5 ГБ, підписи лише парні)
+        final JTextArea memValue = LookUi.body(" ", true);
+        memCard.add(memValue, "gaptop 2, wmin 0");
         Runnable memCheck = () -> {
             int mb = memorySlider.getValue();
+            memValue.setText(SharedLocale.tr("settings.memory.value", com.gummer.launcher.manage.MemoryAdvice.gb(mb)));
             boolean much = com.gummer.launcher.manage.MemoryAdvice.tooMuch(mb);
             memWarn.setText(much ? SharedLocale.tr("memory.tooMuchSetting", com.gummer.launcher.manage.MemoryAdvice.gb(mb),
                     com.gummer.launcher.manage.MemoryAdvice.gb(com.gummer.launcher.manage.MemoryAdvice.totalMb())) : " ");
@@ -852,6 +860,7 @@ public class ConfigurationDialogFlat extends JDialog {
 
     public void save() {
         mapper.copyFromSwing();
+        if (config.getMaxMemory() != initialMaxMemory) config.setMemoryChosen(true);
         config.setJavaRuntime((JavaRuntime) jvmRuntime.getSelectedItem());
         com.gummer.launcher.discord.DiscordPresence.setEnabled(config.isDiscordPresence());
 

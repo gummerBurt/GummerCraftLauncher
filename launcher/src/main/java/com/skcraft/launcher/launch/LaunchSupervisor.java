@@ -59,6 +59,10 @@ public class LaunchSupervisor {
         try {
             boolean update = options.getUpdatePolicy().isUpdateEnabled() && instance.isUpdatePending();
 
+            // 22.11.2026: відеокарти читаються заново на кожен запуск (за замовчуванням гра йде на дискретній, Gpu),
+            // у фоні, поки триває вхід і перевірка файлів
+            com.gummer.launcher.util.Gpu.refreshAsync();
+
             // Store last access date
             Date now = new Date();
             instance.setLastAccessed(now);

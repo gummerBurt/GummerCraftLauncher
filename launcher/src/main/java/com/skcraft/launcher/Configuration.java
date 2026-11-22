@@ -31,6 +31,12 @@ public class Configuration {
     private String jvmArgs;
     private int minMemory = 1024;
     private int maxMemory = 0; // Updated in Launcher
+    /**
+     * 22.11.2026 (тікет #97: гравець поставив 4 ГБ, а збірка Modrinth з 347 модами запустилась на 6): гравець сам змінив
+     * загальну пам'ять у налаштуваннях лаунчера. Тоді вона точна для всіх збірок без своєї пам'яті, порада за кількістю
+     * модів і список модпаків її не піднімають (MemoryAdvice.effective).
+     */
+    private boolean memoryChosen;
     private int permGen = 256;
     private boolean enforceRuntime = false;
     private boolean consoleUseColors = false;
@@ -69,6 +75,8 @@ public class Configuration {
     private boolean discordPresence = true;
     /** 1.36.3: Java гри, відкочені гравцем («17/windows-x64»): не оновлюються самі, доки гравець не натисне «Оновити». */
     private java.util.Set<String> javaPinned = new java.util.LinkedHashSet<String>();
+    /** 21.11.2026: згорнуті розділи «Встановлених» (gummercraft, vanilla, fabric, quilt, forge, neoforge, other). */
+    private java.util.Set<String> collapsedSections = new java.util.LinkedHashSet<String>();
     private String autoUpdatedTo = null; // версія, яку лаунчер уже ставив автоматично (запобіжник від циклу оновлення-перезапуску)
 
     // social links

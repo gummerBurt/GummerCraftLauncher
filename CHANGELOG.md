@@ -4,6 +4,14 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.11
+
+- **Пам'ять і Java збірки одразу у вікні «Збірка».** Нова картка першою у вкладці «Загальне»: своя пам'ять для цієї збірки, вибір Java і кнопка «Аргументи JVM». Картка пише, скільки пам'яті отримає гра і чому.
+- **Пам'ять, яку ти вибрав, тепер точна.** Якщо ти сам поставив пам'ять (у збірці чи в налаштуваннях лаунчера), лаунчер більше не піднімає її порадою за кількістю модів. Якщо не ставив, лаунчер дає щедру пораду, але не більше половини пам'яті ПК. Якщо вибрано точно замало для збірки (наприклад, 1 ГБ на сотні модів), лаунчер дає мінімум і пише про це. Повзунок пам'яті тепер з кроком 0,5 ГБ.
+- **Дискретна відеокарта за замовчуванням.** На ноутбуках і ПК з двома відеокартами гра тепер запускається на дискретній, лаунчер перевіряє відеокарти перед кожним запуском. Інакше можна вибрати у вікні «Збірка», картка «Відеокарта».
+- **Менше мікрофризів на Minecraft 1.18 і новіших:** лаунчер налаштовує збирач пам'яті Java (G1), якщо ти не задав свій в «Аргументах JVM».
+- **Розділи «Встановлених» можна згорнути** кліком по підпису (ГаммерКрафт, Ваніль, Fabric та інші), стан зберігається.
+
 ## 1.36.10
 
 - **Імпорт з інших лаунчерів переносить збірку повністю.** Модпаки SKlauncher, TLauncher та офіційного лаунчера, що мають свою теку гри, тепер копіюються цілком: оформлення меню модпака, квести, дані модів у їхніх власних теках (CustomNPCs і подібні). Раніше переносились лише моди, налаштування, світи, ресурспаки і шейдери. Із самої теки `.minecraft` теж береться все, крім файлів гри та лаунчерів.
@@ -230,6 +238,8 @@
 ---
 
 ## English changelog
+
+**1.36.11:** memory and Java for a build right in the Build window (a new card at the top of General: own memory, Java, JVM arguments, and how much memory the game gets and why); the memory you chose is now exact and no longer raised by the mod count advice, while unset memory gets a generous recommendation of at most half the PC memory, and a choice that is surely too little for the build (like 1 GB for hundreds of mods) is raised to a minimum with a note; the memory slider moves in 0.5 GB steps; on PCs with two graphics cards the game now starts on the discrete one by default, checked before every launch (can be changed in the Build window, Graphics card); fewer micro-stutters on Minecraft 1.18+ with a tuned G1 garbage collector unless you set your own in JVM arguments; sections of "Installed" collapse with a click on their caption, and the state is kept.
 
 **1.36.10:** import from other launchers copies the whole build: SKlauncher, TLauncher and official launcher modpacks with their own game folder are copied entirely (modpack menu design, quests, mod data in mods' own folders such as CustomNPCs); before only mods, configs, worlds, resource packs and shaders were copied. From the shared `.minecraft` everything is taken except game and launcher files.
 
