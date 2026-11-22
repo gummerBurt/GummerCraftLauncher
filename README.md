@@ -1,6 +1,6 @@
 <div align="center">
 
-![GummerCraft - From Ukraine with love!](launcher/src/main/resources/com/skcraft/launcher/ui/frame/logo.png)
+![GummerCraft - From Ukraine with love!](launcher/src/main/resources/com/skcraft/launcher/ui/frame/logo-en.png)
 
 </div>
 

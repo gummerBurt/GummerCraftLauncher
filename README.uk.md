@@ -27,6 +27,14 @@
 
 *English version of this page: [README.md](README.md).*
 
+| Головне вікно (Liquid Glass) | Модпаки Modrinth | Вікно «Збірка»: пресети ФПС |
+|---|---|---|
+| ![Головне вікно GummerCraft Launcher](docs/images/launcher-uk-main.png) | ![Модпаки Modrinth у GummerCraft Launcher](docs/images/launcher-uk-modrinth.png) | ![Пресети ФПС у вікні «Збірка»](docs/images/launcher-uk-fps-presets.png) |
+
+| Моди Modrinth | Вікно «Збірка»: знайти моди |
+|---|---|
+| ![Моди Modrinth у GummerCraft Launcher](docs/images/launcher-uk-mods.png) | ![Пошук модів Modrinth для збірки](docs/images/launcher-uk-find-mods.png) |
+
 ## Можливості
 
 **Версії гри та завантажувачі**
