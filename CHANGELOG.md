@@ -4,6 +4,10 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.14
+
+- **Запуск гри більше не зависає на 90%** («Collecting process arguments») на ПК, де Windows довго не віддає список відеокарт. Лаунчер чекає на нього не довше 15 секунд, а якщо список так і не прийшов, запускає гру на відеокарті, яку вибере система, і не чіпає вже збережений вибір відеокарти.
+
 ## 1.36.13
 
 - **Англійське лого.** В англійській версії лаунчера на збірках GummerCraft і власних збірках напис під логотипом тепер «From Ukraine with love!», в українській як і раніше «З України, з любов'ю!». Змінюється разом з мовою.
@@ -252,6 +256,8 @@
 ---
 
 ## English changelog
+
+**1.36.14:** the game launch no longer hangs at 90% ("Collecting process arguments") on PCs where Windows is slow to report the list of graphics cards. The launcher waits for it at most 15 seconds; if the list never comes, the game starts on the graphics card the system picks, and the saved graphics card choice is left as it is.
 
 **1.36.13:** the English launcher shows its own logo caption "From Ukraine with love!" on GummerCraft packs and your own builds (the Ukrainian one keeps «З України, з любов'ю!»), switching together with the language; Classic look: in a window the build name, the online line and "Join the server" were cut off in 1.36.12, now "Build settings" takes two lines and the online line shortens to "2/200 online" when it does not fit.
 

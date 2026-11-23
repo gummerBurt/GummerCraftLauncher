@@ -119,10 +119,16 @@ public final class Gpu {
             try {
                 List<String> got = f.get(15, TimeUnit.SECONDS);
                 fresh = null;
+                if (got.isEmpty() && names != null) return names; // збій читання: лишити попередній список
                 return names = got;
             } catch (Exception e) {
                 log.info("GPU list refresh failed: " + e);
                 fresh = null;
+                // 23.11.2026: не читати вдруге тут же. Раніше після невдалого фонового читання detect() кликався ще раз
+                // у потоці запуску, і якщо PowerShell висів, запуск гри висів назавжди на «Collecting process arguments»
+                // (90%). Немає списку: гра запускається, як вирішить система (див. beforeLaunch)
+                List<String> n = names;
+                return n != null ? n : Collections.<String>emptyList();
             }
         }
         List<String> n = names;
@@ -225,6 +231,12 @@ public final class Gpu {
         try {
             if (isWindows() && exe != null) rememberJava(instance, exe);
             int c = choice(instance);
+            if (c != AUTO && adapters().isEmpty()) {
+                // 23.11.2026: список відеокарт не прочитався (у ПК завжди є хоча б одна): нічого не міняти, лишити
+                // записане раніше, ніж прибрати вибір дискретної через збій читання
+                log.info("GPU list unknown for this launch, graphics card preference left as it is");
+                return;
+            }
             if (isWindows()) {
                 // «Як вирішить система»: прибрати те, що лаунчер міг записати раніше (нічого, якщо записів немає)
                 if (c == AUTO) forget(baseDir, instance);
@@ -437,27 +449,46 @@ public final class Gpu {
         List<String> cmd = new ArrayList<String>();
         cmd.add(exe.isFile() ? exe.getAbsolutePath() : "reg");
         Collections.addAll(cmd, args);
-        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) if (out != null) out.add(line);
-        }
-        if (!p.waitFor(10, TimeUnit.SECONDS)) {
-            p.destroyForcibly();
-            return -1;
-        }
-        return p.exitValue();
+        return exec(cmd, 10, out);
     }
 
     private static List<String> run(int seconds, String... cmd) throws Exception {
         List<String> out = new ArrayList<String>();
-        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) out.add(line);
-        }
-        if (!p.waitFor(seconds, TimeUnit.SECONDS)) p.destroyForcibly();
+        int code = exec(java.util.Arrays.asList(cmd), seconds, out);
+        if (code == -1) throw new java.util.concurrent.TimeoutException(cmd[0] + " did not finish in " + seconds + " s");
         return out;
+    }
+
+    /**
+     * Запустити процес і чекати не довше {@code seconds}: тоді він убивається, повертається -1.
+     *
+     * <p>23.11.2026 (баг: запуск гри висів на 90% «Collecting process arguments», у лозі «GPU list refresh failed:
+     * TimeoutException»). Раніше вивід читався до кінця ДО {@code waitFor(тайм-аут)}: якщо процес висів (PowerShell з
+     * Get-CimInstance на ПК зі зламаним WMI, антивірус тощо), читання чекало вічно і тайм-аут не діяв. Тепер вивід
+     * читає окремий потік, а основний чекає з тайм-аутом.
+     */
+    private static int exec(List<String> cmd, int seconds, final List<String> out) throws Exception {
+        final Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        p.getOutputStream().close(); // PowerShell інакше може чекати на ввід
+        final List<String> lines = Collections.synchronizedList(new ArrayList<String>());
+        Thread reader = new Thread(() -> {
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) lines.add(line);
+            } catch (Exception ignored) {
+                // процес убито або потік закрито
+            }
+        }, "GPU process output");
+        reader.setDaemon(true);
+        reader.start();
+        if (!p.waitFor(seconds, TimeUnit.SECONDS)) {
+            p.destroyForcibly();
+            log.info("GPU: " + cmd.get(0) + " did not finish in " + seconds + " s, killed");
+            return -1;
+        }
+        reader.join(2000);
+        if (out != null) synchronized (lines) { out.addAll(lines); }
+        return p.exitValue();
     }
 
     private static synchronized List<String[]> readMarks(File baseDir) {

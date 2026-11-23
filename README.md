@@ -78,12 +78,11 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.36.13
+## What's new in 1.36.14
 
-- **English logo.** The English launcher shows the logo caption "From Ukraine with love!", the Ukrainian one «З України, з любов'ю!». It switches together with the language.
-- **Classic: nothing is cut off next to the build name** in a window. "Build settings" takes two lines, and the online line shortens to "2/200 online" when it does not fit.
+- **The game launch no longer hangs at 90%** ("Collecting process arguments") on PCs where Windows is slow to report the list of graphics cards. The launcher waits at most 15 seconds, then starts the game on the graphics card the system picks.
 
-**Previous version, 1.36.12:** progress in worlds of builds from other launchers (an offline account plays with the same UUID as SKlauncher, TLauncher and servers), much faster downloads of Modrinth mods and game files, import from other launchers opens at once, game language follows the system, no cut-off labels with Windows scaling at 125-150%.
+**Previous version, 1.36.13:** English logo caption "From Ukraine with love!", and in the Classic look nothing is cut off next to the build name in a window.
 
 **Every change in every version: [CHANGELOG.md](CHANGELOG.md#english-changelog).**
 
