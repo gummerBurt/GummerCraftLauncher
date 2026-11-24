@@ -4,6 +4,10 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.18
+
+- **Заміна старого exe тепер надійна.** Після закриття лаунчера новий підписаний `GummerCraft.exe` запускається одразу, щойно Java відпустить файли, тож більше немає кількох секунд тиші, коли хочеться клікнути ще раз. Сам файл старого exe замінюється у фоні: якщо він ще зайнятий (наприклад, старий exe відкрили вдруге), лаунчер пробує знову протягом ~90 с, а не здається з першої спроби.
+
 ## 1.36.17
 
 - **Старий exe справді замінюється на місці.** Лаунчер, запущений старим `Gummer_Craft_launcher.exe`, тепер знаходить свій exe і замінює його новим підписаним `GummerCraft.exe` уже після свого закриття (поки лаунчер працює, Windows не дає чіпати цей файл). Якщо замінити не вдалось, старий файл лишається, а новий лаунчер з вбудованою Java однаково запускається.
@@ -270,6 +274,8 @@
 ---
 
 ## English changelog
+
+**1.36.18:** replacing the old exe is now reliable. After the launcher closes, the new signed `GummerCraft.exe` starts right away, as soon as Java releases its files, so there are no longer a few silent seconds that invite a second click. The old exe file itself is swapped in the background: if it is still busy (for example, the old exe was opened again), the launcher keeps trying for ~90 s instead of giving up after the first try.
 
 **1.36.17:** the old `Gummer_Craft_launcher.exe` is now really replaced in place: the launcher finds its exe and swaps it for the new signed `GummerCraft.exe` right after it closes (Windows does not allow touching the file while the launcher runs). If the swap fails, the old file stays and the new launcher with built-in Java starts anyway.
 

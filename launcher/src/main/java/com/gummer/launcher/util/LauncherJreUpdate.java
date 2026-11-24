@@ -45,7 +45,7 @@ import java.util.logging.Logger;
  * <li>{@code minApp}: розпакована установка ({@code version.txt}) старша, тобто в ній непідписаний exe. Діє і на
  * Java 8 (Windows 7/8.1), бо порівнюється версія установки, а не Java.</li>
  * <li>{@code replaceOldExe: true}: лаунчер запущено старим exe без вбудованої Java ({@code Gummer_Craft_launcher.exe},
- * системна Java). Файл старого exe (шлях дає Launch4j у {@code launch4j.exefile}) перейменовується в {@code .old}
+ * системна Java). Файл старого exe (перший запис classpath, з 1.36.17) після закриття лаунчера (cmd, з 1.36.18 з повторними спробами) перейменовується в {@code .old}
  * (запущений exe Windows перейменувати дає, видалити ні), на його місце з тим самим ім'ям кладеться новий
  * {@code GummerCraft.exe}, тож ярлики гравця далі ведуть на нього, і він запускається. Дані гравця не переносяться:
  * обидва exe беруть теку з {@code Документи\GummerCraft\bootstrap.yml}. Лише 64-бітна Windows на x64 (exe з
@@ -63,6 +63,8 @@ public final class LauncherJreUpdate {
     static final String TRIED = "jre-update-tried.txt";
     /** 1.36.15: шлях {@code .old} старого exe після заміни, прибирається при наступному запуску. */
     static final String OLD_EXE = "old-exe-replaced.txt";
+    /** 1.36.18: результат cmd заміни старого exe, наступний запуск пише його в лог і видаляє. */
+    static final String OLD_EXE_RESULT = "old-exe-result.txt";
     private static final Logger log = Logger.getLogger(LauncherJreUpdate.class.getName());
 
     private LauncherJreUpdate() {
@@ -209,25 +211,35 @@ public final class LauncherJreUpdate {
         if (exe == null) return;
         // 1.36.17: поки лаунчер працює, файл старого exe тримає відкритим сама Java (він у classpath: jar усередині exe),
         // і Windows не дає його перейменувати (перевірено 24.11: «being used by another process»). Тому заміну робить cmd
-        // вже після закриття лаунчера: старий у .old, новий на його місце, запуск; не вдалось - старий назад, а новий exe
-        // запускається з temp. Шляхи через змінні середовища і !VAR! (cmd /v:on), щоб & ^ % і пробіли в шляху не ламали команду.
+        // вже після закриття лаунчера.
+        // 1.36.18: у 1.36.17 cmd чекав фіксовані 5 с і пробував один раз, а гравець ці ~6 с бачив порожнечу і запускав
+        // старий exe вдруге; той знову тримав файл, заміна не вдавалась (24.11 у власника на робочому столі). Тепер
+        // окремий cmd-файл: чекає, поки закриється саме цей процес Java (до ~60 с), одразу запускає новий exe (гравець
+        // бачить установку), а старий файл міняє в циклі до ~90 с; результат у OLD_EXE_RESULT, наступний запуск пише його
+        // в лог. Шляхи лише через змінні середовища в лапках (%VAR% без відкладеного розгортання), тож & ^ ! ( ) і пробіли
+        // в шляху нічого не ламають; сам cmd-файл ASCII. ProcessBuilder запускає cmd без вікна (CREATE_NO_WINDOW).
         File bak = new File(old.getParentFile(), old.getName() + ".old");
         try {
             Files.write(new File(launcher.getBaseDir(), OLD_EXE).toPath(), bak.getPath().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             log.info("Can't write " + OLD_EXE + ": " + e);
         }
-        final String script = "ping -n 6 127.0.0.1 >nul & (move /y \"!GC_OLD!\" \"!GC_BAK!\" >nul && "
-                + "(copy /b /y \"!GC_NEW!\" \"!GC_OLD!\" >nul && start \"\" \"!GC_OLD!\" || "
-                + "(move /y \"!GC_BAK!\" \"!GC_OLD!\" >nul & start \"\" \"!GC_NEW!\"))) || start \"\" \"!GC_NEW!\"";
+        final File result = new File(launcher.getBaseDir(), OLD_EXE_RESULT);
+        final File bat = new File(exe.getParentFile(), "gc-replace-exe.cmd");
+        Files.write(bat.toPath(), REPLACE_SCRIPT.getBytes(StandardCharsets.US_ASCII));
+        final String pid = currentPid();
         SwingExecutor.INSTANCE.execute(() -> {
             try {
-                ProcessBuilder pb = new ProcessBuilder(Arrays.asList("cmd.exe", "/v:on", "/c", script)).directory(exe.getParentFile());
+                ProcessBuilder pb = new ProcessBuilder(Arrays.asList("cmd.exe", "/d", "/c", ".\\" + bat.getName()))
+                        .directory(exe.getParentFile());
                 pb.environment().put("GC_OLD", old.getAbsolutePath());
                 pb.environment().put("GC_BAK", bak.getAbsolutePath());
                 pb.environment().put("GC_NEW", exe.getAbsolutePath());
+                pb.environment().put("GC_PID", pid);
+                pb.environment().put("GC_RES", result.getAbsolutePath());
                 pb.start();
-                log.info("Old exe " + old + " will be replaced by " + exe + " after exit (previous kept as " + bak.getName() + ")");
+                log.info("Old exe " + old + " will be replaced by " + exe + " after exit of pid " + pid
+                        + " (previous kept as " + bak.getName() + ")");
                 System.exit(0);
             } catch (IOException e) {
                 log.log(Level.WARNING, "Can't start the old exe replacement", e);
@@ -235,9 +247,71 @@ public final class LauncherJreUpdate {
         });
     }
 
+    /**
+     * 1.36.18: cmd-файл заміни старого exe (див. {@link #replaceOldExe}). Коди в OLD_EXE_RESULT: {@code ok N} (замінено
+     * з N-ї повторної спроби), {@code copy-failed} (старий повернуто на місце), {@code move-failed} (файл весь час був
+     * зайнятий). Новий exe запускається в будь-якому разі, тож гравець отримує новий лаунчер і без заміни файлу.
+     */
+    static final String REPLACE_SCRIPT = String.join("\r\n",
+            "@echo off",
+            "set n=0",
+            ":wait",
+            "if \"%GC_PID%\"==\"\" goto gone",
+            "tasklist /nh /fi \"PID eq %GC_PID%\" 2>nul | find \" %GC_PID% \" >nul",
+            "if errorlevel 1 goto gone",
+            "set /a n+=1",
+            "if %n% geq 60 goto gone",
+            "ping -n 2 127.0.0.1 >nul",
+            "goto wait",
+            ":gone",
+            "start \"\" \"%GC_NEW%\"",
+            "set n=0",
+            ":move",
+            "move /y \"%GC_OLD%\" \"%GC_BAK%\" >nul 2>&1",
+            "if errorlevel 1 goto retry",
+            "copy /b /y \"%GC_NEW%\" \"%GC_OLD%\" >nul 2>&1",
+            "if errorlevel 1 goto restore",
+            "del /f \"%GC_BAK%\" >nul 2>&1",
+            "> \"%GC_RES%\" echo ok %n%",
+            "goto end",
+            ":restore",
+            "move /y \"%GC_BAK%\" \"%GC_OLD%\" >nul 2>&1",
+            "> \"%GC_RES%\" echo copy-failed %n%",
+            "goto end",
+            ":retry",
+            "set /a n+=1",
+            "if %n% geq 30 goto fail",
+            "ping -n 4 127.0.0.1 >nul",
+            "goto move",
+            ":fail",
+            "> \"%GC_RES%\" echo move-failed %n%",
+            ":end",
+            "(goto) 2>nul & del \"%~f0\"",
+            "");
+
+    /** PID цього процесу Java (Java 8 сумісно) або "" (тоді cmd не чекає). */
+    static String currentPid() {
+        try {
+            String n = java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
+            String p = n.substring(0, n.indexOf('@'));
+            return p.matches("[0-9]+") ? p : "";
+        } catch (RuntimeException e) {
+            return "";
+        }
+    }
+
     /** Прибрати {@code .old} після заміни (при першому запуску він ще міг бути зайнятий). */
     private static void cleanupOldExe(Launcher launcher) throws IOException {
+        File res = new File(launcher.getBaseDir(), OLD_EXE_RESULT);
         File note = new File(launcher.getBaseDir(), OLD_EXE);
+        if (res.isFile()) {
+            log.info("Old exe replacement result: " + new String(Files.readAllBytes(res.toPath()), StandardCharsets.US_ASCII).trim());
+            Files.deleteIfExists(res.toPath());
+        } else if (note.isFile() && System.currentTimeMillis() - note.lastModified() < 10 * 60 * 1000L) {
+            // 1.36.18: cmd заміни ще працює (новий лаунчер він запускає раніше, ніж міняє файл): .old не чіпати,
+            // інакше між move і copy можна видалити єдину копію старого exe
+            return;
+        }
         if (!note.isFile()) return;
         File bak = new File(new String(Files.readAllBytes(note.toPath()), StandardCharsets.UTF_8).trim());
         if (bak.getName().toLowerCase(Locale.ROOT).endsWith(".exe.old")) {

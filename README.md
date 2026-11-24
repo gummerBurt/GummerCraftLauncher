@@ -78,7 +78,11 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.36.17
+## What's new in 1.36.18
+
+- **Replacing the old exe is now reliable.** After the launcher closes, the new signed `GummerCraft.exe` starts right away, as soon as Java releases its files, so there are no longer a few silent seconds that invite a second click. The old exe file itself is swapped in the background: if it is still busy (for example, the old exe was opened again), the launcher keeps trying for ~90 s instead of giving up after the first try.
+
+**Also new in 1.36.17:**
 
 - **Old exe files are now really replaced:** the old `Gummer_Craft_launcher.exe` is swapped for the signed `GummerCraft.exe` in place right after the launcher closes, and the launcher's own Java update starts by itself (in 1.36.15-1.36.16 this did not run).
 
