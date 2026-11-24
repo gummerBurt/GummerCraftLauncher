@@ -4,6 +4,10 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.16
+
+- **Заміна старих exe і оновлення Java лаунчера тепер справді запускаються самі.** У 1.36.15 (і з 1.36.2 для оновлення Java) перевірка при старті не викликалась, працювала лише кнопка «Оновити» в налаштуваннях.
+
 ## 1.36.15
 
 - **Лаунчер тепер підписаний.** Exe лаунчера підписані сертифікатом розробника Certum: у властивостях файлу і у вікні Windows видавець «Open Source Developer, Mykola Netreba» замість «Невідомий видавець», менше хибних спрацювань антивірусів.
@@ -262,6 +266,8 @@
 ---
 
 ## English changelog
+
+**1.36.16:** replacing old exe files and updating the launcher's own Java now really start by themselves. In 1.36.15 (and since 1.36.2 for the Java update) the check at startup was never called, only the "Update" button in the settings worked.
 
 **1.36.15:** the launcher exe files are signed with a Certum developer certificate (publisher "Open Source Developer, Mykola Netreba"). The old `Gummer_Craft_launcher.exe` without built-in Java is replaced once by the new signed `GummerCraft.exe` with built-in Java under the same file name, installs with built-in Java get the signed exe too; builds, accounts and settings stay. The exe error window is now called "GummerCraft Launcher" instead of "Please install Java" and says what to do.
 

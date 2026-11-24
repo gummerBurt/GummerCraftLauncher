@@ -112,6 +112,10 @@ public class FancyLauncher {
                     first.validate();
                     SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(() -> first.setVisible(true)));
                     prewarmOptions(launcher, first);
+                    // 24.11.2026 (1.36.16): оновлення Java лаунчера і заміна непідписаного exe (installer.json). Виклик
+                    // стояв лише в Launcher.main, а лаунчер стартує тут, тож з 1.36.2 автоматично це не запускалось ніколи
+                    // (працювала лише кнопка «Оновити» в плитці «Оновлення Java»)
+                    com.gummer.launcher.util.LauncherJreUpdate.start(launcher, first);
                     // 21.11.2026: статус у Discord (тихо нічого не робить, якщо Discord не запущено)
                     com.gummer.launcher.discord.DiscordPresence.start(launcher);
 
