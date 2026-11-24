@@ -128,6 +128,11 @@ public final class ModInfo {
         return info;
     }
 
+    /** 24.11.2026: відомості з кешу без читання jar, або null, якщо цей файл (з таким розміром і датою) ще не читали. */
+    public static ModInfo peek(File jar) {
+        return CACHE.get(key(jar));
+    }
+
     /** Лише ідентифікатор мода (modId), або null. */
     public static String idOf(File jar) {
         return of(jar).id;

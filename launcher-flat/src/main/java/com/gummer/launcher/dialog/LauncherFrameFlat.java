@@ -240,7 +240,8 @@ public class LauncherFrameFlat extends JFrame {
         //);
         // дизайн 1.35: слоти хотбару замість картинок 101x101 (іконки ті самі, вирізані з settings/faq/support_*.png)
         optionsButton = new HotbarSlot("ui/icon/slot/settings.png", SharedLocale.tr("look.slot.settings"), SharedLocale.tr("tooltip.settings"));
-        manageButton = new HotbarSlot("ui/icon/slot/build.png", SharedLocale.tr("look.slot.manage"), SharedLocale.tr("manage.tooltip"), 72);
+        manageButton = new HotbarSlot("ui/icon/slot/build.png", SharedLocale.tr("look.slot.manage"), SharedLocale.tr("manage.tooltip"), 72)
+                .highlight(); // 24.11.2026: найважливіша кнопка, зелений відтінок і рамка
         wikiButton = new HotbarSlot("ui/icon/slot/faq.png", SharedLocale.tr("look.slot.wiki"), SharedLocale.tr("tooltip.faq"));
         supportService = com.gummer.launcher.support.SupportService.create(launcher);
         if (supportService != null) {
@@ -1758,7 +1759,7 @@ public class LauncherFrameFlat extends JFrame {
     private void importMrpack() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle(tr("mrpack.chooseTitle"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth (.mrpack, .zip)", "mrpack", "zip"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth, CurseForge (.mrpack, .zip)", "mrpack", "zip"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         final File file = chooser.getSelectedFile();
         final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
@@ -1983,6 +1984,8 @@ public class LauncherFrameFlat extends JFrame {
     private final CardLayout mainCards = new CardLayout();
     private final JPanel mainHolder = new JPanel(mainCards);
     private ModrinthPage modrinthPage;
+    /** 1.40.0: сторінка модпаків CurseForge (рядок «CurseForge» під Modrinth). */
+    private ModrinthPage curseforgePage;
     /** Версія, «Збірка» і «Запуск» (на сторінці Modrinth сховані). */
     private JPanel launchGroupRef;
 
@@ -2010,6 +2013,14 @@ public class LauncherFrameFlat extends JFrame {
             if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> afterCatalogInstall(added.getName()));
         }, this::playBuild);
         mainHolder.add(modrinthPage, "modrinth");
+        curseforgePage = new ModrinthPage(launcher, true, name -> {
+            // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,
+            // збірка вибирається і одразу ставляться гра і завантажувач, без ще одного натискання «Встановити»
+            Instance added = showNewBuild(name);
+            // 20.11.2026: після встановлення «Встановлені» на цій збірці, гра не запускається
+            if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> afterCatalogInstall(added.getName()));
+        }, this::playBuild);
+        mainHolder.add(curseforgePage, "curseforge");
         return mainHolder;
     }
 
@@ -2075,7 +2086,9 @@ public class LauncherFrameFlat extends JFrame {
         }
         if (modrinthPage == null) return;
         boolean browse = InstanceTableModel.isBrowser(getSelectedInstance());
-        mainCards.show(mainHolder, browse ? "modrinth" : "main");
+        boolean curseRow = InstanceTableModel.isCurseRow(getSelectedInstance());
+        ModrinthPage page = curseRow && curseforgePage != null ? curseforgePage : modrinthPage;
+        mainCards.show(mainHolder, browse ? (curseRow ? "curseforge" : "modrinth") : "main");
         topAreaHeight = browse ? 12 : 150;
         if (accountBoxRef != null) accountBoxRef.setVisible(!browse); // сторінка Modrinth на всю висоту
         if (topArea != null) topArea.revalidate();
@@ -2089,7 +2102,7 @@ public class LauncherFrameFlat extends JFrame {
         // 17.11.2026 (власник: «що таке "Modrinth - не встановлено"... ми ж не встановлюємо модрінт»): на сторінці
         // модпаків кнопок запуску і «Збірка» немає, модпак ставиться кнопкою «Встановити» біля його версії
         if (launchGroupRef != null) launchGroupRef.setVisible(!browse);
-        if (browse) modrinthPage.shown();
+        if (browse) page.shown();
     }
 
     /** Знову вибрати збірку на ім'я (або запам'ятовану), не записуючи це як вибір гравця. */

@@ -41,11 +41,17 @@ public class HttpDownloader implements Downloader {
     private final HashFunction hf = Hashing.sha1();
 
     private final File tempDir;
-    @Getter @Setter private int threadCount = 6;
+    /** 24.11.2026: 6 -> 16 (замір ассетів 1.16.5 з Mojang: 6 потоків 14,7 с, 16 потоків 7,2 с; пул keep-alive теж 16). */
+    @Getter @Setter private int threadCount = 16;
     @Getter @Setter private int retryDelay = 2000;
     @Getter @Setter private int tryCount = 3;
     /** 1.32.2: скільки разів після основного проходу повторювати файли з помилкою (раніше 1). */
     private static final int RETRY_ROUNDS = 4;
+    /**
+     * 24.11.2026: кола повторів ідуть у 4 потоки, а не в threadCount (16). Файли не скачались, найчастіше, через слабкий
+     * чи нестабільний зв'язок (обриви, «Connect timed out»), і 16 одночасних з'єднань там лише душать канал.
+     */
+    private static final int RETRY_THREADS = 4;
     /** 1.32.2: поточне коло повторів (0 = основний прохід), для статусу у вікні. */
     private int retryRound = 0;
     /**
@@ -175,6 +181,7 @@ public class HttpDownloader implements Downloader {
 
         ListeningExecutorService executor = MoreExecutors.listeningDecorator(
                 Executors.newFixedThreadPool(threadCount));
+        ListeningExecutorService retryExecutor = null;
 
         try {
             List<ListenableFuture<?>> futures = new ArrayList<ListenableFuture<?>>();
@@ -204,8 +211,12 @@ public class HttpDownloader implements Downloader {
                 log.info("Retrying " + retry.size() + " failed download(s), round " + round + " of " + RETRY_ROUNDS);
                 Thread.sleep(round * 3000L);
                 futures.clear();
+                if (retryExecutor == null) {
+                    retryExecutor = MoreExecutors.listeningDecorator(
+                            Executors.newFixedThreadPool(Math.min(RETRY_THREADS, threadCount)));
+                }
                 for (HttpDownloadJob job : retry) {
-                    futures.add(executor.submit(job));
+                    futures.add(retryExecutor.submit(job));
                 }
                 try {
                     Futures.allAsList(futures).get();
@@ -230,6 +241,7 @@ public class HttpDownloader implements Downloader {
             }
         } finally {
             executor.shutdownNow();
+            if (retryExecutor != null) retryExecutor.shutdownNow();
         }
     }
 

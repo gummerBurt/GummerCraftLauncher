@@ -27,7 +27,8 @@ import java.util.logging.Logger;
 /**
  * 1.32.1: перший запуск версії Vanilla як у збірок GummerCraft. Гра одразу українською (лише коли
  * {@code options.txt} ще немає, тобто налаштування гравця не чіпаємо) і сервер GummerCraft першим у списку
- * мережевої гри (один раз на версію: якщо гравець його видалить, він не повернеться). Збірки GummerCraft
+ * мережевої гри (один раз на версію: якщо гравець його видалить, він не повернеться; з 1.40 лише чиста Vanilla, без
+ * завантажувачів і модових збірок). Збірки GummerCraft
  * мають те саме у своїх файлах ({@code options.txt}, {@code servers.dat}), тут лише Vanilla.
  * Будь-яка помилка лише пишеться в лог: запуск гри через це не зупиняється.
  */
@@ -66,6 +67,11 @@ public final class VanillaDefaults {
         } catch (Exception e) {
             log.log(Level.WARNING, "Vanilla: could not write options.txt", e);
         }
+        // 24.11.2026 (1.40, власник: «прибери "рекламу гаммеркрафту" в модових збірках ... залиш лише на ванілі.
+        // гравець все одно не приєднається»): сервер GummerCraft у «Гра в мережі» лише для чистої Vanilla. Збірки
+        // Fabric, Quilt, Forge, NeoForge, Modrinth і CurseForge його більше не отримують (у кого вже додано, лишається:
+        // servers.dat гравця не чіпаємо)
+        if (!instance.isVanilla()) return;
         try {
             applyServer(dir);
         } catch (Exception e) {

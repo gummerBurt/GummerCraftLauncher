@@ -104,7 +104,7 @@ public final class InstanceMods {
 
     /** Чи це файл мода (увімкнений чи вимкнений). */
     public static boolean isModFile(File f) {
-        if (!f.isFile()) return false;
+        if (!(f instanceof Snap) && !f.isFile()) return false; // Snap: перелік теки вже знає, що це файл
         String n = f.getName().toLowerCase(Locale.ROOT);
         if (n.endsWith(DISABLED)) n = n.substring(0, n.length() - DISABLED.length());
         return n.endsWith(".jar") || n.endsWith(".zip") || n.endsWith(".litemod");
@@ -120,10 +120,65 @@ public final class InstanceMods {
         return n.contains("staldayz") || n.contains("dayz");
     }
 
+    /**
+     * 24.11.2026 (власник: «інтерфейс лаунчера має "літати"»): файл з розміром і датою, прочитаними разом з переліком
+     * теки. Список модів, кеш описів, іконок і сторін (клієнт/сервер) брали розмір і дату кожного файлу окремо, 6-8
+     * разів на мод; на збірці зі 196 модами це ~1500 звертань до диска в потоці інтерфейсу (~0,1 с при кожному
+     * відкритті «Моди»). Windows віддає розмір і дату всіх файлів теки одним переліком. Знімок: після змін у теці
+     * список читається заново (fillMods), а решта (існування, перейменування, вміст) працює як звичайний File.
+     */
+    static final class Snap extends File {
+        private final long len;
+        private final long mod;
+
+        Snap(File dir, String name, long len, long mod) {
+            super(dir, name);
+            this.len = len;
+            this.mod = mod;
+        }
+
+        @Override
+        public long length() {
+            return len;
+        }
+
+        @Override
+        public long lastModified() {
+            return mod;
+        }
+
+    }
+
+    /** Звичайні файли теки (без підтек) зі знімком розміру і дати, одним переліком; null, якщо теки немає чи збій. */
+    static File[] listSnapped(File dir) {
+        if (!dir.isDirectory()) return null;
+        final List<File> out = new ArrayList<File>();
+        try {
+            java.nio.file.Files.walkFileTree(dir.toPath(), java.util.EnumSet.noneOf(java.nio.file.FileVisitOption.class), 1,
+                    new java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+                        @Override
+                        public java.nio.file.FileVisitResult visitFile(java.nio.file.Path p, java.nio.file.attribute.BasicFileAttributes a) {
+                            if (a.isRegularFile()) {
+                                out.add(new Snap(dir, p.getFileName().toString(), a.size(), a.lastModifiedTime().toMillis()));
+                            }
+                            return java.nio.file.FileVisitResult.CONTINUE;
+                        }
+
+                        @Override
+                        public java.nio.file.FileVisitResult visitFileFailed(java.nio.file.Path p, IOException e) {
+                            return java.nio.file.FileVisitResult.CONTINUE;
+                        }
+                    });
+        } catch (IOException | RuntimeException e) {
+            return dir.listFiles(); // як раніше
+        }
+        return out.toArray(new File[0]);
+    }
+
     /** Моди в теці mods (без підтек: туди Forge кладе бібліотеки за версією гри), за назвою. */
     public static List<Mod> list(Instance instance) {
         List<Mod> out = new ArrayList<Mod>();
-        File[] files = modsDir(instance).listFiles();
+        File[] files = listSnapped(modsDir(instance));
         if (files == null) return out;
         Set<String> pack = instance.isBuiltIn() ? Collections.<String>emptySet() : packFiles(instance);
         boolean lock = packModsLocked(instance);

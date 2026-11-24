@@ -43,6 +43,41 @@ public final class FontCheck {
      * системні (Segoe UI теж TrueType). true, якщо зареєстровано основне накреслення.
      */
     public static boolean installInter() {
+        java.util.concurrent.FutureTask<boolean[]> t = early;
+        if (t != null) {
+            try {
+                boolean[] r = t.get();
+                if (!r[0] && r.length > 1) return r[1]; // фонова підготовка вже зареєструвала (або не змогла)
+            } catch (Exception ignored) {
+                // як без підготовки
+            }
+        }
+        return installInterNow();
+    }
+
+    /**
+     * 24.11.2026 (власник: «лаунчер натурально ЛІТАВ»): реєстрація шрифту в Java 8 сама перебирає всі шрифти системи
+     * (сторож потоку інтерфейсу: 0,1-0,2 с, на щойно ввімкненому ПК до 1,6 с), і це було в потоці інтерфейсу до показу
+     * вікна. Тепер те саме ({@link #systemHasInter} і {@link #installInter}, у тому ж порядку) стартує у фоні першим
+     * рядком запуску, паралельно з читанням налаштувань і збірок; потік інтерфейсу потім лише бере готове. Результат
+     * {@code {система має Inter 1/0, зареєстровано}}.
+     */
+    private static volatile java.util.concurrent.FutureTask<boolean[]> early;
+
+    public static void prepareEarly() {
+        if (early != null) return;
+        java.util.concurrent.FutureTask<boolean[]> t = new java.util.concurrent.FutureTask<boolean[]>(() -> {
+            boolean has = systemHasInterNow();
+            if (has) return new boolean[]{true};
+            return new boolean[]{false, installInterNow()};
+        });
+        early = t;
+        Thread th = new Thread(t, "GummerCraft fonts");
+        th.setDaemon(true);
+        th.start();
+    }
+
+    private static boolean installInterNow() {
         boolean regular = false;
         GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
         for (String name : FILES) {
@@ -59,12 +94,60 @@ public final class FontCheck {
 
     /** Чи є в системі свій шрифт з родиною «Inter» (викликати до installInter). */
     public static boolean systemHasInter() {
+        java.util.concurrent.FutureTask<boolean[]> t = early;
+        if (t != null) {
+            try {
+                return t.get()[0];
+            } catch (Exception ignored) {
+                // як без підготовки
+            }
+        }
+        return systemHasInterNow();
+    }
+
+    private static boolean systemHasInterNow() {
+        // 24.11.2026 (власник: «лаунчер натурально ЛІТАВ»): на Windows пошук родини, якої в системі немає, змушує Java
+        // відкрити КОЖЕН файл шрифтів системи (сторож потоку інтерфейсу: 0,6-1,6 с при кожному старті, до показу
+        // вікна). Встановлений шрифт Windows кладе файлом у теку шрифтів, тож досить глянути назви файлів. Помилка в
+        // бік «немає» не страшна: після встановлення оформлення interMismatch() однаково звіряє розміри і вертає Segoe UI
+        if (isWindows()) return windowsHasInterFile();
         try {
             Font f = new Font("Inter", Font.PLAIN, 12);
             return "Inter".equalsIgnoreCase(f.getFamily(Locale.ROOT));
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+    }
+
+    /** Файли «Inter-Regular.ttf», «InterVariable.ttf», «Inter.ttc», «Inter_18pt-...» у системній чи своїй теці шрифтів. */
+    static boolean windowsHasInterFile() {
+        java.util.List<java.io.File> dirs = new java.util.ArrayList<java.io.File>();
+        String win = System.getenv("WINDIR");
+        dirs.add(new java.io.File(win != null ? win : "C:\\Windows", "Fonts"));
+        String local = System.getenv("LOCALAPPDATA");
+        if (local != null) dirs.add(new java.io.File(local, "Microsoft\\Windows\\Fonts"));
+        for (java.io.File d : dirs) {
+            String[] names = d.list();
+            if (names == null) continue;
+            for (String n : names) {
+                if (isInterFileName(n)) {
+                    log.info("UI font: system Inter file " + new java.io.File(d, n));
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** «Inter», а не «Inter Tight» чи «Interstate»: після «inter» розділювач, «variable» або розширення. */
+    static boolean isInterFileName(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        if (!(n.endsWith(".ttf") || n.endsWith(".otf") || n.endsWith(".ttc") || n.endsWith(".otc"))) return false;
+        return n.matches("inter([-_ .].*|variable.*|display.*)");
     }
 
     /**

@@ -91,7 +91,7 @@ public class LauncherFrameFlat3 extends JFrame {
     // init bottom buttons
     private final JButton optionsButton;
     /** 17.11.2026: «Збірка» біля «Грати»: вікно «Керування збіркою». */
-    private final Btn manageButton = new Btn(tr("ui3.manage"), Glyph.BOX, Btn.Style.TONAL).height(64);
+    private final Btn manageButton = new Btn(tr("ui3.manage"), Glyph.BOX, Btn.Style.HIGHLIGHT).height(64); // 24.11.2026: HIGHLIGHT, найважливіша кнопка виділена
     private final JButton wikiButton;
     /** 1.32: звернення в підтримку (null, якщо в launcher.properties немає supportInboxId). */
     private final com.gummer.launcher.support.SupportService supportService;
@@ -1229,7 +1229,7 @@ public class LauncherFrameFlat3 extends JFrame {
                     : icon instanceof Icon ? (Icon) icon : null;
             t.title = instancesModel.titleOf(i);
             // 19.11.2026: плитка «Імпорт збірки» з тим самим фоном, що Modrinth над нею
-            String key = com.gummer.launcher.FlatBackgroundPanel3.lookKey(InstanceTableModel.isImportRow(i) ? InstanceTableModel.MODRINTH : i);
+            String key = com.gummer.launcher.FlatBackgroundPanel3.lookKey(InstanceTableModel.isImportRow(i) || InstanceTableModel.isCurseRow(i) ? InstanceTableModel.MODRINTH : i);
             // 17.11.2026 ~23:35: свій фон на плитці лише у «Встановлених», у «Усі» плитка розділу зі своїм оформленням
             final java.awt.image.BufferedImage art = instancesModel.isInstalledOnly() ? com.gummer.launcher.manage.InstanceArt.background(i) : null;
             if (art != null) {
@@ -1248,7 +1248,7 @@ public class LauncherFrameFlat3 extends JFrame {
                 t.group = instancesModel.installedCaption(i, r > 0 ? instancesModel.getInstanceAt(r - 1) : null);
             }
             if (InstanceTableModel.isBrowser(i) && !InstanceTableModel.isAddRow(i)) t.group = tr("launcher.section.modrinth"); // 17.11.2026
-            if (InstanceTableModel.isImportRow(i)) t.group = null; // 19.11.2026: під Modrinth, у тому ж розділі
+            if (InstanceTableModel.isImportRow(i) || InstanceTableModel.isCurseRow(i)) t.group = null; // 19.11.2026: під Modrinth, у тому ж розділі
             boolean browser = InstanceTableModel.isBrowser(i); // 17.11.2026: плитка сторінки Modrinth
             t.notInstalled = !browser && !i.isLocal();
             t.update = i.isLocal() && (!i.isInstalled() || i.isUpdatePending());
@@ -1894,7 +1894,7 @@ public class LauncherFrameFlat3 extends JFrame {
     private void importMrpack() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle(tr("mrpack.chooseTitle"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth (.mrpack, .zip)", "mrpack", "zip"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth, CurseForge (.mrpack, .zip)", "mrpack", "zip"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         final File file = chooser.getSelectedFile();
         final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
@@ -2018,6 +2018,8 @@ public class LauncherFrameFlat3 extends JFrame {
     private final CardLayout mainCards = new CardLayout();
     private final JPanel mainHolder = new JPanel(mainCards);
     private ModrinthPage modrinthPage;
+    /** 1.40.0: сторінка модпаків CurseForge (рядок «CurseForge» під Modrinth). */
+    private ModrinthPage curseforgePage;
 
     private com.gummer.launcher.look.ListModeSwitch listSwitchRef;
     /** 20.11.2026: ще не вирішено, чи лишити «Встановлені» на старті (див. selectRememberedInstance). */
@@ -2071,6 +2073,14 @@ public class LauncherFrameFlat3 extends JFrame {
             if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> afterCatalogInstall(added.getName()));
         }, this::playBuild);
         mainHolder.add(modrinthPage, "modrinth");
+        curseforgePage = new ModrinthPage(launcher, true, name -> {
+            // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,
+            // збірка вибирається і одразу ставляться гра і завантажувач, без ще одного натискання «Встановити»
+            Instance added = showNewBuild(name);
+            // 20.11.2026: після встановлення «Встановлені» на цій збірці, гра не запускається
+            if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> afterCatalogInstall(added.getName()));
+        }, this::playBuild);
+        mainHolder.add(curseforgePage, "curseforge");
         return mainHolder;
     }
 
@@ -2135,10 +2145,12 @@ public class LauncherFrameFlat3 extends JFrame {
         }
         if (modrinthPage == null) return;
         boolean browse = InstanceTableModel.isBrowser(getSelectedInstance());
-        placeVote(browse ? modrinthPage.headerSlot() : heroRightRef);
-        mainCards.show(mainHolder, browse ? "modrinth" : "main");
+        placeVote(browse ? (InstanceTableModel.isCurseRow(getSelectedInstance()) && curseforgePage != null ? curseforgePage : modrinthPage).headerSlot() : heroRightRef);
+        boolean curseRow = InstanceTableModel.isCurseRow(getSelectedInstance());
+        ModrinthPage page = curseRow && curseforgePage != null ? curseforgePage : modrinthPage;
+        mainCards.show(mainHolder, browse ? (curseRow ? "curseforge" : "modrinth") : "main");
         
-        if (browse) modrinthPage.shown();
+        if (browse) page.shown();
     }
 
     /** Знову вибрати збірку на ім'я (або запам'ятовану), не записуючи це як вибір гравця. */

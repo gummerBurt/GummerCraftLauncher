@@ -127,7 +127,7 @@ public class FlatBackgroundPanel3 extends JPanel {
         currentLayout = layout;
         Scene next = new Scene(background != null ? background : defaultBackground, background != null,
                 intOf(layout, "background.x"), intOf(layout, "background.y"),
-                FlatBackgroundPanel.BROWSER_LOOK.equalsIgnoreCase(packName) ? FlatBackgroundPanel.NO_LOGO // 17.11.2026: сторінка Modrinth
+                FlatBackgroundPanel.isBrowserLook(packName) ? FlatBackgroundPanel.NO_LOGO // 17.11.2026: сторінка Modrinth
                         : logo != null ? logo : defaultLogo, intOf(layout, "logo.x"), intOf(layout, "logo.y"));
         if (next.looksSame(current)) return;
 

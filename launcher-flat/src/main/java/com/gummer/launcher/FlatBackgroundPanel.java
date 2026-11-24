@@ -43,6 +43,13 @@ public class FlatBackgroundPanel extends JPanel {
     private static final int VIEW_CENTER_X = LOGO_X + LOGO_W / 2;
     /** 17.11.2026: оформлення сторінки Modrinth (bg_modrinth.jpg, без лого збірки і написів); те саме ім'я в Класиці і Бібліотеці. */
     public static final String BROWSER_LOOK = "modrinth";
+    /** 24.11.2026 (власник: «для сторінки CurseForge зміни бекграунд на якийсь з CurseForge»): bg_curseforge.jpg, теж без лого. */
+    public static final String CURSE_LOOK = "curseforge";
+
+    /** Сторінка Modrinth чи CurseForge: свій фон, без лого збірки і написів. */
+    public static boolean isBrowserLook(String key) {
+        return BROWSER_LOOK.equalsIgnoreCase(key) || CURSE_LOOK.equalsIgnoreCase(key);
+    }
     /** Порожнє лого: сцена без логотипа (сторінка Modrinth). */
     static final Image NO_LOGO = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
 
@@ -225,7 +232,7 @@ public class FlatBackgroundPanel extends JPanel {
     private boolean prewarmHooked;
     private Timer prewarmTimer;
     /** Збірки з власним фоном (look.FrameImages), Modrinth і без оформлення (GummerCraft, свої збірки). */
-    private static final String[] PREWARM_KEYS = {"staldayz", "vanilla", "fabric", "quilt", "forge", "neoforge", "modrinth", "default"};
+    private static final String[] PREWARM_KEYS = {"staldayz", "vanilla", "fabric", "quilt", "forge", "neoforge", "modrinth", "curseforge", "default"};
 
     /**
      * 18.11.2026 (власник: «лаунчер включився на модрінті, я клацнув на сталдейз - затуп пів секунди перш ніж
@@ -341,7 +348,7 @@ public class FlatBackgroundPanel extends JPanel {
         }
         if (customBackground != null) background = customBackground;
         currentLayout = layout;
-        boolean browser = BROWSER_LOOK.equals(key);
+        boolean browser = isBrowserLook(key);
         pickSplashes(packName);
         if (browser) {
             splashes = new String[0];

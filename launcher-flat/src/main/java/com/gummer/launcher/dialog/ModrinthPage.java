@@ -40,6 +40,15 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
  * модом»; «сортування, фільтри за категоріями, на встановленому модпаку "Грати"»): вкладки «Модпаки» і «Моди»,
  * порядок (популярні, нові, оновлені), категорія; у мода «Встановити» зі списком збірок, куди він підходить, і «Нова
  * збірка з цим модом»; у встановленого модпака «Грати» і, якщо вийшла новіша версія, «Оновити до ...».</p>
+ *
+ * <p>1.40.0 (24.11.2026, власник: «зроби тут вкладку CurseForge і скачку модпаків з курсфордж точно як з модрінта»):
+ * та сама сторінка в режимі CurseForge ({@code curse}): лише модпаки, категорії CurseForge, пошук і версії через наш
+ * проксі (curseforge.CurseBrowse), «Встановити» ставить zip-збірку CurseForge. Оновлення встановленого модпака
+ * CurseForge поки немає (MrpackUpdate вміє лише Modrinth).</p>
+ *
+ * <p>24.11.2026 (власник: «модпаки одним кліком - курсфордж працювали так само як модрінт - мали вкладку і модпаки, і
+ * моди»): у режимі CurseForge теж вкладка «Моди» з тими самими «Встановити в збірку» і «Нова збірка з цим модом»
+ * (curseforge.CurseBrowse.modVersions і installFile), категорії свого виду.</p>
  */
 public final class ModrinthPage extends JPanel {
 
@@ -50,6 +59,10 @@ public final class ModrinthPage extends JPanel {
     private static final int FIRST_VERSIONS = 6;
 
     private final Launcher launcher;
+    /** 1.40.0: сторінка CurseForge, інакше Modrinth. */
+    private final boolean curse;
+    /** Категорії CurseForge {id, назва} для поточної вкладки, довантажуються при її першому показі. */
+    private List<Object[]> curseCategories = new java.util.ArrayList<Object[]>();
     /** Модпак встановлено: назва нової збірки (вікно перечитує список і вибирає її). */
     private final Consumer<String> installed;
     /** «Грати»: назва збірки, яку вибрати і запустити. */
@@ -89,10 +102,15 @@ public final class ModrinthPage extends JPanel {
     private boolean busy;
 
     public ModrinthPage(Launcher launcher, Consumer<String> installed, Consumer<String> play) {
+        this(launcher, false, installed, play);
+    }
+
+    public ModrinthPage(Launcher launcher, boolean curse, Consumer<String> installed, Consumer<String> play) {
         // рядки: заголовок, підказка, фільтри, «Знайдено», результати. 17.11.2026: після появи підказки розтягувався рядок
         // «Знайдено» (на весь екран «Знайдено: 1» посередині, картки внизу), тепер росте лише список результатів
         super(new MigLayout("insets 20 22 14 18, gap 0, wrap 1, fill", "[grow,fill]", "[][]12[]8[][grow,fill]"));
         this.launcher = launcher;
+        this.curse = curse;
         this.installed = installed;
         this.play = play;
         setOpaque(false);
@@ -100,6 +118,7 @@ public final class ModrinthPage extends JPanel {
 
         JPanel top = new JPanel(new MigLayout("insets 0, gap 16", "[][]push[]", "[]"));
         top.setOpaque(false);
+        if (curse) title.setText(tr("cpage.title"));
         top.add(title);
         com.gummer.launcher.look.ListModeSwitch tabs = new com.gummer.launcher.look.ListModeSwitch(
                 tr("mpage.tab.packs"), tr("mpage.tab.mods"), false, mods -> setKind(mods ? ModrinthBrowse.Kind.MOD : ModrinthBrowse.Kind.MODPACK));
@@ -107,7 +126,7 @@ public final class ModrinthPage extends JPanel {
         headerSlot.setOpaque(false);
         top.add(headerSlot, "aligny center");
         add(top, "wmin 0");
-        hint = new WrapText(tr("mpage.hint")); // 17.11.2026: у Класиці звичайний текст обрізався збоку
+        hint = new WrapText(tr(curse ? "cpage.hint" : "mpage.hint")); // 17.11.2026: у Класиці звичайний текст обрізався збоку
         add(hint, "gaptop 4, wmin 0");
 
         // 17.11.2026: з категоріями і сортуванням рядок став ширшим за сторінку (сторінка виїжджала за край, обрізались
@@ -115,7 +134,7 @@ public final class ModrinthPage extends JPanel {
         // списку за його найдовшим пунктом, але не більше 150-170 (раніше фіксовані 130 обрізали «Усі завантажувачі»)
         JPanel filters = new JPanel(new MigLayout("insets 0, gap 8", "[grow,fill,100::][pref:pref:170,fill][pref:pref:150,fill][pref:pref:170,fill][pref:pref:170,fill]", "[34!]"));
         filters.setOpaque(false);
-        search.putClientProperty("JTextField.placeholderText", tr("mpage.placeholder"));
+        search.putClientProperty("JTextField.placeholderText", tr(curse ? "cpage.placeholder" : "mpage.placeholder"));
         search.putClientProperty("JTextField.showClearButton", true);
         filters.add(search, "wmin 100");
         loaderBox.addItem(tr("mpage.allLoaders"));
@@ -188,13 +207,34 @@ public final class ModrinthPage extends JPanel {
         if (k == kind) return;
         kind = k;
         boolean mods = k == ModrinthBrowse.Kind.MOD;
-        title.setText(tr(mods ? "mpage.titleMods" : "mpage.title"));
-        hint.setText(tr(mods ? "mpage.hintMods" : "mpage.hint"));
-        search.putClientProperty("JTextField.placeholderText", tr(mods ? "mpage.placeholderMods" : "mpage.placeholder"));
+        String p = curse ? "cpage." : "mpage.";
+        title.setText(tr(p + (mods ? "titleMods" : "title")));
+        hint.setText(tr((mods ? "mpage." : p) + (mods ? "hintMods" : "hint"))); // підказка модів однакова
+        search.putClientProperty("JTextField.placeholderText", tr(mods ? "mpage.placeholderMods" : p + "placeholder"));
         search.repaint();
         categories = mods ? ModrinthBrowse.MOD_CATEGORIES : ModrinthBrowse.MODPACK_CATEGORIES;
+        if (curse) {
+            curseCategories = new java.util.ArrayList<Object[]>();
+            loadCurseCategories(k);
+        }
         fillCategories();
         reload();
+    }
+
+    /** Категорії CurseForge цього виду у фоні; поки вкладка та сама, список оновлюється. */
+    private void loadCurseCategories(final ModrinthBrowse.Kind k) {
+        ModrinthBrowse.POOL.submit(() -> {
+            try {
+                final List<Object[]> cats = com.gummer.launcher.curseforge.CurseBrowse.categories(launcher, k);
+                SwingUtilities.invokeLater(() -> {
+                    if (k != kind) return;
+                    curseCategories = cats;
+                    fillCategories();
+                });
+            } catch (Exception e) {
+                log.log(Level.INFO, "No CurseForge categories", e);
+            }
+        });
     }
 
     private void fillCategories() {
@@ -202,11 +242,21 @@ public final class ModrinthPage extends JPanel {
         try {
             categoryBox.removeAllItems();
             categoryBox.addItem(tr("mpage.cat.all"));
-            for (String c : categories) categoryBox.addItem(tr("mpage.cat." + c));
+            if (curse) {
+                for (Object[] c : curseCategories) categoryBox.addItem((String) c[1]);
+            } else {
+                for (String c : categories) categoryBox.addItem(tr("mpage.cat." + c));
+            }
             categoryBox.setSelectedIndex(0);
         } finally {
             adjusting = false;
         }
+    }
+
+    /** 1.40.0: категорія CurseForge (id), або null. */
+    private Integer curseCategoryFilter() {
+        int i = categoryBox.getSelectedIndex();
+        return i > 0 && i - 1 < curseCategories.size() ? (Integer) curseCategories.get(i - 1)[0] : null;
     }
 
     private String categoryFilter() {
@@ -240,6 +290,7 @@ public final class ModrinthPage extends JPanel {
         }
         loadedOnce = true;
         reload();
+        if (curse) loadCurseCategories(kind);
         ModrinthBrowse.POOL.submit(() -> {
             try {
                 List<com.gummer.launcher.vanilla.VanillaVersions.Release> all = com.gummer.launcher.vanilla.VanillaVersions.releases(launcher);
@@ -279,14 +330,20 @@ public final class ModrinthPage extends JPanel {
         final String query = search.getText();
         final String loader = loaderFilter();
         final String game = gameFilter();
-        final String category = categoryFilter();
+        final String category = curse ? null : categoryFilter();
+        final Integer curseCat = curse ? curseCategoryFilter() : null;
         final ModrinthBrowse.Sort sort = sortFilter();
         final ModrinthBrowse.Kind k = kind;
         status.setText(tr("manage.browse.loading"));
         more.setEnabled(false);
         ModrinthBrowse.POOL.submit(() -> {
             try {
-                final ModrinthBrowse.Page page = ModrinthBrowse.search(k, query, game,
+                final ModrinthBrowse.Page page = curse
+                        ? com.gummer.launcher.curseforge.CurseBrowse.search(launcher, k, query, game, loader, curseCat,
+                        sort == ModrinthBrowse.Sort.NEWEST ? com.gummer.launcher.curseforge.CurseBrowse.Sort.NEWEST
+                                : sort == ModrinthBrowse.Sort.UPDATED ? com.gummer.launcher.curseforge.CurseBrowse.Sort.UPDATED
+                                : com.gummer.launcher.curseforge.CurseBrowse.Sort.BEST, from)
+                        : ModrinthBrowse.search(k, query, game,
                         loader != null ? new String[]{loader} : null, from, ModrinthBrowse.Filter.POPULAR, sort, category);
                 boolean iconAdded = false;
                 for (ModrinthBrowse.Hit h : page.hits) {
@@ -313,10 +370,10 @@ public final class ModrinthPage extends JPanel {
                     show(page, from);
                 });
             } catch (Exception e) {
-                log.log(Level.INFO, "Modrinth modpack search failed", e);
+                log.log(Level.INFO, (curse ? "CurseForge" : "Modrinth") + " modpack search failed", e);
                 SwingUtilities.invokeLater(() -> {
                     if (gen != generation) return;
-                    status.setText(tr("manage.browse.failed"));
+                    status.setText(tr(curse ? "manage.browse.failedCurse" : "manage.browse.failed"));
                     more.setEnabled(true);
                 });
             }
@@ -327,7 +384,10 @@ public final class ModrinthPage extends JPanel {
         results.remove(more);
         for (ModrinthBrowse.Hit h : page.hits) results.add(new Card(h, kind));
         offset = from + page.hits.size();
-        status.setText(page.total == 0 ? tr("manage.browse.nothing") : tr("manage.browse.found", page.total));
+        // 24.11.2026 (власник: «чому знайдено лише 10000 модпаків курсфордж?»): CurseForge більше 10000 не рахує
+        status.setText(page.total == 0 ? tr("manage.browse.nothing")
+                : curse && page.total >= com.gummer.launcher.curseforge.CurseBrowse.MAX_RESULTS ? tr("cpage.foundMany")
+                : tr("manage.browse.found", page.total));
         if (offset < page.total && !page.hits.isEmpty()) {
             more.setEnabled(true);
             results.add(more, "growx 0, alignx center, gaptop 4");
@@ -559,7 +619,7 @@ public final class ModrinthPage extends JPanel {
             meta.setFont(meta.getFont().deriveFont(11.5f));
             // 17.11.2026 (власник: «в самих збірках бракує більше інформації або хоча б посилання на збірку, щоб
             // гравець міг скріншоти глянути»): сторінка модпака на Modrinth у браузері (галерея, повний опис)
-            JLabel site = new JLabel(tr("mpage.page"));
+            JLabel site = new JLabel(tr(curse ? "cpage.page" : "mpage.page"));
             site.setFont(site.getFont().deriveFont(11.5f));
             site.setForeground(LookTheme.palette().accent);
             site.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -578,9 +638,12 @@ public final class ModrinthPage extends JPanel {
             card.add(metaRow, "cell 1 1, wmin 0");
             WrapText desc = new WrapText(h.description);
             card.add(desc, "cell 1 2, span 2, wmin 0");
+            if ((cardKind == ModrinthBrowse.Kind.MOD || cardKind == ModrinthBrowse.Kind.RESOURCEPACK) && ModrinthBrowse.isXray(h)) {
+                card.add(InstanceManageDialog.xrayWarning(), "cell 1 3, span 2, wmin 0"); // 24.11.2026: червона позначка X-ray
+            }
             versions.setOpaque(false);
             versions.setVisible(false);
-            card.add(versions, "cell 1 3, span 2, growx, wmin 0, hidemode 3");
+            card.add(versions, "cell 1 4, span 2, growx, wmin 0, hidemode 3");
             add(card, BorderLayout.CENTER);
         }
 
@@ -603,14 +666,16 @@ public final class ModrinthPage extends JPanel {
             versionsButton.setText(tr("manage.browse.loading"));
             ModrinthBrowse.POOL.submit(() -> {
                 try {
-                    final List<ModrinthBrowse.PackVersion> list = ModrinthBrowse.modpackVersions(hit.id);
+                    final List<ModrinthBrowse.PackVersion> list = curse
+                            ? com.gummer.launcher.curseforge.CurseBrowse.versions(launcher, hit)
+                            : ModrinthBrowse.modpackVersions(hit.id);
                     SwingUtilities.invokeLater(() -> fill(list, false));
                 } catch (Exception e) {
-                    log.log(Level.INFO, "Modrinth modpack versions failed: " + hit.slug, e);
+                    log.log(Level.INFO, (curse ? "CurseForge" : "Modrinth") + " modpack versions failed: " + hit.slug, e);
                     SwingUtilities.invokeLater(() -> {
                         versionsButton.setEnabled(true);
                         versionsButton.setText(tr("mpage.versions"));
-                        status.setText(tr("manage.browse.failed"));
+                        status.setText(tr(curse ? "manage.browse.failedCurse" : "manage.browse.failed"));
                     });
                 }
             });
@@ -752,7 +817,8 @@ public final class ModrinthPage extends JPanel {
             final java.util.List<com.skcraft.launcher.Instance> targets = modTargets();
             ModrinthBrowse.POOL.submit(() -> {
                 try {
-                    final List<ModrinthBrowse.PackVersion> vs = ModrinthBrowse.modVersions(hit.id);
+                    final List<ModrinthBrowse.PackVersion> vs = curse
+                            ? com.gummer.launcher.curseforge.CurseBrowse.modVersions(launcher, hit) : ModrinthBrowse.modVersions(hit.id);
                     final java.util.List<Object[]> fit = new java.util.ArrayList<Object[]>();
                     for (com.skcraft.launcher.Instance i : targets) {
                         String game = ModrinthBrowse.gameVersionOf(i);
@@ -767,11 +833,11 @@ public final class ModrinthPage extends JPanel {
                         showModMenu(button, vs, fit);
                     });
                 } catch (Exception e) {
-                    log.log(Level.INFO, "Modrinth mod versions failed: " + hit.slug, e);
+                    log.log(Level.INFO, (curse ? "CurseForge" : "Modrinth") + " mod versions failed: " + hit.slug, e);
                     SwingUtilities.invokeLater(() -> {
                         button.setEnabled(true);
                         button.setText(tr("mpage.mod.install"));
-                        status.setText(tr("manage.browse.failed"));
+                        status.setText(tr(curse ? "manage.browse.failedCurse" : "manage.browse.failed"));
                     });
                 }
             });
@@ -806,7 +872,7 @@ public final class ModrinthPage extends JPanel {
                     newBuildWith(vs);
                 } catch (RuntimeException ex) {
                     log.log(Level.WARNING, "New build with mod failed", ex);
-                    toast(Notification.Type.WARNING, tr("manage.browse.failed"));
+                    toast(Notification.Type.WARNING, tr(curse ? "manage.browse.failedCurse" : "manage.browse.failed"));
                 }
             });
             menu.add(create);
@@ -821,22 +887,33 @@ public final class ModrinthPage extends JPanel {
                 final List<String> missing = new java.util.ArrayList<String>();
                 final List<String> conflicts = new java.util.ArrayList<String>();
                 try {
-                    ModrinthBrowse.install(ModrinthBrowse.Kind.MOD, hit, game, loaders,
-                            com.gummer.launcher.manage.InstanceMods.modsDir(target), added, missing, conflicts);
+                    installMod(game, loaders, com.gummer.launcher.manage.InstanceMods.modsDir(target), added, missing, conflicts);
                     SwingUtilities.invokeLater(() -> {
                         added.remove(hit.title);
                         toast(Notification.Type.SUCCESS, added.isEmpty() ? tr("mpage.mod.installed", modTitle, target.getTitle())
                                 : tr("mpage.mod.installedWith", modTitle, target.getTitle(), String.join(", ", added)));
-                        if (!missing.isEmpty()) toast(Notification.Type.WARNING, tr("mpage.mod.depsMissing", modTitle, String.join(", ", missing), game));
+                        if (!missing.isEmpty()) toast(Notification.Type.WARNING, tr(curse ? "cpage.mod.depsMissing" : "mpage.mod.depsMissing",
+                                modTitle, String.join(", ", missing), game));
                         if (!conflicts.isEmpty()) toast(Notification.Type.WARNING, tr("mpage.mod.conflicts", modTitle, String.join(", ", conflicts)));
                     });
                 } catch (Exception e) {
                     log.log(Level.WARNING, "Mod install failed: " + hit.slug + " -> " + target.getName(), e);
                     SwingUtilities.invokeLater(() -> toast(Notification.Type.WARNING,
                             ModrinthBrowse.NO_VERSION.equals(e.getMessage()) ? tr("mpage.mod.noVersion", modTitle, game)
-                                    : tr("manage.browse.installFailed", modTitle)));
+                                    : com.gummer.launcher.curseforge.CurseBrowse.NOT_DOWNLOADED.equals(e.getMessage())
+                                    ? tr("cpage.notDownloaded", modTitle) : tr("manage.browse.installFailed", modTitle)));
                 }
             });
+        }
+
+        /** Мод (з залежностями) у теку модів: з Modrinth або, на сторінці CurseForge, з CurseForge. */
+        private void installMod(String game, String[] loaders, java.io.File mods, List<String> added, List<String> missing,
+                                List<String> conflicts) throws Exception {
+            if (curse) {
+                com.gummer.launcher.curseforge.CurseBrowse.installFile(launcher, ModrinthBrowse.Kind.MOD, hit, game, loaders, mods, added, missing, conflicts);
+            } else {
+                ModrinthBrowse.install(ModrinthBrowse.Kind.MOD, hit, game, loaders, mods, added, missing, conflicts);
+            }
         }
 
         /**
@@ -898,7 +975,7 @@ public final class ModrinthPage extends JPanel {
             final com.google.common.util.concurrent.ListenableFuture<String> task = launcher.getExecutor().submit(() -> {
                 String made = copier.call();
                 java.io.File mods = new java.io.File(new java.io.File(new java.io.File(launcher.getInstancesDir(), made), "minecraft"), "mods");
-                ModrinthBrowse.install(ModrinthBrowse.Kind.MOD, hit, game, loaders, mods, null, null, null);
+                installMod(game, loaders, mods, null, null, null);
                 return made;
             });
             com.skcraft.concurrency.ObservableFuture<String> future = new com.skcraft.concurrency.ObservableFuture<String>(task, copier);
@@ -953,7 +1030,8 @@ public final class ModrinthPage extends JPanel {
             button.setText(tr("manage.browse.installing"));
             final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
             final com.google.common.util.concurrent.ListenableFuture<String> task = launcher.getExecutor().submit(
-                    () -> ModrinthBrowse.installModpackVersion(launcher, hit, v, importer));
+                    () -> curse ? com.gummer.launcher.curseforge.CurseBrowse.install(launcher, hit, v, importer)
+                            : ModrinthBrowse.installModpackVersion(launcher, hit, v, importer));
             com.skcraft.concurrency.ObservableFuture<String> future = new com.skcraft.concurrency.ObservableFuture<String>(task, importer);
             com.skcraft.launcher.dialog.ProgressDialog.showProgress(owner, future,
                     tr("manage.browse.modpackProgressTitle"), tr("manage.browse.modpackProgress", LookUi.plainText(hit.title)));

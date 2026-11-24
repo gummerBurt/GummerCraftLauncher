@@ -48,6 +48,21 @@ public class FancyLauncher {
         // 18.11.2026: фони і логотипи збірок розпаковуються у фоні паралельно зі створенням вікна (раніше перше
         // звернення вигляду, а Бібліотека читала обкладинки сама в потоці інтерфейсу)
         com.gummer.launcher.look.FrameImages.warmUp();
+        // 24.11.2026: перевірка і реєстрація шрифту Inter у фоні (у Java 8 це перебір усіх шрифтів системи), той самий
+        // вибір, що й раніше; з -Dgummer.font=segoe не потрібна
+        if (!"segoe".equalsIgnoreCase(System.getProperty("gummer.font"))) com.gummer.launcher.look.FontCheck.prepareEarly();
+        // 24.11.2026 (власник: «лаунчер натурально ЛІТАВ»): класи Jackson (читання налаштувань і збірок) вантажаться
+        // у фоні, поки потік інтерфейсу ставить оформлення і шрифти; раніше це ~60 мс у потоці інтерфейсу до показу вікна
+        Thread classes = new Thread(() -> {
+            try {
+                com.gummer.launcher.util.Json.newMapper();
+                Class.forName("com.skcraft.launcher.persistence.Persistence");
+            } catch (Throwable ignored) {
+                // не біда: завантажаться там, де потрібні
+            }
+        }, "GummerCraft warm-up");
+        classes.setDaemon(true);
+        classes.start();
 
         SwingUtilities.invokeLater(new Runnable() {
             @Override
@@ -116,6 +131,8 @@ public class FancyLauncher {
                     // стояв лише в Launcher.main, а лаунчер стартує тут, тож з 1.36.2 автоматично це не запускалось ніколи
                     // (працювала лише кнопка «Оновити» в плитці «Оновлення Java»)
                     com.gummer.launcher.util.LauncherJreUpdate.start(launcher, first);
+                    // 24.11.2026 (1.40.0): вікно для модів збірки CurseForge, які автор дозволяє качати лише з сайту
+                    com.gummer.launcher.dialog.CurseBlockedDialog.install();
                     // 21.11.2026: статус у Discord (тихо нічого не робить, якщо Discord не запущено)
                     com.gummer.launcher.discord.DiscordPresence.start(launcher);
 
@@ -196,7 +213,12 @@ public class FancyLauncher {
         // 19.11.2026: список Java для налаштувань рахується у фоні (раніше ~0,24 с з цих ~0,28 с у потоці інтерфейсу)
         com.skcraft.launcher.launch.runtime.JavaRuntimeFinder.prefetch();
         // 19.11.2026: список відеокарт (картка «Відеокарта» у вікні «Збірка» і запуск гри), PowerShell ~1 с
-        Thread gpus = new Thread(com.gummer.launcher.util.Gpu::adapters, "GPU list");
+        // 24.11.2026: і порада пресета ФПС (пам'ять і відеокарти з реєстру), щоб розділ «Продуктивність (ФПС)» одразу
+        // показував «Красиво» чи інший пресет, а не перемикав його за мить після відкриття
+        Thread gpus = new Thread(() -> {
+            com.gummer.launcher.manage.FpsPresets.advise();
+            com.gummer.launcher.util.Gpu.adapters();
+        }, "GPU list");
         gpus.setDaemon(true);
         gpus.start();
         Timer t = new Timer(500, null);

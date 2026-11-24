@@ -43,7 +43,7 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
 /**
  * 17.11.2026: вікно «Керування збіркою» (кнопка «Збірка» біля «Грати» у всіх трьох виглядах і пункт меню збірки).
  * Одне спільне вікно в стилі поточного вигляду ({@link LookTheme}), щоб не множити код у трьох копіях головного вікна.
- * Розділи: Загальне (назва, копія, теки, Java і пам'ять), Імпорт/Експорт (19.11.2026: файл збірки .mrpack чи .zip,
+ * Розділи: Загальне (назва, копія, теки, Java і пам'ять), Продуктивність (FPS: пресети і відеокарта, 24.11.2026), Імпорт/Експорт (19.11.2026: файл збірки .mrpack чи .zip,
  * імпорт з інших лаунчерів), Моди (вкл/викл, необов'язкові моди модпаку), Ресурспаки, Шейдери, Світи, Скріншоти. Файли можна перетягнути у вікно: вони копіюються в теку відкритого розділу.
  */
 public class InstanceManageDialog extends JDialog {
@@ -52,9 +52,12 @@ public class InstanceManageDialog extends JDialog {
     /** 19.11.2026 (власник: «Збірка - під загальне зроби вкладку "Імпорт/Експорт" і туди перенеси все з
      *  імпортом/експортом»): номер новий, а в меню вона одразу під «Загальне» ({@link #NAV_ORDER}). */
     public static final int IMPEX = 6;
-    private static final int LAST = IMPEX;
+    /** 24.11.2026 (власник: «виведи "Продуктивність (FPS)" окремо, між "Загальне" та "Імпорт/Експорт"»): пресети FPS і
+     *  вибір відеокарти, раніше в «Загальне». */
+    public static final int PERF = 7;
+    private static final int LAST = PERF;
     /** Порядок розділів у меню зліва. */
-    private static final int[] NAV_ORDER = {GENERAL, IMPEX, MODS, RESOURCEPACKS, SHADERS, WORLDS, SCREENSHOTS};
+    private static final int[] NAV_ORDER = {GENERAL, PERF, IMPEX, MODS, RESOURCEPACKS, SHADERS, WORLDS, SCREENSHOTS};
 
     /** Що вікно просить у головного вікна (воно в трьох варіантах). */
     public interface Host {
@@ -87,7 +90,24 @@ public class InstanceManageDialog extends JDialog {
     private final Host host;
     private final LookTheme.Palette pal = LookTheme.palette();
     private final CardLayout pages = new CardLayout();
-    private final JPanel pageHost = new JPanel(pages);
+    /**
+     * 24.11.2026 (власник: «інтерфейс лаунчера має "літати"»): розмір вікна задано явно ({@link LookTheme#fitToScreen}),
+     * тож бажаний розмір області розділів ні на що не впливає. А {@link CardLayout} рахував його як найбільший з УСІХ
+     * збудованих розділів, тобто кожна зміна в будь-якому розділі (навіть схованому) заново міряла весь список модів.
+     * На збірці зі 196 модами позначки «клієнт/сервер», що доходять у фоні, вішали вікно на 0,3-0,7 с, навіть коли
+     * гравець уже перейшов на «Ресурспаки». Тепер область розділів просто займає все місце, яке їй дають.
+     */
+    private final JPanel pageHost = new JPanel(pages) {
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(100, 100);
+        }
+
+        @Override
+        public Dimension getMinimumSize() {
+            return new Dimension(0, 0);
+        }
+    };
     private final JLabel headTitle = new JLabel();
     private int current;
     private boolean changed;
@@ -110,7 +130,7 @@ public class InstanceManageDialog extends JDialog {
         setModalityType(DEFAULT_MODALITY_TYPE);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         build();
-        Dimension size = LookTheme.fitToScreen(this, 780, 580, 600, 420);
+        Dimension size = LookTheme.fitToScreen(this, 798, 580, 600, 420); // 24.11.2026: 780 -> 798, меню зліва ширше на 18
         setSize(size);
         setMinimumSize(new Dimension(Math.min(600, size.width), Math.min(420, size.height)));
         setResizable(true);
@@ -145,7 +165,7 @@ public class InstanceManageDialog extends JDialog {
         // 17.11.2026: StalDayZ закритий: набір модів лише наш, сторонні ресурспаки заборонені, одиночної гри немає,
         // тож розділів «Моди», «Ресурспаки», «Світи» в ньому немає (сторінки зібрано, але в меню їх не видно)
         String[] all = {tr("manage.nav.general"), tr("manage.nav.mods"), tr("manage.nav.packs"),
-                tr("manage.nav.shaders"), tr("manage.nav.worlds"), tr("manage.nav.screenshots"), tr("manage.nav.impex")};
+                tr("manage.nav.shaders"), tr("manage.nav.worlds"), tr("manage.nav.screenshots"), tr("manage.nav.impex"), tr("manage.nav.perf")};
         navPages.clear();
         for (int i : NAV_ORDER) {
             if (closedPack() && (i == MODS || i == RESOURCEPACKS || i == WORLDS)) continue;
@@ -171,11 +191,11 @@ public class InstanceManageDialog extends JDialog {
             head.add(kind, "wmin 0");
         }
 
-        JPanel body = new JPanel(new MigLayout("insets 10 14 0 14, gap 14 0, fill", "[170!][grow,fill]", "[grow,fill]"));
+        JPanel body = new JPanel(new MigLayout("insets 10 14 0 14, gap 14 0, fill", "[188!][grow,fill]", "[grow,fill]"));
         body.setOpaque(false);
         JPanel navCol = new JPanel(new MigLayout("insets 2 0 2 2, wrap 1, fillx", "[grow,fill]", "[]push"));
         navCol.setOpaque(false);
-        navCol.add(nav, "growx, wmin 0, wmax 168");
+        navCol.add(nav, "growx, wmin 0, wmax 186"); // 24.11.2026: 168 -> 186, «Продуктивність (ФПС)» жирним
         body.add(navCol, "grow");
         body.add(pageHost, "grow, wmin 0");
 
@@ -206,6 +226,7 @@ public class InstanceManageDialog extends JDialog {
             public void windowOpened(java.awt.event.WindowEvent e) {
                 close.requestFocusInWindow();
                 show(current);
+                prefetchMods(); // 24.11.2026: «Моди» потім показуються одразу
             }
         });
 
@@ -276,6 +297,9 @@ public class InstanceManageDialog extends JDialog {
                 break;
             case IMPEX:
                 p = impexPage();
+                break;
+            case PERF:
+                p = perfPage();
                 break;
             default:
                 p = generalPage();
@@ -377,10 +401,6 @@ public class InstanceManageDialog extends JDialog {
         // 17.11.2026: своя іконка і фон копії (InstanceArt)
         if (com.gummer.launcher.manage.InstanceArt.supported(instance)) p.add(artCard());
 
-        // 19.11.2026 (власник: «Гра на вбудованій відеокарті ... в ідеалі перемикач в "збірка"»): лише на ПК з двома
-        // відеокартами; список відеокарт у фоні (перший раз ~1 с), картка з'являється, коли він готовий
-        p.add(gpuCard(), "hidemode 3");
-
         // копія
         JPanel copyCard = card();
         copyCard.add(LookUi.title(tr("manage.copy.title"), 15f));
@@ -429,8 +449,6 @@ public class InstanceManageDialog extends JDialog {
         if (com.gummer.launcher.modrinth.MrpackUpdate.canUpdate(instance)) p.add(modpackCard());
         // 18.11.2026: копія: повернути до стану на момент копіювання
         if (com.gummer.launcher.manage.CopyReset.canReset(instance)) p.add(copyResetCard());
-        // 18.11.2026: пресети ФПС для цієї (вже наявної) збірки
-        p.add(fpsCard());
 
         // 17.11.2026: поділитися збіркою (файл .mrpack) і поставити чужу
 
@@ -611,13 +629,28 @@ public class InstanceManageDialog extends JDialog {
      * 18.11.2026 (власник: «пресети ФПС ... щоб можна було додати на вже існуючі збірки»): налаштування гри
      * (options.txt) і моди для ФПС з Modrinth (manage.FpsPresets). Світів не стосується.
      */
+    // ------------------------------------------------------------------ Продуктивність (FPS)
+
+    /** 24.11.2026: окремий розділ між «Загальне» та «Імпорт/Експорт»: пресети FPS і відеокарта. */
+    private JPanel perfPage() {
+        JPanel p = page();
+        // 18.11.2026: пресети ФПС для цієї (вже наявної) збірки
+        p.add(fpsCard());
+        // 19.11.2026 (власник: «Гра на вбудованій відеокарті ... в ідеалі перемикач в "збірка"»): лише на ПК з двома
+        // відеокартами; список відеокарт у фоні (перший раз ~1 с), картка з'являється, коли він готовий
+        p.add(gpuCard(), "hidemode 3");
+        return p;
+    }
+
     private JPanel fpsCard() {
         final JPanel c = card();
         c.add(LookUi.title(tr("fps.title"), 15f));
         c.add(LookUi.body(tr("fps.text"), true), "wmin 0");
         final JPanel row = new JPanel(new MigLayout("insets 0, gap 8", "[][]push", "[32!]"));
         row.setOpaque(false);
-        c.add(row, "gaptop 6");
+        // 24.11.2026: wmin 0, інакше ряд тримав свою останню ширину як мінімальну, і коли з'являлась смуга прокрутки
+        // (картка «Відеокарта» додається вже після першої розкладки), уся сторінка вилазила за правий край
+        c.add(row, "gaptop 6, wmin 0");
         final com.gummer.launcher.manage.FpsPresets.Preset[] presets = com.gummer.launcher.manage.FpsPresets.Preset.values();
         final JComboBox<String> pick = new JComboBox<String>();
         for (com.gummer.launcher.manage.FpsPresets.Preset pr : presets) pick.addItem(tr("fps.preset." + pr.name().toLowerCase(java.util.Locale.ROOT)));
@@ -659,33 +692,43 @@ public class InstanceManageDialog extends JDialog {
         c.add(advice, "wmin 0, gaptop 4");
         final boolean[] touched = {false};
         pick.addActionListener(e -> touched[0] = true);
-        new SwingWorker<com.gummer.launcher.manage.FpsPresets.Advice, Void>() {
-            @Override
-            protected com.gummer.launcher.manage.FpsPresets.Advice doInBackground() {
-                return com.gummer.launcher.manage.FpsPresets.advise();
+        final java.util.function.Consumer<com.gummer.launcher.manage.FpsPresets.Advice> showAdvice = a -> {
+            String title = tr("fps.preset." + a.preset.name().toLowerCase(java.util.Locale.ROOT));
+            java.util.List<String> why = new ArrayList<String>();
+            if (a.ramGb > 0) why.add(tr("fps.advice.ram", a.ramGb));
+            if (a.gpu != null) why.add(a.gpu);
+            advice.setText(why.isEmpty() ? tr("fps.adviceShort", title) : tr("fps.advice", title, String.join(", ", why)));
+            advice.setVisible(true);
+            if (!touched[0]) {
+                pick.setSelectedIndex(a.preset.ordinal());
+                touched[0] = false;
             }
-
-            @Override
-            protected void done() {
-                try {
-                    com.gummer.launcher.manage.FpsPresets.Advice a = get();
-                    String title = tr("fps.preset." + a.preset.name().toLowerCase(java.util.Locale.ROOT));
-                    java.util.List<String> why = new ArrayList<String>();
-                    if (a.ramGb > 0) why.add(tr("fps.advice.ram", a.ramGb));
-                    if (a.gpu != null) why.add(a.gpu);
-                    advice.setText(why.isEmpty() ? tr("fps.adviceShort", title) : tr("fps.advice", title, String.join(", ", why)));
-                    advice.setVisible(true);
-                    if (!touched[0]) {
-                        pick.setSelectedIndex(a.preset.ordinal());
-                        touched[0] = false;
-                    }
-                    c.revalidate();
-                    c.repaint();
-                } catch (Exception ignored) {
-                    // без поради
+            c.revalidate();
+            c.repaint();
+        };
+        // 24.11.2026 (власник: «"красиво" проглюкує на мілісекунду, очевидно лаунчер зчитує конфігурацію компа перш ніж
+        // показати "красиво"»): порада рахується у фоні ще на старті лаунчера, тож тут вона майже завжди вже є і
+        // ставиться до першого показу. Лише якщо ще ні (розділ відкрили в першу секунду), як раніше, у фоні
+        com.gummer.launcher.manage.FpsPresets.Advice ready = com.gummer.launcher.manage.FpsPresets.peek();
+        if (ready != null) {
+            showAdvice.accept(ready);
+        } else {
+            new SwingWorker<com.gummer.launcher.manage.FpsPresets.Advice, Void>() {
+                @Override
+                protected com.gummer.launcher.manage.FpsPresets.Advice doInBackground() {
+                    return com.gummer.launcher.manage.FpsPresets.advise();
                 }
-            }
-        }.execute();
+
+                @Override
+                protected void done() {
+                    try {
+                        showAdvice.accept(get());
+                    } catch (Exception ignored) {
+                        // без поради
+                    }
+                }
+            }.execute();
+        }
         if (com.gummer.launcher.manage.FpsPresets.canAddMods(instance)) {
             final JPanel mods = new JPanel(new MigLayout("insets 0, gap 8", "[][]push", "[32!]"));
             mods.setOpaque(false);
@@ -1075,8 +1118,6 @@ public class InstanceManageDialog extends JDialog {
     private final JTextField modsSearch = new JTextField();
     private final JLabel modsCount = new JLabel();
     private final List<ModRow> modRows = new ArrayList<ModRow>();
-    private SwingWorker<?, ?> modsLoader;
-
     /** Підпис вмісту списку модів: файли (назва, розмір, дата) і вибір необов'язкових модів. */
     private String modsSignature(List<InstanceMods.Mod> mods, List<InstanceMods.Optional> optionals) {
         StringBuilder b = new StringBuilder();
@@ -1125,7 +1166,7 @@ public class InstanceManageDialog extends JDialog {
         optionalList.revalidate();
 
         // моди: файли одразу, назви, описи й іконки з jar у фоні (200 модів читаються секунду-дві)
-        if (modsLoader != null) modsLoader.cancel(true);
+        final int gen = ++modsGen; // старі незакінчені читання і порції рядків більше нічого не показують
         final List<InstanceMods.Mod> mods = InstanceMods.list(instance);
         modsShown = modsSignature(mods, optionals);
         modsList.removeAll();
@@ -1140,47 +1181,118 @@ public class InstanceManageDialog extends JDialog {
             modsList.repaint();
             return;
         }
+        // 24.11.2026 (власник: «всі списки мають оновлюватись без підгрузок»): назви, описи й іконки вже прочитані
+        // (попереднє відкриття або фонове читання, що стартує з відкриттям вікна, див. prefetchMods): список одразу,
+        // без «Завантаження...»
+        List<Object[]> ready = new ArrayList<Object[]>(mods.size());
+        for (InstanceMods.Mod m : mods) {
+            com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.peek(m.file);
+            Image icon = info == null ? null : MOD_ICONS.get(modIconKey(m.file));
+            if (info == null || icon == null) {
+                ready = null;
+                break;
+            }
+            ready.add(new Object[]{m, info, icon == NO_ICON ? null : icon});
+        }
+        if (ready != null) {
+            showModRows(ready, gen);
+            return;
+        }
         modsList.add(small(tr("manage.mods.loading")), "wmin 0");
         modsList.revalidate();
         modsList.repaint();
-        modsLoader = new SwingWorker<List<Object[]>, Void>() {
-            @Override
-            protected List<Object[]> doInBackground() {
-                // 17.11.2026: jar читаються паралельно (опис і іконка з кожного), порядок списку зберігається
-                long t0 = System.nanoTime();
-                List<Object[]> out = mods.parallelStream().map(m -> {
-                    com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.of(m.file);
-                    return new Object[]{m, info, modIcon(m.file, info)};
-                }).collect(java.util.stream.Collectors.toList());
-                java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).info("Mods list: " + out.size()
-                        + " jar read in " + (System.nanoTime() - t0) / 1000000 + " ms");
-                return out;
-            }
-
-            @Override
-            protected void done() {
-                if (isCancelled()) return;
-                try {
-                    List<Object[]> rows = get();
-                    modsList.removeAll();
-                    for (Object[] r : rows) {
-                        ModRow row = new ModRow((InstanceMods.Mod) r[0], (com.gummer.launcher.manage.ModInfo) r[1], (Image) r[2]);
-                        modRows.add(row);
-                        modsList.add(row, "wmin 0, hidemode 3"); // схований пошуком рядок не займає місця
-                    }
-                    filterMods();
-                    loadSides();
-                    loadUpdates(); // 17.11.2026: паралельно з позначками сторін, а не після них (кнопка «Оновити все» на ~1 с раніше)
-                } catch (Exception e) {
-                    modsShown = null; // наступне повернення на вкладку спробує ще раз
-                    modsList.removeAll();
-                    modsList.add(small(String.valueOf(e.getMessage())), "wmin 0");
-                }
+        java.util.concurrent.CompletableFuture<List<Object[]>> read = modsPrefetch;
+        if (read == null || !modsShown.equals(modsPrefetchSig)) {
+            read = java.util.concurrent.CompletableFuture.supplyAsync(() -> readModRows(mods));
+        }
+        read.whenComplete((rows, err) -> SwingUtilities.invokeLater(() -> {
+            if (gen != modsGen) return;
+            if (err != null) {
+                modsShown = null; // наступне повернення на вкладку спробує ще раз
+                modsList.removeAll();
+                Throwable cause = err instanceof java.util.concurrent.CompletionException && err.getCause() != null ? err.getCause() : err;
+                modsList.add(small(String.valueOf(cause.getMessage())), "wmin 0");
                 modsList.revalidate();
                 modsList.repaint();
+                return;
             }
+            showModRows(rows, gen);
+        }));
+    }
+
+    /** Номер останнього заповнення списку модів: відповіді старих читань і порцій рядків відкидаються. */
+    private int modsGen;
+    /** Фонове читання модів, що стартує з відкриттям вікна (prefetchMods), і підпис теки, для якої воно. */
+    private volatile java.util.concurrent.CompletableFuture<List<Object[]>> modsPrefetch;
+    private volatile String modsPrefetchSig;
+    /**
+     * Скільки рядків модів додається за одну подію потоку інтерфейсу (решта наступними, щоб вікно не завмирало): перша
+     * порція трохи більша за видиму частину списку, далі більшими.
+     */
+    private static final int MOD_ROWS_FIRST = 16, MOD_ROWS_CHUNK = 32;
+
+    /** Назви, описи й іконки з jar (паралельно, порядок списку зберігається). Не з потоку інтерфейсу. */
+    private static List<Object[]> readModRows(List<InstanceMods.Mod> mods) {
+        // 17.11.2026: jar читаються паралельно (опис і іконка з кожного), порядок списку зберігається
+        long t0 = System.nanoTime();
+        List<Object[]> out = mods.parallelStream().map(m -> {
+            com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.of(m.file);
+            return new Object[]{m, info, modIcon(m.file, info)};
+        }).collect(java.util.stream.Collectors.toList());
+        java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).info("Mods list: " + out.size()
+                + " jar read in " + (System.nanoTime() - t0) / 1000000 + " ms");
+        return out;
+    }
+
+    /**
+     * 24.11.2026: з відкриттям вікна моди збірки читаються у фоні, поки гравець ще на «Загальне», тож «Моди» потім
+     * показуються одразу. Кеш ModInfo і іконок спільний, повторне читання того самого файлу нічого не коштує.
+     */
+    private void prefetchMods() {
+        if (instance.isVanilla() || closedPack() || modsPrefetch != null) return;
+        java.util.concurrent.CompletableFuture<List<Object[]>> f = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            List<InstanceMods.Mod> mods = InstanceMods.list(instance);
+            modsPrefetchSig = modsSignature(mods, InstanceMods.optionals(instance));
+            List<Object[]> rows = readModRows(mods);
+            for (InstanceMods.Mod m : mods) com.gummer.launcher.manage.ModSides.cached(m.file); // позначки з диска
+            return rows;
+        });
+        modsPrefetch = f;
+    }
+
+    /**
+     * Рядки модів у список. 24.11.2026: перші {@value #MOD_ROWS_FIRST} одразу, решта порціями наступними подіями: на
+     * збірці зі 196 модами створення і розкладка всіх рядків разом тримали вікно ~0,1-0,15 с.
+     */
+    private void showModRows(final List<Object[]> rows, final int gen) {
+        modsList.removeAll();
+        final String q = modsSearch.getText().trim().toLowerCase(Locale.ROOT);
+        final int[] at = {0};
+        final Runnable[] step = new Runnable[1];
+        step[0] = () -> {
+            if (gen != modsGen) return;
+            int to = Math.min(rows.size(), at[0] + (at[0] == 0 ? MOD_ROWS_FIRST : MOD_ROWS_CHUNK));
+            for (int k = at[0]; k < to; k++) {
+                Object[] r = rows.get(k);
+                ModRow row = new ModRow((InstanceMods.Mod) r[0], (com.gummer.launcher.manage.ModInfo) r[1], (Image) r[2]);
+                if (!q.isEmpty() && !row.matches(q)) row.setVisible(false); // пошук уже введено: без миготіння
+                modRows.add(row);
+                modsList.add(row, "wmin 0, hidemode 3"); // схований пошуком рядок не займає місця
+            }
+            at[0] = to;
+            if (to < rows.size()) {
+                modsList.revalidate();
+                modsList.repaint();
+                SwingUtilities.invokeLater(step[0]);
+                return;
+            }
+            filterMods();
+            loadSides();
+            loadUpdates(); // 17.11.2026: паралельно з позначками сторін, а не після них (кнопка «Оновити все» на ~1 с раніше)
+            modsList.revalidate();
+            modsList.repaint();
         };
-        modsLoader.execute();
+        step[0].run();
     }
 
     private SwingWorker<?, ?> sidesLoader;
@@ -1265,15 +1377,20 @@ public class InstanceManageDialog extends JDialog {
                 if (isCancelled()) return;
                 try {
                     java.util.Map<File, com.gummer.launcher.manage.ModUpdates.Update> m = get();
+                    boolean changed = false;
                     for (ModRow r : rows) {
                         com.gummer.launcher.manage.ModUpdates.Update u = m.get(r.mod.file);
                         if (u == null || !modRows.contains(r)) continue;
                         pendingUpdates.put(r, u);
                         r.setUpdate(u);
+                        changed = true;
                     }
                     showUpdateAll();
-                    modsList.revalidate();
-                    modsList.repaint();
+                    // 24.11.2026: без оновлень 196 рядків не перекладаються вдруге (~0,1 с завмирання)
+                    if (changed) {
+                        modsList.revalidate();
+                        modsList.repaint();
+                    }
                 } catch (Exception ignored) {
                     // без оновлень
                 }
@@ -1459,9 +1576,13 @@ public class InstanceManageDialog extends JDialog {
                 if (isCancelled()) return;
                 try {
                     java.util.Map<File, com.gummer.launcher.manage.ModSides.Side> m = get();
-                    for (ModRow r : rows) r.setSide(m.get(r.mod.file));
-                    modsList.revalidate();
-                    modsList.repaint();
+                    boolean changed = false;
+                    for (ModRow r : rows) changed |= r.setSide(m.get(r.mod.file));
+                    // 24.11.2026: позначки зазвичай уже є з диска (ModRow), тоді список не перекладається вдруге
+                    if (changed) {
+                        modsList.revalidate();
+                        modsList.repaint();
+                    }
                 } catch (Exception ignored) {
                     // без позначок
                 }
@@ -1489,10 +1610,14 @@ public class InstanceManageDialog extends JDialog {
     private static final Image NO_ICON = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
     private static final int ICON = 40;
 
-    private static Image modIcon(File jar, com.gummer.launcher.manage.ModInfo info) {
+    private static String modIconKey(File jar) {
         String path = jar.getAbsolutePath();
         if (path.endsWith(InstanceMods.DISABLED)) path = path.substring(0, path.length() - InstanceMods.DISABLED.length());
-        String key = path + "|" + jar.length() + "|" + jar.lastModified();
+        return path + "|" + jar.length() + "|" + jar.lastModified();
+    }
+
+    private static Image modIcon(File jar, com.gummer.launcher.manage.ModInfo info) {
+        String key = modIconKey(jar);
         Image cached = MOD_ICONS.get(key);
         if (cached != null) return cached == NO_ICON ? null : cached;
         BufferedImage img = info.readIcon(jar);
@@ -1662,11 +1787,13 @@ public class InstanceManageDialog extends JDialog {
         }
 
         /** 17.11.2026: позначка «клієнт», «сервер», «клієнт + сервер» чи «клієнт або сервер». */
-        void setSide(com.gummer.launcher.manage.ModSides.Side s) {
-            if (s == null || side != null) return;
+        /** true, якщо позначку додано (рядок змінився). */
+        boolean setSide(com.gummer.launcher.manage.ModSides.Side s) {
+            if (s == null || side != null) return false;
             side = sideTag(s);
             sideLine.add(side);
             sideLine.revalidate();
+            return true;
         }
 
         ModRow(InstanceMods.Mod mod, com.gummer.launcher.manage.ModInfo info, Image icon) {
@@ -1703,6 +1830,9 @@ public class InstanceManageDialog extends JDialog {
                 d.setFont(d.getFont().deriveFont(12f));
                 d.setForeground(pal.text2);
                 add(d, "skip 1, wmin 0, wrap");
+            }
+            if (com.gummer.launcher.manage.ModrinthBrowse.isXray(info.name, info.description, mod.name)) {
+                add(xrayWarning(), "skip 1, wmin 0, wrap"); // 24.11.2026: червона позначка X-ray і в «Моїх модах»
             }
 
             JPanel meta = new JPanel(new MigLayout("insets 0, gap 10", "[]", "[]"));
@@ -2089,9 +2219,17 @@ public class InstanceManageDialog extends JDialog {
      * 17.11.2026: картка «Знайти на Modrinth» на сторінках ресурспаків і шейдерів. Популярне під версію гри цієї збірки
      * вантажиться при першому відкритті сторінки, пошук за Enter чи кнопкою, «Показати ще» по 20. «Встановити» качає
      * найновішу версію під цю гру (ModrinthBrowse.install) у теку сторінки і оновлює список вище.
+     *
+     * <p>24.11.2026 (власник: «в "знайти моди" нехай буде підвкладка "Знайти на Modrinth" та "Знайти на CurseForge". Те
+     * саме з шейдерами і ресурспаками, і те саме з модпаками»): замість заголовка перемикач джерела. CurseForge шукає і
+     * ставить через curseforge.CurseBrowse (той самий фільтр гри і завантажувача, залежності модів, журнал
+     * поставленого); фільтра «Клієнт / Сервер» там немає, бо CurseForge цього не знає.</p>
      */
     private final class Browse extends JPanel {
         final com.gummer.launcher.manage.ModrinthBrowse.Kind kind;
+        /** Шукати на CurseForge, а не на Modrinth. */
+        boolean curse;
+        JPanel filterRow;
         final File dir;
         final Runnable refresh;
         final String game = com.gummer.launcher.manage.ModrinthBrowse.gameVersionOf(instance);
@@ -2105,6 +2243,8 @@ public class InstanceManageDialog extends JDialog {
                 tr("manage.browse.sort.client"), tr("manage.browse.sort.server")});
         boolean loaded;
         int offset, total, generation;
+        /** 24.11.2026: рядки результатів, що чекають, поки пошук з'явиться на екрані (див. search). */
+        Runnable parked;
 
         Browse(com.gummer.launcher.manage.ModrinthBrowse.Kind kind, File dir, Runnable refresh) {
             super(new MigLayout("insets 0, wrap 1, gap 0 4, fillx", "[grow,fill]", ""));
@@ -2114,17 +2254,28 @@ public class InstanceManageDialog extends JDialog {
             this.refresh = refresh;
             this.loaders = com.gummer.launcher.manage.ModrinthBrowse.loadersOf(kind, instance);
             JPanel c = card();
-            c.add(LookUi.title(tr("manage.browse.title"), 15f));
             boolean noShaders = kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.SHADER && loaders == null;
-            String hint = noShaders ? tr("manage.browse.noShaders")
-                    : kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MODPACK ? tr("manage.browse.hintModpacks", game, loaderTitle(loaders))
-                    : kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD
-                    ? (game == null ? tr("manage.browse.hintNoVersion")
-                    : !instance.isBuiltIn() && !instance.isCopy() ? tr("manage.browse.hintModsPack", game)
-                    : tr("manage.browse.hintMods", game, loaderTitle(loaders)))
-                    : game != null ? tr("manage.browse.hint", game) : tr("manage.browse.hintNoVersion");
-            c.add(LookUi.body(hint, true), "wmin 0");
-            if (kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD) c.add(LookUi.body(tr("manage.side.legend"), true), "wmin 0, gaptop 4");
+            final JTextArea hintText = LookUi.body(hintFor(false, noShaders), true);
+            // позначки «клієнт / сервер» є лише в Modrinth, з CurseForge легенда ховається
+            final JTextArea legend = kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD ? LookUi.body(tr("manage.side.legend"), true) : null;
+            if (noShaders) {
+                c.add(LookUi.title(tr("manage.browse.title"), 15f));
+            } else {
+                // ListModeSwitch: перший підпис праворуч, другий ліворуч; ліворуч Modrinth
+                com.gummer.launcher.look.ListModeSwitch source = new com.gummer.launcher.look.ListModeSwitch(
+                        tr("manage.browse.titleCurse"), tr("manage.browse.title"), true, modrinth -> {
+                    if (curse == !modrinth) return;
+                    curse = !modrinth;
+                    hintText.setText(hintFor(curse, false));
+                    if (filterRow != null) filter.setVisible(!curse);
+                    if (legend != null) legend.setVisible(!curse);
+                    loaded = true;
+                    search(false);
+                });
+                c.add(source, "w 360!, h 32!, wmax 100%");
+            }
+            c.add(hintText, "wmin 0");
+            if (legend != null) c.add(legend, "wmin 0, gaptop 4, hidemode 3");
             if (!noShaders) {
                 JButton go = LookUi.secondary(new JButton(tr("manage.browse.search")));
                 boolean mods = kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD;
@@ -2138,7 +2289,8 @@ public class InstanceManageDialog extends JDialog {
                 if (mods) {
                     filter.setToolTipText(tr("manage.browse.sort.tip"));
                     filter.addActionListener(e -> search(false));
-                    row.add(filter, "h 32!");
+                    row.add(filter, "h 32!, hidemode 3");
+                    filterRow = row;
                 }
                 row.add(go, "h 32!");
                 c.add(row, "wmin 0, gaptop 6");
@@ -2156,6 +2308,35 @@ public class InstanceManageDialog extends JDialog {
                 more.addActionListener(e -> search(true));
             }
             add(c, "wmin 0");
+            addHierarchyListener(e -> {
+                if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing() && parked != null) {
+                    Runnable r = parked;
+                    parked = null;
+                    SwingUtilities.invokeLater(r);
+                }
+            });
+        }
+
+        /** Підказка над пошуком: що показано (для модпаків ще звідки). */
+        String hintFor(boolean cf, boolean noShaders) {
+            return noShaders ? tr("manage.browse.noShaders")
+                    : kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MODPACK
+                    ? tr(cf ? "manage.browse.hintModpacksCurse" : "manage.browse.hintModpacks", game, loaderTitle(loaders))
+                    : kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD
+                    ? (game == null ? tr("manage.browse.hintNoVersion")
+                    : !instance.isBuiltIn() && !instance.isCopy() ? tr("manage.browse.hintModsPack", game)
+                    : tr("manage.browse.hintMods", game, loaderTitle(loaders)))
+                    : game != null ? tr("manage.browse.hint", game) : tr("manage.browse.hintNoVersion");
+        }
+
+        /**
+         * Завантажувач для пошуку CurseForge (там один): моди за останнім зі списку збірки (у Quilt це Fabric, модів під
+         * Quilt на CurseForge мало), модпаки за своїм; ресурспаки і шейдери без нього.
+         */
+        String curseLoader() {
+            if (loaders == null || loaders.length == 0) return null;
+            if (kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD) return loaders[loaders.length - 1];
+            return kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MODPACK ? loaders[0] : null;
         }
 
         void loadIfNeeded() {
@@ -2170,6 +2351,7 @@ public class InstanceManageDialog extends JDialog {
             final String q = query.getText();
             final com.gummer.launcher.manage.ModrinthBrowse.Filter f =
                     com.gummer.launcher.manage.ModrinthBrowse.Filter.values()[Math.max(0, filter.getSelectedIndex())];
+            final boolean cf = curse;
             status.setText(tr("manage.browse.loading"));
             more.setEnabled(false);
             if (!append) {
@@ -2183,7 +2365,9 @@ public class InstanceManageDialog extends JDialog {
                 com.gummer.launcher.manage.ModrinthBrowse.Page found = null;
                 Exception error = null;
                 try {
-                    found = com.gummer.launcher.manage.ModrinthBrowse.search(kind, q, game, loaders, from, f);
+                    found = cf ? com.gummer.launcher.curseforge.CurseBrowse.search(launcher, kind, q, game, curseLoader(), null,
+                            com.gummer.launcher.curseforge.CurseBrowse.Sort.BEST, from)
+                            : com.gummer.launcher.manage.ModrinthBrowse.search(kind, q, game, loaders, from, f);
                     for (com.gummer.launcher.manage.ModrinthBrowse.Hit h : found.hits) h.installed = looksInstalled(h);
                 } catch (Exception ex) {
                     error = ex;
@@ -2193,27 +2377,57 @@ public class InstanceManageDialog extends JDialog {
                 SwingUtilities.invokeLater(() -> {
                     if (gen != generation) return; // уже новий пошук
                     more.setEnabled(true);
-                    // нові рядки не мають прокручувати сторінку (опис у JTextArea тягне прокрутку до себе)
-                    final JScrollPane sp = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, Browse.this);
-                    final int keep = sp != null ? sp.getVerticalScrollBar().getValue() : -1;
+                    List<com.gummer.launcher.manage.ModrinthBrowse.Hit> hits = java.util.Collections.emptyList();
                     try {
                         if (failed != null) throw failed;
                         com.gummer.launcher.manage.ModrinthBrowse.Page page = result;
                         total = page.total;
                         offset = from + page.hits.size();
-                        for (com.gummer.launcher.manage.ModrinthBrowse.Hit h : page.hits) results.add(new HitRow(h), "wmin 0");
-                        status.setText(total == 0 ? tr("manage.browse.nothing") : tr("manage.browse.found", total));
+                        hits = page.hits;
+                        // CurseForge більше 10000 не рахує (curseforge.CurseBrowse.MAX_RESULTS)
+                        status.setText(total == 0 ? tr("manage.browse.nothing")
+                                : cf && total >= com.gummer.launcher.curseforge.CurseBrowse.MAX_RESULTS ? tr("cpage.foundMany")
+                                : tr("manage.browse.found", total));
                         more.setVisible(offset < total && !page.hits.isEmpty());
                     } catch (Exception ex) {
-                        status.setText(tr("manage.browse.failed"));
+                        status.setText(tr(cf ? "manage.browse.failedCurse" : "manage.browse.failed"));
                         more.setVisible(false);
                     }
-                    results.revalidate();
-                    results.repaint();
-                    // 17.11.2026: описи нових рядків спершу міряються без ширини (вищими), і під списком лишалась
-                    // порожнеча перед «Показати ще»; розкласти ще раз з остаточною шириною
-                    relayoutLater(results);
-                    if (sp != null) SwingUtilities.invokeLater(() -> sp.getVerticalScrollBar().setValue(keep));
+                    // 24.11.2026 (власник: «інтерфейс лаунчера має "літати"»): 20 рядків з описами разом тримали вікно
+                    // ~75 мс; тепер порціями по 5 наступними подіями, вікно між ними відповідає. І лише коли пошук на
+                    // екрані: результати, що приходять до прихованої «Знайти» (вона вантажиться наперед), раніше
+                    // розкладались при першому ж кліку на іншу сторінку («Шейдери» на збірці зі 196 модами: 75 мс)
+                    final List<com.gummer.launcher.manage.ModrinthBrowse.Hit> todo = hits;
+                    final int[] at = {0};
+                    final int[] keep = {Integer.MIN_VALUE};
+                    final JScrollPane[] sp = new JScrollPane[1];
+                    final Runnable[] step = new Runnable[1];
+                    step[0] = () -> {
+                        if (gen != generation) return; // уже новий пошук
+                        if (!isShowing()) {
+                            parked = step[0]; // продовжить hierarchyChanged, щойно «Знайти» відкриють
+                            return;
+                        }
+                        if (keep[0] == Integer.MIN_VALUE) {
+                            // нові рядки не мають прокручувати сторінку (опис у JTextArea тягне прокрутку до себе)
+                            sp[0] = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, Browse.this);
+                            keep[0] = sp[0] != null ? sp[0].getVerticalScrollBar().getValue() : -1;
+                        }
+                        int to = Math.min(todo.size(), at[0] + HIT_ROWS_CHUNK);
+                        for (int k = at[0]; k < to; k++) results.add(new HitRow(todo.get(k)), "wmin 0");
+                        at[0] = to;
+                        results.revalidate();
+                        results.repaint();
+                        if (to < todo.size()) {
+                            SwingUtilities.invokeLater(step[0]);
+                            return;
+                        }
+                        // 17.11.2026: описи нових рядків спершу міряються без ширини (вищими), і під списком лишалась
+                        // порожнеча перед «Показати ще»; розкласти ще раз з остаточною шириною
+                        relayoutLater(results);
+                        if (sp[0] != null) SwingUtilities.invokeLater(() -> sp[0].getVerticalScrollBar().setValue(keep[0]));
+                    };
+                    step[0].run();
                 });
             });
         }
@@ -2229,8 +2443,10 @@ public class InstanceManageDialog extends JDialog {
             install.setEnabled(false);
             install.setText(tr("manage.browse.installing"));
             final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
+            final boolean cf = com.gummer.launcher.curseforge.CurseBrowse.isCurseId(h.id);
             final com.google.common.util.concurrent.ListenableFuture<String> task = launcher.getExecutor().submit(
-                    () -> com.gummer.launcher.manage.ModrinthBrowse.installModpack(launcher, h, game, loaders, importer));
+                    () -> cf ? com.gummer.launcher.curseforge.CurseBrowse.installModpack(launcher, h, game, loaders, importer)
+                            : com.gummer.launcher.manage.ModrinthBrowse.installModpack(launcher, h, game, loaders, importer));
             com.skcraft.concurrency.ObservableFuture<String> future = new com.skcraft.concurrency.ObservableFuture<String>(task, importer);
             com.skcraft.launcher.dialog.ProgressDialog.showProgress(InstanceManageDialog.this, future,
                     tr("manage.browse.modpackProgressTitle"), tr("manage.browse.modpackProgress", h.title));
@@ -2260,6 +2476,9 @@ public class InstanceManageDialog extends JDialog {
         }
 
         /** Рядок результату: іконка, назва, автор і завантаження, опис, «Сторінка», «Встановити». */
+        /** Скільки рядків пошуку додається за одну подію потоку інтерфейсу. */
+        private static final int HIT_ROWS_CHUNK = 5;
+
         final class HitRow extends JPanel {
             HitRow(final com.gummer.launcher.manage.ModrinthBrowse.Hit h) {
                 super(new MigLayout("insets 8 10 8 8, gap 12 2, fillx", "[" + ICON + "!][grow,fill][]", "[]"));
@@ -2304,6 +2523,10 @@ public class InstanceManageDialog extends JDialog {
                     d.setForeground(pal.text2);
                     add(d, "skip 1, wmin 0, wrap");
                 }
+                if ((kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD || kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.RESOURCEPACK)
+                        && com.gummer.launcher.manage.ModrinthBrowse.isXray(h)) {
+                    add(xrayWarning(), "skip 1, wmin 0, wrap"); // 24.11.2026: червона позначка X-ray
+                }
                 JPanel meta = new JPanel(new MigLayout("insets 0, gap 10", "[]", "[]"));
                 meta.setOpaque(false);
                 meta.add(small(tr("manage.browse.meta", h.author, downloads(h.downloads))), "wmin 0");
@@ -2335,6 +2558,9 @@ public class InstanceManageDialog extends JDialog {
                     new SwingWorker<String, Void>() {
                         @Override
                         protected String doInBackground() throws Exception {
+                            if (com.gummer.launcher.curseforge.CurseBrowse.isCurseId(h.id)) {
+                                return com.gummer.launcher.curseforge.CurseBrowse.installFile(launcher, kind, h, game, loaders, dir, got, missing, conflicts);
+                            }
                             return com.gummer.launcher.manage.ModrinthBrowse.install(kind, h, game, loaders, dir, got, missing, conflicts);
                         }
 
@@ -2352,7 +2578,8 @@ public class InstanceManageDialog extends JDialog {
                                 com.gummer.launcher.stats.LaunchStats.added(launcher, kind.projectType);
                                 // 17.11.2026: чого бракує чи що заважає, гравець має побачити одразу, а не на вильоті гри
                                 java.util.List<String> warn = new ArrayList<String>();
-                                if (!missing.isEmpty()) warn.add(tr("manage.browse.depsMissing", h.title, String.join(", ", missing), game != null ? game : "?"));
+                                if (!missing.isEmpty()) warn.add(tr(com.gummer.launcher.curseforge.CurseBrowse.isCurseId(h.id)
+                                        ? "manage.browse.depsMissingCurse" : "manage.browse.depsMissing", h.title, String.join(", ", missing), game != null ? game : "?"));
                                 if (!conflicts.isEmpty()) warn.add(tr("manage.browse.depsConflict", h.title, String.join(", ", conflicts)));
                                 if (!warn.isEmpty()) {
                                     JOptionPane.showMessageDialog(InstanceManageDialog.this, String.join("\n\n", warn),
@@ -2365,8 +2592,9 @@ public class InstanceManageDialog extends JDialog {
                                 install.setText(tr("manage.browse.install"));
                                 boolean noVersion = com.gummer.launcher.manage.ModrinthBrowse.NO_VERSION.equals(t.getMessage());
                                 toast(noVersion ? tr("manage.browse.noVersion", h.title, game != null ? game : "?")
-                                        : tr("manage.browse.installFailed", h.title));
-                                if (!noVersion) java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).log(java.util.logging.Level.WARNING, "Modrinth install failed: " + h.slug, t);
+                                        : com.gummer.launcher.curseforge.CurseBrowse.NOT_DOWNLOADED.equals(t.getMessage())
+                                        ? tr("cpage.notDownloaded", h.title) : tr("manage.browse.installFailed", h.title));
+                                if (!noVersion) java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).log(java.util.logging.Level.WARNING, "Install failed: " + h.id + " " + h.slug, t);
                             }
                         }
                     }.execute();
@@ -2431,6 +2659,9 @@ public class InstanceManageDialog extends JDialog {
                 name.setForeground(pal.text);
                 row.add(name, "wmin 0, growx");
                 row.add(small(f.isDirectory() ? tr("manage.files.folder") : size(f.length())), "gapleft 8");
+                if (list == packsList && com.gummer.launcher.manage.ModrinthBrowse.isXray(f.getName())) {
+                    row.add(xrayWarning(), "newline, span, wmin 0"); // 24.11.2026: ресурспак X-ray
+                }
                 list.add(row, "wmin 0");
             }
         }
@@ -3036,7 +3267,7 @@ public class InstanceManageDialog extends JDialog {
     private void importPack() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle(tr("mrpack.chooseTitle"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth (.mrpack, .zip)", "mrpack", "zip"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth, CurseForge (.mrpack, .zip)", "mrpack", "zip"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         final File file = chooser.getSelectedFile();
         final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
@@ -3073,6 +3304,13 @@ public class InstanceManageDialog extends JDialog {
     private JPanel gpuCard() {
         final JPanel c = card();
         c.setVisible(false);
+        // 24.11.2026: список відеокарт лаунчер читає у фоні на старті; якщо він уже є, картка будується одразу (без
+        // появи за мить після відкриття розділу і без зсуву сторінки), інакше, як раніше, у фоні
+        if (com.gummer.launcher.util.Gpu.adaptersReady()) {
+            String d = com.gummer.launcher.util.Gpu.discreteOfHybrid();
+            fillGpuCard(c, d == null ? null : new String[]{d, String.valueOf(com.gummer.launcher.util.Gpu.integratedOfHybrid())}, false);
+            return c;
+        }
         new SwingWorker<String[], Void>() {
             @Override
             protected String[] doInBackground() {
@@ -3088,6 +3326,14 @@ public class InstanceManageDialog extends JDialog {
                 } catch (Exception e) {
                     gpus = null;
                 }
+                fillGpuCard(c, gpus, true);
+            }
+        }.execute();
+        return c;
+    }
+
+    /** Вміст картки «Відеокарта»; late: картка з'являється вже після першої розкладки сторінки. */
+    private void fillGpuCard(final JPanel c, String[] gpus, boolean late) {
                 if (gpus == null || !com.gummer.launcher.util.Gpu.choiceSupported()) return;
                 boolean win = com.skcraft.launcher.util.Environment.getInstance().getPlatform()
                         == com.skcraft.launcher.util.Platform.WINDOWS;
@@ -3154,13 +3400,13 @@ public class InstanceManageDialog extends JDialog {
                 row.setOpaque(false);
                 row.add(open, "h 32!");
                 row.add(copy, "h 32!");
-                c.add(row, "gaptop 6");
+                c.add(row, "gaptop 6, wmin 0"); // 24.11.2026: як ряд картки FPS
                 c.add(note, "wmin 0, hidemode 3");
                 c.setVisible(true);
                 c.revalidate();
-            }
-        }.execute();
-        return c;
+                // 24.11.2026: картка з'являється вже після першої розкладки; поява смуги прокрутки звужує сторінку, а
+                // тексти з переносом сусідньої картки FPS лишались старої ширини і вилазили за край
+                if (late) relayoutLater(c);
     }
 
     /** 19.11.2026: перемикач з таким самим видом кружечка, як квадратик {@link #check} (ті самі ключі FlatLaf). */
@@ -3196,6 +3442,14 @@ public class InstanceManageDialog extends JDialog {
                 + "; icon.disabledCheckmarkColor: " + LookUi.hex(pal.text3)
                 + "; disabledText: " + LookUi.hex(pal.text3));
         return b;
+    }
+
+    /** 24.11.2026: червоне попередження під модом чи ресурспаком X-ray (текст browse.xray), з переносом у вузькому вікні. */
+    static JTextArea xrayWarning() {
+        JTextArea l = LookUi.body(tr("browse.xray"), false);
+        l.setForeground(LookTheme.palette().danger);
+        l.setFont(l.getFont().deriveFont(Font.BOLD, 12f));
+        return l;
     }
 
     private JLabel small(String text) {
@@ -3253,7 +3507,8 @@ public class InstanceManageDialog extends JDialog {
 
         @Override
         public Dimension getPreferredScrollableViewportSize() {
-            return getPreferredSize();
+            // 24.11.2026: не міряти всю сторінку (див. pageHost): розмір видимої частини задає вікно
+            return new Dimension(100, 100);
         }
 
         @Override

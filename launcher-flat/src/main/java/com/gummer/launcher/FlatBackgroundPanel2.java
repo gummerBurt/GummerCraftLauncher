@@ -156,7 +156,7 @@ public class FlatBackgroundPanel2 extends JPanel {
         currentLayout = layout;
         // 17.11.2026: сторінка Modrinth без лого збірки
         Scene next = new Scene(key, background != null ? background : defaultBackground,
-                FlatBackgroundPanel.BROWSER_LOOK.equals(key) ? FlatBackgroundPanel.NO_LOGO : logo != null ? logo : defaultLogo);
+                FlatBackgroundPanel.isBrowserLook(key) ? FlatBackgroundPanel.NO_LOGO : logo != null ? logo : defaultLogo);
         applyValues(next);
         if (next.looksSame(current)) {
             current = next;

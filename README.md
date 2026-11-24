@@ -41,6 +41,7 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 - One-click Modrinth modpacks with search and filters. Modpack updates with the authors' changelog and a way back to the previous version.
 - Search and install mods, resource packs and shaders right in the Build window. Required dependencies are installed automatically, every file is checked against the Modrinth hash, and each mod shows whether it is client-side, server-side or needed on both.
 - Update your mods one by one or with "Update all". The old version of a mod is kept for 30 days: if the game starts crashing after an update, the mod goes back with one button.
+- CurseForge modpacks: browse and install them on the CurseForge page, like Modrinth, or open a CurseForge `.zip`. Modrinth `.mrpack` works too. Mods whose authors allow downloads only from the CurseForge website are listed with a "Download" button, and the launcher picks the downloaded files up from your Downloads folder by itself.
 - "Share build": a `.mrpack` or `.zip` file with all the mods that both our launcher and Prism can open.
 - Import builds from Prism Launcher, PolyMC, ATLauncher, CurseForge, the old Modrinth App, TLauncher, SKlauncher and the official Minecraft launcher (MultiMC and any other launcher: pick the folder by hand). Mods, settings, resource packs and shaders are moved over, worlds if you want.
 
@@ -78,7 +79,20 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.36.18
+## What's new in 1.40.0
+
+A big update: CurseForge integration.
+
+- **CurseForge page** on the left, under Modrinth in "One-click modpacks": CurseForge modpacks and mods, with search, loader, game version, category and sorting, just like Modrinth. "Install" puts the modpack in under its own name and icon; the "Mods" tab installs a mod into a fitting build with the mods it needs.
+- **CurseForge next to Modrinth in the "Build" window**: "Find mods", "Find resource packs", "Find shaders" and "Modpacks" switch between "Find on Modrinth" and "Find on CurseForge".
+- **CurseForge zip modpacks** open with "Open build file" (an export from the CurseForge App or a file from curseforge.com).
+- **Files the authors allow only from the CurseForge website** are first looked up on Modrinth by sha1 (the very same file) and downloaded from there. Whatever is left is listed in a window: "Download" opens the file page, and the launcher picks the file up from your Downloads folder by itself.
+- **Required mods from both sources**: if CurseForge lacks a required mod for this game version, it comes from Modrinth, and the other way round.
+- **16 download threads instead of 6**, and one dropped file no longer breaks a modpack install.
+- **The GummerCraft server in the Multiplayer list is now added only to Vanilla builds.**
+- **A red X-ray note**, a separate "Performance (FPS)" section in "Manage build", a highlighted "Build settings" button and a faster interface.
+
+**Also new in 1.36.18:**
 
 - **Replacing the old exe is now reliable.** After the launcher closes, the new signed `GummerCraft.exe` starts right away, as soon as Java releases its files, so there are no longer a few silent seconds that invite a second click. The old exe file itself is swapped in the background: if it is still busy (for example, the old exe was opened again), the launcher keeps trying for ~90 s instead of giving up after the first try.
 

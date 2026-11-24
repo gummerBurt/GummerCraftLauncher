@@ -122,11 +122,43 @@ public final class ModrinthBrowse {
         }
     }
 
+    /**
+     * 24.11.2026: проти X-ray, а не сам X-ray (Xray Snitch, XrayReporter, AntiXray: ловлять тих, хто з ним грає;
+     * Block Overlay Fix: виправляє баг «бачу крізь блок»). Хоч одне таке слово в назві чи описі: позначки немає.
+     */
+    private static final java.util.regex.Pattern ANTI_XRAY = java.util.regex.Pattern.compile(
+            "(?iu)anti[\\s_.-]?x[\\s_.-]?ray|snitch|\\bdetect(s|ed|ing|or)?\\b|\\breport(s|er|ing)?\\b|x[\\s_.-]?rayers"
+                    + "|\\bcombat\\b|\\bprevent|\\bfix(es)?\\s+x[\\s_.-]?ray");
+    /** 24.11.2026: xray у будь-якому місці, «x-ray» / «x ray» / «x_ray» окремим словом, іксрей / ікс-рей / иксрей. */
+    private static final java.util.regex.Pattern XRAY = java.util.regex.Pattern.compile(
+            "(?iu)xray|(?<![\\p{L}\\d])x[\\s_.-]ray|[іи]кс[\\s-]?рей");
+
+    /**
+     * 24.11.2026 (власник: «всі моди та ресурспаки, де зустрічається іксрей, додай червону помітку»): чи схоже на
+     * X-ray (назва, slug, опис, ім'я файлу). Лише позначка для гравця, встановлювати не заважає.
+     */
+    public static boolean isXray(String... texts) {
+        boolean found = false;
+        for (String t : texts) {
+            if (t == null || t.isEmpty()) continue;
+            if (ANTI_XRAY.matcher(t).find()) return false;
+            if (XRAY.matcher(t).find()) found = true;
+        }
+        return found;
+    }
+
+    /** Те саме для результату пошуку. */
+    public static boolean isXray(Hit h) {
+        return h != null && isXray(h.title, h.slug, h.description);
+    }
+
     /** Один результат пошуку. */
     public static final class Hit {
         public String id, slug, title, author, description, iconUrl;
         /** 17.11.2026 ~23:15: головна картинка галереї проєкту (featured_gallery, інакше перша), або null: фон збірки модпака. */
         public String galleryUrl;
+        /** 1.40.0: сторінка проєкту на сайті (CurseForge), або null: тоді адреса Modrinth за slug. */
+        public String pageUrl;
         /** 17.11.2026: де мод працює (з client_side і server_side пошуку), або null. */
         public ModSides.Side side;
         /** 17.11.2026: чи вже стоїть у збірці (рахується у фоні разом з пошуком, а не в потоці інтерфейсу). */
@@ -309,6 +341,17 @@ public final class ModrinthBrowse {
         return out;
     }
 
+    /**
+     * 24.11.2026: щойно скачаний мод {@code jar} (ще не в теці) уже є в теці під іншою назвою файлу: назва наявного
+     * файлу (без {@code .disabled}), інакше null. Для CurseForge (curseforge.CurseBrowse), як нижче в {@link #install}.
+     */
+    public static String alreadyProvided(File dir, File jar) {
+        File same = providerOf(dir, ModInfo.idOf(jar));
+        if (same == null) return null;
+        String n = same.getName();
+        return n.endsWith(InstanceMods.DISABLED) ? n.substring(0, n.length() - InstanceMods.DISABLED.length()) : n;
+    }
+
     /** Мод у теці (увімкнений чи вимкнений), який дає грі цей id, або null. */
     static File providerOf(File dir, String modId) {
         if (modId == null || modId.trim().isEmpty()) return null;
@@ -345,7 +388,8 @@ public final class ModrinthBrowse {
         return projectId == null ? null : readIndex(dir).path(dir.getName() + "/" + projectId).asText(null);
     }
 
-    static synchronized void record(File dir, String projectId, String fileName) {
+    /** 24.11.2026: і з CurseForge (curseforge.CurseBrowse, ID {@code cf-<id>}), журнал той самий. */
+    public static synchronized void record(File dir, String projectId, String fileName) {
         try {
             JsonNode n = readIndex(dir);
             com.fasterxml.jackson.databind.node.ObjectNode o = n instanceof com.fasterxml.jackson.databind.node.ObjectNode
@@ -614,9 +658,11 @@ public final class ModrinthBrowse {
             try {
                 install(Kind.MOD, d, gameVersion, loaders, dir, installed, missing, conflicts, seen, depth + 1);
             } catch (IOException e) {
-                // залежності під цю гру немає чи не скачалась: мод уже поставлено, гравця попередить вікно
+                // залежності під цю гру немає чи не скачалась: 24.11.2026 той самий мод з CurseForge, а якщо і там
+                // немає, мод уже поставлено, гравця попередить вікно
                 log.info("Modrinth dependency " + d.slug + " not installed: " + e.getMessage());
-                if (missing != null) missing.add(d.title);
+                if (com.gummer.launcher.curseforge.CurseBrowse.installSameAs(d, gameVersion, loaders, dir, installed, missing,
+                        conflicts, seen, depth + 1) == null && missing != null) missing.add(d.title);
             }
         }
     }
@@ -633,6 +679,8 @@ public final class ModrinthBrowse {
         public final List<String> games = new ArrayList<String>();
         public final List<String> loaders = new ArrayList<String>();
         JsonNode file;
+        /** 1.40.0: файл версії модпака CurseForge (curseforge.CurseForge.FileInfo), для Modrinth null. */
+        public Object extra;
 
         /** Завантажувач, яким лаунчер поставить цю версію (fabric, quilt, forge, neoforge), або null. */
         public String loader() {
@@ -870,7 +918,8 @@ public final class ModrinthBrowse {
         try {
             // пошук дає лише мініатюру галереї (…_350.webp, 350 px); оригінал (raw_url) з картки проєкту
             String url = hit.galleryUrl;
-            try {
+            if (!hit.id.matches("[A-Za-z0-9]+")) url = hit.galleryUrl; // 1.40.0: CurseForge (cf-…), картка Modrinth не потрібна
+            else try {
                 JsonNode best = null;
                 for (JsonNode g : getJson(API + "project/" + enc(hit.id)).path("gallery")) {
                     if (best == null || g.path("featured").asBoolean(false) && !best.path("featured").asBoolean(false)) best = g;
@@ -906,7 +955,9 @@ public final class ModrinthBrowse {
     private static BufferedImage imageNow(String url, int maxBytes) {
         try {
             URL u = new URL(url);
-            if (!"https".equals(u.getProtocol()) || !CDN_HOST.equalsIgnoreCase(u.getHost())) return null;
+            // 1.40.0: ще картинки CurseForge (іконки і скріни модпаків зі сторінки CurseForge)
+            if (!"https".equals(u.getProtocol()) || !(CDN_HOST.equalsIgnoreCase(u.getHost())
+                    || "media.forgecdn.net".equalsIgnoreCase(u.getHost()))) return null;
             byte[] data = HttpRequest.get(u).execute().expectResponseCode(200).returnContent().asBytes();
             if (data.length > maxBytes) return null;
             if (data.length > 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
@@ -935,7 +986,66 @@ public final class ModrinthBrowse {
     }
 
     public static String projectUrl(Kind kind, Hit hit) {
+        if (hit.pageUrl != null) return hit.pageUrl;
         return "https://modrinth.com/" + kind.projectType + "/" + (hit.slug != null ? hit.slug : hit.id);
+    }
+
+    /**
+     * 24.11.2026 (власник: «в нас є два джерела, це потрібно використати»): обов'язкова залежність мода CurseForge, якої
+     * там немає під цю гру (або автор дозволяє її лише на сайті), ставиться з Modrinth, якщо там той самий мод: збіг
+     * slug або назви (без регістру, пробілів і розділових знаків), пошук Modrinth уже відфільтровано під цю гру і
+     * завантажувач. Далі звичайне встановлення з Modrinth (sha512, її залежності, мод з тим самим id вдруге не
+     * ставиться). Повертає назву файлу або null: не знайдено чи не вдалося, тоді гравця попереджають, як раніше.
+     */
+    public static String installSameAs(Hit dep, String gameVersion, String[] loaders, File dir, List<String> installed,
+                                       List<String> missing, List<String> conflicts, java.util.Set<String> seen, int depth)
+            throws InterruptedException {
+        if (dep == null || dep.title == null || loaders == null || loaders.length == 0 || depth > 3) return null;
+        try {
+            Hit same = sameMod(dep, search(Kind.MOD, dep.title, gameVersion, loaders, 0).hits);
+            if (same == null && dep.slug != null && dep.slug.matches("[a-z0-9_-]{2,64}")) {
+                try {
+                    JsonNode p = getJson(API + "project/" + dep.slug);
+                    if ("mod".equals(p.path("project_type").asText(""))) {
+                        Hit h = new Hit();
+                        h.id = p.path("id").asText(null);
+                        h.slug = p.path("slug").asText(null);
+                        h.title = p.path("title").asText("");
+                        same = sameMod(dep, java.util.Collections.singletonList(h));
+                    }
+                } catch (IOException notThere) {
+                    // на Modrinth такого slug немає
+                }
+            }
+            if (same == null || same.id == null || !same.id.matches("[A-Za-z0-9]+") || seen.contains(same.id)) return null;
+            if (looksInstalled(dir, same.id, same.slug)) return same.title;
+            seen.add(same.id);
+            String file = install(Kind.MOD, same, gameVersion, loaders, dir, installed, missing, conflicts, seen, depth);
+            log.info("Dependency " + dep.title + " installed from Modrinth instead (" + same.slug + ")");
+            return file;
+        } catch (IOException e) {
+            log.info("Dependency " + dep.title + " is not on Modrinth either: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** Той самий проєкт серед знайдених в іншому джерелі: спершу за slug, потім за назвою; null, якщо немає. */
+    public static Hit sameMod(Hit a, List<Hit> found) {
+        if (a == null || found == null) return null;
+        if (a.slug != null) {
+            for (Hit h : found) if (h.slug != null && a.slug.equalsIgnoreCase(h.slug)) return h;
+        }
+        String t = plainName(a.title);
+        if (t.length() < 3) return null;
+        for (Hit h : found) if (t.equals(plainName(h.title))) return h;
+        return null;
+    }
+
+    /** Назва без регістру, пробілів і розділових знаків, без хвоста в дужках: «Cloth Config API (Fabric/Forge)» -> «clothconfigapi». */
+    static String plainName(String s) {
+        if (s == null) return "";
+        String n = s.replaceAll("\\s*[(\\[][^)\\]]*[)\\]]\\s*$", "");
+        return n.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{Nd}]", "");
     }
 
     static JsonNode getJson(String url) throws IOException, InterruptedException {

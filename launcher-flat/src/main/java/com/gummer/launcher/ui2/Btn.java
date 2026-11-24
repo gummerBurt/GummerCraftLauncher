@@ -22,7 +22,13 @@ public class Btn extends JButton {
         /** Зелений контур: помітна, але не головна дія. */
         OUTLINE,
         /** Суцільний зелений (як «Грати»): лише якщо дія справді головна. */
-        ACCENT
+        ACCENT,
+        /**
+         * 24.11.2026 (власник: «кнопка "Налаштування збірки" загалом найважливіша, її потрібно якось виділити»): темна
+         * поверхня з зеленим відтінком і зеленою рамкою, значок світло-зелений. Помітна одразу, але не сперечається з
+         * суцільно зеленою «Грати».
+         */
+        HIGHLIGHT
     }
 
     private final Style style;
@@ -152,6 +158,10 @@ public class Btn extends JButton {
                 case ACCENT:
                     fill = pressed ? Ui.ACCENT_PRESSED : hover ? Ui.ACCENT_HOVER : Ui.ACCENT;
                     break;
+                case HIGHLIGHT:
+                    fill = mix(Ui.SURFACE_2, Ui.ACCENT, pressed ? 0.42f : hover ? 0.32f : 0.2f);
+                    stroke = Ui.ACCENT_HOVER;
+                    break;
                 default:
                     break;
             }
@@ -171,7 +181,7 @@ public class Btn extends JButton {
             int dy = pressed ? 1 : 0;
             FontMetrics fm = g2.getFontMetrics(getFont());
             if (iconOnly()) {
-                if (glyph != null) glyph.paint(g2, (w - 18) / 2, (h - 18) / 2 + dy, 18, fg);
+                if (glyph != null) glyph.paint(g2, (w - 18) / 2, (h - 18) / 2 + dy, 18, style == Style.HIGHLIGHT ? Ui.ACCENT_TEXT : fg);
             } else {
                 int x = Ui.S3;
                 String[] ls = lines();
@@ -180,7 +190,7 @@ public class Btn extends JButton {
                 int contentW = (glyph != null ? 18 + Ui.S2 : 0) + lw;
                 if (getHorizontalAlignment() == CENTER || w > getPreferredSize().width + Ui.S2) x = (w - badgeSpace - contentW) / 2;
                 if (glyph != null) {
-                    glyph.paint(g2, x, (h - 18) / 2 + dy, 18, fg);
+                    glyph.paint(g2, x, (h - 18) / 2 + dy, 18, style == Style.HIGHLIGHT ? Ui.ACCENT_TEXT : fg);
                     x += 18 + Ui.S2;
                 }
                 g2.setFont(getFont());
@@ -198,6 +208,13 @@ public class Btn extends JButton {
         } finally {
             g2.dispose();
         }
+    }
+
+    /** Колір між a і b (t = 0 a, t = 1 b). */
+    private static Color mix(Color a, Color b, float t) {
+        return new Color(Math.round(a.getRed() + (b.getRed() - a.getRed()) * t),
+                Math.round(a.getGreen() + (b.getGreen() - a.getGreen()) * t),
+                Math.round(a.getBlue() + (b.getBlue() - a.getBlue()) * t));
     }
 
     /** Для підкласів: малювання між фоном і вмістом. */

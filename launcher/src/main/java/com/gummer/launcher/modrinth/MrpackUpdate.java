@@ -162,7 +162,9 @@ public final class MrpackUpdate implements ProgressObservable {
     public static boolean canUpdate(Instance instance) {
         if (instance == null || !instance.isMrpack() || !instance.isLocal()) return false;
         JsonNode info = MrpackPacks.info(instance);
-        return info != null && info.path("projectId").asText(null) != null && info.path("mc").asText(null) != null;
+        // 1.40.0: збірки CurseForge (source curseforge, projectId «cf-…») оновлюються не через Modrinth
+        return info != null && info.path("projectId").asText(null) != null && info.path("mc").asText(null) != null
+                && !"curseforge".equals(info.path("source").asText(null));
     }
 
     /** Остання перевірка з пам'яті (без мережі), або null. */
@@ -652,7 +654,8 @@ public final class MrpackUpdate implements ProgressObservable {
         status = SharedLocale.tr("mrpack.update.status.files", 0, total);
         progress = 0;
         try (final ZipFile zip = new ZipFile(plan.packFile)) {
-            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(6, r -> {
+            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(16, // 24.11.2026: 6 -> 16, як HttpDownloader
+                     r -> {
                 Thread t = new Thread(r, "mrpack-update");
                 t.setDaemon(true);
                 return t;
@@ -676,7 +679,7 @@ public final class MrpackUpdate implements ProgressObservable {
                                     continue;
                                 }
                                 try {
-                                    data = HttpRequest.get(url).execute().expectResponseCode(200).returnContent().asBytes();
+                                    data = MrpackPacks.fetch(url, null); // 24.11.2026: з повторами
                                     break;
                                 } catch (IOException ex) {
                                     last = ex;

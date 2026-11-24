@@ -33,7 +33,11 @@ import java.util.concurrent.Executors;
  */
 public final class EdtWatch extends EventQueue {
 
-    static final int SLOW_MS = 60;
+    /** Поріг у мс; 24.11.2026: змінюється {@code -Dgummer.perf.ms=N} (проби швидкості міряють від 16 мс). */
+    static final int SLOW_MS = Math.max(1, Integer.getInteger("gummer.perf.ms", 60));
+    /** Найдовша подія (мс) з останнього {@link #takeWorst()}: для проб, що міряють окремі дії. */
+    private static final java.util.concurrent.atomic.AtomicLong worst = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong blocked = new java.util.concurrent.atomic.AtomicLong();
     static final int SAMPLE_MS = 8;
     private static final int MAX_SAMPLES = 400;
 
@@ -94,9 +98,19 @@ public final class EdtWatch extends EventQueue {
             if (outer) {
                 long ms = (System.nanoTime() - started) / 1000000L;
                 started = 0;
+                worst.accumulateAndGet(ms, Math::max);
+                if (ms >= 16) blocked.addAndGet(ms);
                 if (ms >= SLOW_MS && !nested) report(event, ms);
             }
         }
+    }
+
+    /**
+     * 24.11.2026: найдовша подія потоку інтерфейсу і сума подій від 16 мс з минулого виклику, {@code {найдовша, сума}},
+     * і скидання. Лише для проб швидкості (сторож має бути ввімкнений).
+     */
+    public static long[] takeWorst() {
+        return new long[]{worst.getAndSet(0), blocked.getAndSet(0)};
     }
 
     private void sample() {

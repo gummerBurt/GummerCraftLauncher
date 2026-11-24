@@ -143,6 +143,51 @@ public class InstanceTableModel extends AbstractTableModel {
     public static final BrowserRow MODRINTH = new BrowserRow();
 
     /**
+     * 1.40.0 (24.11.2026, власник: «зроби тут вкладку CurseForge і скачку модпаків з курсфордж точно як з модрінта»):
+     * рядок «CurseForge» під Modrinth, сторінка модпаків CurseForge (ModrinthPage у режимі CurseForge).
+     */
+    public static final BrowserRow CURSEFORGE = new BrowserRow("gc-browse-curseforge", "CurseForge");
+
+    /** Рядок сторінки CurseForge. */
+    public static boolean isCurseRow(Instance instance) {
+        return instance == CURSEFORGE;
+    }
+
+    /** Іконка рядка «CurseForge»: помаранчеве коло з ковадлом, без файлу картинки. */
+    private static final Icon CURSEFORGE_ICON = new Icon() {
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new java.awt.Color(241, 100, 54));
+            g2.fillOval(x + 1, y + 1, 30, 30);
+            g2.setColor(java.awt.Color.WHITE);
+            java.awt.geom.Path2D a = new java.awt.geom.Path2D.Float();
+            a.moveTo(x + 6, y + 10);   // ріг ковадла зліва
+            a.lineTo(x + 25, y + 10);
+            a.lineTo(x + 25, y + 15);
+            a.curveTo(x + 22, y + 15, x + 20, y + 16, x + 19, y + 19);
+            a.lineTo(x + 21, y + 22);  // ніжка
+            a.lineTo(x + 11, y + 22);
+            a.lineTo(x + 13, y + 19);
+            a.curveTo(x + 12, y + 16, x + 9, y + 14, x + 6, y + 10);
+            a.closePath();
+            g2.fill(a);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return 32;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return 32;
+        }
+    };
+
+    /**
      * 17.11.2026 (власник: «у режимі "Встановлені" неможливо додати збірку ... якщо треба, ок»): рядок «+ Додати збірку»
      * у кінці списку «Встановлені». Як і рядок Modrinth, це не збірка ({@link #isBrowser} теж true); вікна, вибравши
      * його, перемикають список на «Усі», де є всі версії і модпаки.
@@ -463,6 +508,7 @@ public class InstanceTableModel extends AbstractTableModel {
         }
         if (filter == null) {
             rows.add(MODRINTH);
+            rows.add(CURSEFORGE); // 1.40.0: під Modrinth
             rows.add(IMPORT); // 19.11.2026: під Modrinth
         }
     }
@@ -1093,6 +1139,7 @@ public class InstanceTableModel extends AbstractTableModel {
                 instance = getInstanceAt(rowIndex);
                 if (isAddRow(instance)) return ADD_ICON;
                 if (isImportRow(instance)) return IMPORT_ICON;
+                if (isCurseRow(instance)) return CURSEFORGE_ICON;
                 if (isBrowser(instance)) {
                     return modrinthIcon;
                 }
@@ -1129,7 +1176,9 @@ public class InstanceTableModel extends AbstractTableModel {
                 }
                 if (instance.isMrpack()) {
                     Icon own = packIcon(instance);
-                    return own != null ? own : modrinthIcon;
+                    if (own != null) return own;
+                    com.fasterxml.jackson.databind.JsonNode info = com.gummer.launcher.modrinth.MrpackPacks.info(instance);
+                    return info != null && "curseforge".equals(info.path("source").asText(null)) ? CURSEFORGE_ICON : modrinthIcon;
                 }
                 if ("main".equals(instance.getGroup())) {
                     return gummercraftIcon;

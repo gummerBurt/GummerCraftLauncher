@@ -157,6 +157,15 @@ public final class Gpu {
         return Collections.unmodifiableList(out);
     }
 
+    /**
+     * 24.11.2026: чи список відеокарт уже прочитано (лаунчер читає його у фоні на старті). Тоді {@link #adapters()},
+     * {@link #discreteOfHybrid()} і {@link #integratedOfHybrid()} не чекають PowerShell і їх можна кликати з потоку
+     * інтерфейсу: картка «Відеокарта» будується одразу, а не з'являється за мить після відкриття розділу.
+     */
+    public static boolean adaptersReady() {
+        return names != null && fresh == null;
+    }
+
     /** Окрема відеокарта, якщо поруч є і вбудована (дві відеокарти), інакше null. */
     public static String discreteOfHybrid() {
         List<String> all = adapters();

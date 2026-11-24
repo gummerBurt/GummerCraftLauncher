@@ -205,6 +205,11 @@ public final class FpsPresets {
      * «Слабкий ПК»; окрема відеокарта нового покоління (RTX, RX 6000+, Arc) і від 16 ГБ: «Красиво»; решта
      * «Збалансовано». Рахується раз, не з потоку інтерфейсу (перший виклик читає реєстр).
      */
+    /** 24.11.2026: порада, якщо її вже пораховано ({@link #advise()} на старті лаунчера у фоні), інакше null. Без чекання. */
+    public static Advice peek() {
+        return advice;
+    }
+
     public static Advice advise() {
         Advice a = advice;
         if (a != null) return a;

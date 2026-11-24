@@ -78,8 +78,35 @@ public final class ModSides {
 
     /** Лише з кешу, без мережі (для першого показу списку), або null. */
     public static Side cached(File jar) {
-        Object o = CACHE.get(key(jar));
+        String k = key(jar);
+        Object o = CACHE.get(k);
+        if (o == null) o = fromDisk(jar, k);
         return o instanceof Side ? (Side) o : null;
+    }
+
+    /**
+     * 24.11.2026 (власник: «всі списки мають оновлюватись без підгрузок»): сторона з диска ({@link #HASH_FILE},
+     * поле {@code sides}: sha1 -> сторона), без мережі і без читання jar (sha1 лише з того ж файлу, якщо розмір і час
+     * збіглися). Раніше після кожного запуску лаунчера позначки «клієнт/сервер» з'являлись за 0,3-0,6 с після
+     * списку модів (запит до Modrinth). Знайдене кладеться в кеш пам'яті, тож Modrinth про цей файл більше не питаємо;
+     * новий чи оновлений мод (інший sha1) питається, як раніше. null: на диску немає.
+     */
+    private static Object fromDisk(File jar, String k) {
+        try {
+            File dir = jar.getAbsoluteFile().getParentFile();
+            File game = dir != null ? dir.getParentFile() : null;
+            if (game == null) return null;
+            String[] e = disk(game).get(dir.getName() + "/" + baseName(jar));
+            if (e == null || e.length != 3 || !String.valueOf(jar.length()).equals(e[0]) || !String.valueOf(jar.lastModified()).equals(e[1])) return null;
+            String side = sidesDisk(game).get(e[2]);
+            if (side == null) return null;
+            Object o = "none".equals(side) ? NONE : Side.valueOf(side);
+            HASHES.putIfAbsent(k, e[2]);
+            CACHE.putIfAbsent(k, o);
+            return o;
+        } catch (RuntimeException ex) {
+            return null; // невідоме значення чи битий запис: як без диска
+        }
     }
 
     /**
@@ -90,7 +117,9 @@ public final class ModSides {
         Map<File, Side> out = new HashMap<File, Side>();
         Map<String, File> byHash = new LinkedHashMap<String, File>();
         for (File f : jars) {
-            Object c = CACHE.get(key(f));
+            String k = key(f);
+            Object c = CACHE.get(k);
+            if (c == null) c = fromDisk(f, k);
             if (c instanceof Side) out.put(f, (Side) c);
             else if (c == null) {
                 try {
@@ -137,11 +166,13 @@ public final class ModSides {
             }
             java.util.logging.Logger.getLogger(ModSides.class.getName()).info("Mod sides: " + remote.size() + " of " + byHash.size()
                     + " from Modrinth in " + (System.nanoTime() - t0) / 1000000 + " ms");
-            for (File f : byHash.values()) {
+            for (Map.Entry<String, File> e : byHash.entrySet()) {
+                File f = e.getValue();
                 Side s = remote.get(f);
                 if (s == null) s = ofEnvironment(ModInfo.of(f).environment);
                 CACHE.put(key(f), s != null ? s : NONE);
                 if (s != null) out.put(f, s);
+                rememberSide(f, e.getKey(), s); // 24.11.2026: і на диск, для першого показу після перезапуску
             }
         }
         return out;
@@ -201,6 +232,26 @@ public final class ModSides {
         }
     }
 
+    /** Тека гри -> (sha1 -> сторона або «none»), поле {@code sides} у {@link #HASH_FILE}. */
+    private static final Map<String, Map<String, String>> SIDES = new ConcurrentHashMap<String, Map<String, String>>();
+
+    private static Map<String, String> sidesDisk(File game) {
+        disk(game); // читає і sides
+        Map<String, String> m = SIDES.get(game.getAbsolutePath());
+        return m != null ? m : java.util.Collections.<String, String>emptyMap();
+    }
+
+    private static void rememberSide(File jar, String sha1, Side s) {
+        File dir = jar.getAbsoluteFile().getParentFile();
+        File game = dir != null ? dir.getParentFile() : null;
+        if (game == null) return;
+        disk(game);
+        Map<String, String> m = SIDES.get(game.getAbsolutePath());
+        if (m == null) return;
+        String v = s != null ? s.name() : "none";
+        if (!v.equals(m.put(sha1, v))) scheduleSave(game);
+    }
+
     private static String baseName(File f) {
         String n = f.getName();
         return n.toLowerCase(Locale.ROOT).endsWith(InstanceMods.DISABLED) ? n.substring(0, n.length() - InstanceMods.DISABLED.length()) : n;
@@ -209,6 +260,7 @@ public final class ModSides {
     private static Map<String, String[]> disk(File game) {
         return DISK.computeIfAbsent(game.getAbsolutePath(), p -> {
             Map<String, String[]> m = new ConcurrentHashMap<String, String[]>();
+            Map<String, String> sides = new ConcurrentHashMap<String, String>();
             File file = new File(game, HASH_FILE);
             if (file.isFile()) {
                 try {
@@ -219,10 +271,17 @@ public final class ModSides {
                         JsonNode a = e.getValue();
                         if (a.isArray() && a.size() == 3) m.put(e.getKey(), new String[]{a.get(0).asText(), a.get(1).asText(), a.get(2).asText()});
                     }
+                    // 24.11.2026: сторони модів за sha1 (старі версії лаунчера це поле пропускають)
+                    java.util.Iterator<Map.Entry<String, JsonNode>> si = root.path("sides").fields();
+                    while (si.hasNext()) {
+                        Map.Entry<String, JsonNode> e = si.next();
+                        if (e.getKey().matches("[0-9a-f]{40}") && e.getValue().isTextual()) sides.put(e.getKey(), e.getValue().asText());
+                    }
                 } catch (IOException | RuntimeException e) {
                     // битий файл: рахуємо заново і перезапишемо
                 }
             }
+            SIDES.put(p, sides);
             return m;
         });
     }
@@ -247,6 +306,7 @@ public final class ModSides {
             com.fasterxml.jackson.databind.node.ObjectNode root = MAPPER.createObjectNode();
             root.put("v", 1);
             com.fasterxml.jackson.databind.node.ObjectNode files = root.putObject("files");
+            java.util.Set<String> live = new java.util.HashSet<String>();
             for (Map.Entry<String, String[]> e : new java.util.TreeMap<String, String[]>(m).entrySet()) {
                 File f = new File(game, e.getKey());
                 if (!f.isFile() && !new File(game, e.getKey() + InstanceMods.DISABLED).isFile()) {
@@ -255,6 +315,16 @@ public final class ModSides {
                 }
                 com.fasterxml.jackson.databind.node.ArrayNode a = files.putArray(e.getKey());
                 for (String v : e.getValue()) a.add(v);
+                if (e.getValue().length == 3) live.add(e.getValue()[2]);
+            }
+            // 24.11.2026: сторони лише для файлів, які ще є
+            Map<String, String> sides = SIDES.get(gamePath);
+            if (sides != null && !sides.isEmpty()) {
+                com.fasterxml.jackson.databind.node.ObjectNode so = root.putObject("sides");
+                for (Map.Entry<String, String> e : new java.util.TreeMap<String, String>(sides).entrySet()) {
+                    if (live.contains(e.getKey())) so.put(e.getKey(), e.getValue());
+                    else sides.remove(e.getKey());
+                }
             }
             File tmp = new File(game, HASH_FILE + ".tmp");
             MAPPER.writeValue(tmp, root);

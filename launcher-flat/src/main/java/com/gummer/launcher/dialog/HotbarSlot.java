@@ -26,6 +26,19 @@ public class HotbarSlot extends JButton {
     private final String caption;
     private boolean hover;
     private int badge;
+    /**
+     * 24.11.2026 (власник: «кнопка "Налаштування збірки" загалом найважливіша, її потрібно якось виділити»): слот із
+     * зеленим відтінком і зеленою рамкою, колір як у сяйва «Запуску» ({@link #HIGHLIGHT}).
+     */
+    private boolean highlight;
+    private static final Color HIGHLIGHT = new Color(0x8C, 0xE0, 0x4A);
+
+    /** 24.11.2026: виділений слот (кнопка «Налаштування збірки»). */
+    public HotbarSlot highlight() {
+        highlight = true;
+        repaint();
+        return this;
+    }
 
     public HotbarSlot(String iconPath, String caption, String tooltip) {
         this(iconPath, caption, tooltip, WIDTH);
@@ -130,6 +143,10 @@ public class HotbarSlot extends JButton {
             // клітинка: темна, з тінню зверху-зліва і світлим краєм знизу-справа (вдавлена, як слот інвентарю)
             g2.setColor(pressed ? new Color(0, 0, 0, 120) : hover ? new Color(255, 255, 255, 34) : new Color(255, 255, 255, 12));
             g2.fillRect(3, 3, w - 6, h - 6);
+            if (highlight) { // 24.11.2026: зелений відтінок клітинки
+                g2.setColor(new Color(HIGHLIGHT.getRed(), HIGHLIGHT.getGreen(), HIGHLIGHT.getBlue(), pressed ? 30 : hover ? 62 : 44));
+                g2.fillRect(3, 3, w - 6, h - 6);
+            }
             g2.setColor(new Color(0, 0, 0, 110));
             g2.fillRect(3, 3, w - 6, 2);
             g2.fillRect(3, 3, 2, h - 6);
@@ -160,10 +177,17 @@ public class HotbarSlot extends JButton {
                 int tx = (w - fm.stringWidth(text)) / 2, ty = h - 15 - (lines.length - 1 - i) * lineH + dy;
                 g2.setColor(new Color(40, 40, 40));
                 g2.drawString(text, tx + 1, ty + 1);
-                g2.setColor(hover ? Color.WHITE : new Color(225, 225, 225));
+                g2.setColor(hover || highlight ? Color.WHITE : new Color(225, 225, 225));
                 g2.drawString(text, tx, ty);
             }
 
+            // 24.11.2026: виділений слот: зелена рамка в 2 пікселі (при наведенні її змінює біла)
+            if (highlight && !hover) {
+                g2.setColor(new Color(HIGHLIGHT.getRed(), HIGHLIGHT.getGreen(), HIGHLIGHT.getBlue(), 220));
+                g2.setStroke(new BasicStroke(2f));
+                g2.drawRect(2, 2, w - 5, h - 5);
+                g2.setStroke(new BasicStroke(1f));
+            }
             // вибраний слот: біла рамка в 3 пікселі, як у хотбарі
             if (hover) {
                 g2.setColor(new Color(255, 255, 255, 235));

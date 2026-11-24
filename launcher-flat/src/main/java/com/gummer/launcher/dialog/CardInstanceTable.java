@@ -213,7 +213,10 @@ public class CardInstanceTable extends InstanceTable {
         Instance inst = instanceAt(row);
         if (inst == null) return null;
         // 17.11.2026 (власник: «для modrinth зліва зроби категорію (напис) - Модпаки одним кліком»)
-        if (InstanceTableModel.isImportRow(inst)) return null; // 19.11.2026: під Modrinth, у тому ж розділі
+        // 19.11.2026: імпорт під Modrinth, у тому ж розділі. 24.11.2026 (власник: «нехай і модрінт, і курс фордж і імпорт
+        // збірки будуть під одною категорією "модпаки одним кліком", хз навіщо той чат додав окрему, таку ж категорію»):
+        // рядок CurseForge теж; у Бібліотеці і Класиці це вже було, у Склі забули
+        if (InstanceTableModel.isImportRow(inst) || InstanceTableModel.isCurseRow(inst)) return null;
         if (InstanceTableModel.isBrowser(inst) && !InstanceTableModel.isAddRow(inst)) return tr("launcher.section.modrinth");
         Instance prev = row > 0 ? instanceAt(row - 1) : null;
         InstanceTableModel m = (InstanceTableModel) getModel();
