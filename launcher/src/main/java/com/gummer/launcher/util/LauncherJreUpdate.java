@@ -150,6 +150,11 @@ public final class LauncherJreUpdate {
             if (!isX64Windows()) return null;
             if (JavaKind.isBundled()) return null;
             String p = System.getProperty("launch4j.exefile");
+            if (p == null || p.isEmpty()) {
+                // 1.36.17: наш Launch4j не передає -Dlaunch4j.exefile (перевірено 24.11 на exe 1.36.2: командний рядок
+                // без жодного -D), але сам exe завжди перший у classpath (як у SelfRestart.bootstrapCommand)
+                p = System.getProperty("java.class.path", "").split(java.util.regex.Pattern.quote(File.pathSeparator))[0];
+            }
             if (p == null || p.isEmpty()) return null;
             File exe = new File(p).getCanonicalFile();
             if (!exe.isFile() || !exe.getName().toLowerCase(Locale.ROOT).endsWith(".exe")) return null;
@@ -202,25 +207,32 @@ public final class LauncherJreUpdate {
         if (info == null || !info.path("replaceOldExe").asBoolean(false)) return;
         final File exe = download(launcher, window, info, "Old exe " + old, false, "launcher.exeUpdateStatus");
         if (exe == null) return;
-        File run = exe;
+        // 1.36.17: поки лаунчер працює, файл старого exe тримає відкритим сама Java (він у classpath: jar усередині exe),
+        // і Windows не дає його перейменувати (перевірено 24.11: «being used by another process»). Тому заміну робить cmd
+        // вже після закриття лаунчера: старий у .old, новий на його місце, запуск; не вдалось - старий назад, а новий exe
+        // запускається з temp. Шляхи через змінні середовища і !VAR! (cmd /v:on), щоб & ^ % і пробіли в шляху не ламали команду.
         File bak = new File(old.getParentFile(), old.getName() + ".old");
         try {
-            Files.deleteIfExists(bak.toPath());
-            Files.move(old.toPath(), bak.toPath());
-            try {
-                Files.copy(exe.toPath(), old.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                Files.deleteIfExists(old.toPath());
-                Files.move(bak.toPath(), old.toPath()); // повернути старий exe на місце
-                throw e;
-            }
-            run = old;
             Files.write(new File(launcher.getBaseDir(), OLD_EXE).toPath(), bak.getPath().getBytes(StandardCharsets.UTF_8));
-            log.info("Old exe replaced: " + old + " (previous kept as " + bak.getName() + ")");
-        } catch (IOException | RuntimeException e) {
-            log.log(Level.INFO, "Can't replace old exe " + old + ", starting the new one from " + exe + ": " + e);
+        } catch (IOException e) {
+            log.info("Can't write " + OLD_EXE + ": " + e);
         }
-        runAndExit(run, launcher);
+        final String script = "ping -n 6 127.0.0.1 >nul & (move /y \"!GC_OLD!\" \"!GC_BAK!\" >nul && "
+                + "(copy /b /y \"!GC_NEW!\" \"!GC_OLD!\" >nul && start \"\" \"!GC_OLD!\" || "
+                + "(move /y \"!GC_BAK!\" \"!GC_OLD!\" >nul & start \"\" \"!GC_NEW!\"))) || start \"\" \"!GC_NEW!\"";
+        SwingExecutor.INSTANCE.execute(() -> {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(Arrays.asList("cmd.exe", "/v:on", "/c", script)).directory(exe.getParentFile());
+                pb.environment().put("GC_OLD", old.getAbsolutePath());
+                pb.environment().put("GC_BAK", bak.getAbsolutePath());
+                pb.environment().put("GC_NEW", exe.getAbsolutePath());
+                pb.start();
+                log.info("Old exe " + old + " will be replaced by " + exe + " after exit (previous kept as " + bak.getName() + ")");
+                System.exit(0);
+            } catch (IOException e) {
+                log.log(Level.WARNING, "Can't start the old exe replacement", e);
+            }
+        });
     }
 
     /** Прибрати {@code .old} після заміни (при першому запуску він ще міг бути зайнятий). */

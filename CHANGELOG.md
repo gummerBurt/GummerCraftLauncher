@@ -4,6 +4,10 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.17
+
+- **Старий exe справді замінюється на місці.** Лаунчер, запущений старим `Gummer_Craft_launcher.exe`, тепер знаходить свій exe і замінює його новим підписаним `GummerCraft.exe` уже після свого закриття (поки лаунчер працює, Windows не дає чіпати цей файл). Якщо замінити не вдалось, старий файл лишається, а новий лаунчер з вбудованою Java однаково запускається.
+
 ## 1.36.16
 
 - **Заміна старих exe і оновлення Java лаунчера тепер справді запускаються самі.** У 1.36.15 (і з 1.36.2 для оновлення Java) перевірка при старті не викликалась, працювала лише кнопка «Оновити» в налаштуваннях.
@@ -266,6 +270,8 @@
 ---
 
 ## English changelog
+
+**1.36.17:** the old `Gummer_Craft_launcher.exe` is now really replaced in place: the launcher finds its exe and swaps it for the new signed `GummerCraft.exe` right after it closes (Windows does not allow touching the file while the launcher runs). If the swap fails, the old file stays and the new launcher with built-in Java starts anyway.
 
 **1.36.16:** replacing old exe files and updating the launcher's own Java now really start by themselves. In 1.36.15 (and since 1.36.2 for the Java update) the check at startup was never called, only the "Update" button in the settings worked.
 
