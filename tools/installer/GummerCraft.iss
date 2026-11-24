@@ -48,6 +48,10 @@ RestartApplications=no
 OutputBaseFilename=GummerCraft-{#AppVersion}
 VersionInfoVersion={#AppVersion}
 VersionInfoProductName=GummerCraft Launcher
+#ifdef SignThumb
+; 1.36.15: підпис Certum (build-installer.sh передає /Sgcsign=... і /DSignThumb=..., коли задано SIGN_THUMB)
+SignTool=gcsign
+#endif
 
 [Languages]
 Name: "uk"; MessagesFile: "compiler:Languages\Ukrainian.isl"
@@ -140,5 +144,9 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   // позначка розпакованої версії: наступний запуск цього (чи старшого) файлу одразу відкриє лаунчер
   if CurStep = ssPostInstall then
+  begin
     SaveStringToFile(ExpandConstant('{app}\version.txt'), '{#AppVersion}', False);
+    // 1.36.15: звідки запущено цей файл (на майбутнє: щоб наступна примусова заміна могла замінити і його)
+    SaveStringToFile(ExpandConstant('{app}\source.txt'), ExpandConstant('{srcexe}'), False);
+  end;
 end;

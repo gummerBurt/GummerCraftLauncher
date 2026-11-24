@@ -4,6 +4,12 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.36.15
+
+- **Лаунчер тепер підписаний.** Exe лаунчера підписані сертифікатом розробника Certum: у властивостях файлу і у вікні Windows видавець «Open Source Developer, Mykola Netreba» замість «Невідомий видавець», менше хибних спрацювань антивірусів.
+- **Старі exe міняються самі.** Якщо ти запускаєш старий `Gummer_Craft_launcher.exe` (без вбудованої Java), лаунчер один раз завантажить новий підписаний `GummerCraft.exe` з вбудованою Java, покладе його на місце старого з тим самим ім'ям (ярлики далі працюють) і перезапуститься вже з ним. Установки з вбудованою Java так само отримають підписаний exe. Збірки, акаунти і налаштування лишаються, бо тека гравця та сама.
+- **Зрозуміле вікно помилки.** Якщо exe не зміг запустити Java, вікно тепер називається «GummerCraft Launcher» (раніше «Please install Java» на будь-яку помилку) і пише, що робити: завантажити GummerCraft.exe заново з gummercraft.fun.
+
 ## 1.36.14
 
 - **Запуск гри більше не зависає на 90%** («Collecting process arguments») на ПК, де Windows довго не віддає список відеокарт. Лаунчер чекає на нього не довше 15 секунд, а якщо список так і не прийшов, запускає гру на відеокарті, яку вибере система, і не чіпає вже збережений вибір відеокарти.
@@ -256,6 +262,8 @@
 ---
 
 ## English changelog
+
+**1.36.15:** the launcher exe files are signed with a Certum developer certificate (publisher "Open Source Developer, Mykola Netreba"). The old `Gummer_Craft_launcher.exe` without built-in Java is replaced once by the new signed `GummerCraft.exe` with built-in Java under the same file name, installs with built-in Java get the signed exe too; builds, accounts and settings stay. The exe error window is now called "GummerCraft Launcher" instead of "Please install Java" and says what to do.
 
 **1.36.14:** the game launch no longer hangs at 90% ("Collecting process arguments") on PCs where Windows is slow to report the list of graphics cards. The launcher waits for it at most 15 seconds; if the list never comes, the game starts on the graphics card the system picks, and the saved graphics card choice is left as it is.
 

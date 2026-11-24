@@ -60,7 +60,15 @@ launch4j  {
     windowTitle = "GummerCraft Launcher"
     trademarks = "GummerCraft"
     supportUrl = "https://gummercraft.fun/support"
-    errTitle = "Please install Java"
+    // 1.36.15 (перший підписаний exe): заголовок і тексти вікон помилок Launch4j. Раніше будь-яка помилка старту мала
+    // заголовок «Please install Java». Лише англійською: Launch4j показує вікно ANSI-функцією, і кирилиця на системах
+    // з не кириличною кодовою сторінкою (наприклад, чеською) стала б кракозябрами. Після вікна Launch4j сам відкриває
+    // supportUrl (а якщо Java не знайдено, downloadUrl).
+    errTitle = "GummerCraft Launcher"
+    messagesStartupError = "GummerCraft Launcher could not start Java. Please download GummerCraft.exe again from gummercraft.fun and run it. Your modpacks and accounts will stay. The support chat will open after you close this window."
+    messagesBundledJreError = "The Java built into GummerCraft Launcher is damaged or missing (an antivirus often removes files from the jre folder). Please download GummerCraft.exe again from gummercraft.fun and run it. Your modpacks and accounts will stay. The support chat will open after you close this window."
+    messagesJreVersionError = "GummerCraft Launcher needs Java 8 or newer. Easier way: download the new GummerCraft.exe from gummercraft.fun, it has Java built in."
+    messagesLauncherError = "GummerCraft Launcher failed to start. Please download GummerCraft.exe again from gummercraft.fun and run it. Your modpacks and accounts will stay. The support chat will open after you close this window."
     // немає Java - відкривається пряме завантаження інсталятора Java 8 (x64) з сайту Oracle, без проміжного редиректу через наш домен.
     // Посилання Oracle з часом застарівають (BundleId): якщо почне вести на 404 - оновити тут і перезібрати exe.
     downloadUrl = "https://javadl.oracle.com/webapps/download/AutoDL?BundleId=253608_2fde65a2208f40a5b5f4c844b0dff092"

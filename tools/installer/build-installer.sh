@@ -59,7 +59,17 @@ fetch_jre jre8 jre8
 STAGE_WIN=$(cygpath -w "$STAGE" 2>/dev/null || echo "$STAGE")
 OUT_WIN=$(cygpath -w "$OUT" 2>/dev/null || echo "$OUT")
 ISS_WIN=$(cygpath -w "$HERE/GummerCraft.iss" 2>/dev/null || echo "$HERE/GummerCraft.iss")
-"$ISCC" //Q "//DAppVersion=$VERSION" "//DStage=$STAGE_WIN" "//O$OUT_WIN" "$ISS_WIN"
+# 1.36.15: SIGN_THUMB (відбиток сертифіката Certum) - підписати exe Launch4j у stage (через --launch4j, див. sign.py) і сам
+# GummerCraft-<версія>.exe (Inno Setup кличе sign.py через SignTool=gcsign). Без SIGN_THUMB збірка без підпису, як раніше.
+if [ -n "${SIGN_THUMB:-}" ]; then
+  python -X utf8 -I "$HERE/sign.py" "$SIGN_THUMB" "$STAGE/GummerCraft.exe" --launch4j || { echo "Підпис exe Launch4j не вдався"; exit 1; }
+  # Inno кличе цей cmd з шляхом файлу в лапках (%1): без вкладених лапок у самому параметрі /S
+  SIGN_CMD="$OUT/gcsign.cmd"
+  printf '@python -X utf8 -I "%s" %s %%1\r\n' "$(cygpath -w "$HERE/sign.py" 2>/dev/null || echo "$HERE/sign.py")" "$SIGN_THUMB" > "$SIGN_CMD"
+  "$ISCC" //Q "//DAppVersion=$VERSION" "//DStage=$STAGE_WIN" "//DSignThumb=$SIGN_THUMB" "//Sgcsign=$(cygpath -w "$SIGN_CMD" 2>/dev/null || echo "$SIGN_CMD") \$f" "//O$OUT_WIN" "$ISS_WIN"
+else
+  "$ISCC" //Q "//DAppVersion=$VERSION" "//DStage=$STAGE_WIN" "//O$OUT_WIN" "$ISS_WIN"
+fi
 
 # портативний zip: GummerCraft/ з exe і jre (Java 17, тобто Windows 10+; Windows 7/8.1 - лише GummerCraft.exe), без установки
 python - "$STAGE" "$OUT/GummerCraft-$VERSION-portable.zip" <<'PY'

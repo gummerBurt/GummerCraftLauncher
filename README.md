@@ -78,11 +78,13 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.36.14
+## What's new in 1.36.15
 
-- **The game launch no longer hangs at 90%** ("Collecting process arguments") on PCs where Windows is slow to report the list of graphics cards. The launcher waits at most 15 seconds, then starts the game on the graphics card the system picks.
+- **The launcher is now signed.** The launcher exe files are signed with a Certum developer certificate: the file properties and Windows show the publisher "Open Source Developer, Mykola Netreba" instead of "Unknown publisher", with fewer antivirus false positives.
+- **Old exe files replace themselves.** If you start the old `Gummer_Craft_launcher.exe` (without built-in Java), the launcher downloads the new signed `GummerCraft.exe` with built-in Java once, puts it in place of the old file under the same name (shortcuts keep working) and restarts with it. Installs with built-in Java get the signed exe the same way. Builds, accounts and settings stay, the player folder is the same.
+- **A clear error window.** If the exe could not start Java, the window is now called "GummerCraft Launcher" (it used to say "Please install Java" for any error) and says what to do: download GummerCraft.exe again from gummercraft.fun.
 
-**Previous version, 1.36.13:** English logo caption "From Ukraine with love!", and in the Classic look nothing is cut off next to the build name in a window.
+**Previous version, 1.36.14:** the game launch no longer hangs at 90% on PCs where Windows is slow to report the list of graphics cards.
 
 **Every change in every version: [CHANGELOG.md](CHANGELOG.md#english-changelog).**
 
@@ -130,7 +132,7 @@ Output goes to `<module>/build/libs`. The bootstrapper exe wrapper (Launch4j):
 ./gradlew clean build createAllExecutables
 ```
 
-The result is `launcher-bootstrap/build/launch4j/Gummer_Craft_launcher.exe`. Official releases are not yet signed with a developer certificate (code signing is in progress), so Windows SmartScreen may warn on first run. When signing arrives, the signing keys will not be in the repository.
+The result is `launcher-bootstrap/build/launch4j/Gummer_Craft_launcher.exe`. Since 1.36.15 official releases are signed with a Certum code signing certificate (publisher "Open Source Developer, Mykola Netreba", key in Certum's SimplySign cloud, not in the repository); `tools/installer/sign.py` signs them. A build of your own is unsigned.
 
 ## Verify the official build
 
