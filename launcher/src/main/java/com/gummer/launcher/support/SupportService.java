@@ -335,6 +335,12 @@ public class SupportService {
         if (selected != null) {
             File logs = new File(selected.getContentDir(), "logs");
             addFile(files, new File(logs, "latest.log"), "game-latest.log");
+            // 25.11.2026 (тікет #111): вивід гри останнього запуску (LaunchProcessHandler.saveConsole). Єдиний текст
+            // помилки, коли гра падає до старту свого логу. Свіжий, за 3 дні, як і crash-report.
+            File console = new File(selected.getDir(), com.skcraft.launcher.launch.LaunchProcessHandler.CONSOLE_FILE);
+            if (console.isFile() && System.currentTimeMillis() - console.lastModified() < 3L * 24 * HOUR_MS) {
+                addFile(files, console, "game-console.log");
+            }
             File[] crashes = new File(selected.getContentDir(), "crash-reports").listFiles((d, n) -> n.endsWith(".txt"));
             if (crashes != null && crashes.length > 0) {
                 File newest = crashes[0];

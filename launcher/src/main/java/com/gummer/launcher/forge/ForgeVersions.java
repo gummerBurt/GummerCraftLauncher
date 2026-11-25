@@ -161,7 +161,8 @@ public final class ForgeVersions {
                     JsonNode promos = MAPPER.readTree(body).path("promos");
                     for (String key : new String[]{mc + "-recommended", mc + "-latest"}) {
                         String b = promos.path(key).asText(null);
-                        if (b != null && all.contains(mc + "-" + b)) return mc + "-" + b;
+                        String v = b == null ? null : inList(all, mc, mc + "-" + b);
+                        if (v != null) return v;
                     }
                 } catch (IOException e) {
                     log.log(Level.FINE, "Bad Forge promotions", e);
@@ -173,6 +174,22 @@ public final class ForgeVersions {
             if (!isBeta(v)) return v;
         }
         return all.get(0);
+    }
+
+    /**
+     * 25.11.2026 (тікет #115): назва версії Forge так, як вона лежить у maven, або null. У Forge 1.7.10 - 1.10.2 у maven
+     * хвіст гілки: {@code 1.7.10-10.13.4.1614-1.7.10}, {@code 1.10.2-12.18.3.2511-1.10.0}, а .mrpack, CurseForge і
+     * promotions дають {@code 1.7.10-10.13.4.1614}. Без цього установник шукався за адресою без хвоста і отримував 404.
+     * Спершу точна назва, потім з хвостом {@code -mc}, потім будь-який хвіст.
+     */
+    static String inList(List<String> all, String mc, String loader) {
+        if (all == null || loader == null) return null;
+        if (all.contains(loader)) return loader;
+        if (all.contains(loader + "-" + mc)) return loader + "-" + mc;
+        for (String v : all) {
+            if (v.startsWith(loader + "-")) return v;
+        }
+        return null;
     }
 
     public static boolean isBeta(String v) {
@@ -217,6 +234,13 @@ public final class ForgeVersions {
             List<String> all = versions(launcher, kind).get(mc);
             loader = recommended(launcher, kind, mc, all);
             if (loader == null) throw new IOException("The " + kind.title + " version list for " + mc + " is unavailable");
+        } else if (kind == Kind.FORGE) {
+            // тікет #115: «1.7.10-10.13.4.1614» з .mrpack -> «1.7.10-10.13.4.1614-1.7.10», як у maven
+            String named = inList(versions(launcher, kind).get(mc), mc, loader);
+            if (named != null && !named.equals(loader)) {
+                log.info("Forge " + loader + " is " + named + " in the Forge maven");
+                loader = named;
+            }
         }
 
         byte[] body = HttpRequest.get(url).execute().expectResponseCode(200).returnContent().asBytes();

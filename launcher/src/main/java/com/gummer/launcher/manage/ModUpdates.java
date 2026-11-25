@@ -28,6 +28,12 @@ import java.util.logging.Logger;
  * поточні версії і {@code POST /v2/version_files/update} найновіші), без запиту на кожен мод. Оновлення пропонується,
  * лише коли нова версія опублікована пізніше за поточну (бета, яку гравець поставив сам, не відкотиться на старіший
  * реліз). Моди модпака сюди не йдуть: їх оновлює сам модпак.
+ *
+ * <p>25.11.2026 (власник: «обов'язково задіюємо і курсфордж ... вони мають доповнювати та страхувати одне одного»):
+ * файли, яких Modrinth не знає, шукаються на CurseForge за fingerprint (через наш проксі): три запити на весь список
+ * (fingerprint -> мод і файл, найновіші файли модів під цю гру, дані файлів). Новіший там, де ID файлу більший
+ * (CurseForge видає ID по зростанню). Запити до проксі не частіше разу на 1,5 с (у проксі 60 на хвилину з IP, а бейджі
+ * перевіряють усі збірки підряд).</p>
  */
 public final class ModUpdates {
 
@@ -53,7 +59,15 @@ public final class ModUpdates {
         public final String currentNumber;
         final String currentDate;
 
+        /** 25.11.2026: новий файл з CurseForge (тоді {@code version} і {@code primary} null), або null: з Modrinth. */
+        public final com.gummer.launcher.curseforge.CurseForge.FileInfo cf;
+
         Update(File file, String projectId, String versionNumber, JsonNode version, JsonNode primary, String currentNumber, String currentDate) {
+            this(file, projectId, versionNumber, version, primary, currentNumber, currentDate, null);
+        }
+
+        private Update(File file, String projectId, String versionNumber, JsonNode version, JsonNode primary, String currentNumber,
+                       String currentDate, com.gummer.launcher.curseforge.CurseForge.FileInfo cf) {
             this.file = file;
             this.projectId = projectId;
             this.versionNumber = versionNumber;
@@ -61,6 +75,12 @@ public final class ModUpdates {
             this.primary = primary;
             this.currentNumber = currentNumber;
             this.currentDate = currentDate;
+            this.cf = cf;
+        }
+
+        /** Звідки нова версія: «CurseForge» чи «Modrinth». */
+        public String source() {
+            return cf != null ? "CurseForge" : "Modrinth";
         }
     }
 
@@ -101,6 +121,8 @@ public final class ModUpdates {
         if (all) return out;
         out.clear();
         Map<String, Update> found = new HashMap<String, Update>();
+        java.util.Set<String> onModrinth = new java.util.HashSet<String>();
+        boolean modrinthOk = true;
         try {
             Map<String, Object> body = new HashMap<String, Object>();
             body.put("hashes", new ArrayList<String>(byHash.keySet()));
@@ -112,6 +134,7 @@ public final class ModUpdates {
             for (Map.Entry<String, File> e : byHash.entrySet()) {
                 JsonNode now = current.path(e.getKey());
                 JsonNode next = latest.path(e.getKey());
+                if (!now.isMissingNode()) onModrinth.add(e.getKey());
                 if (now.isMissingNode() || next.isMissingNode()) continue;
                 if (now.path("id").asText("").equals(next.path("id").asText(""))) continue;
                 // новіша лише за датою: поставлену руками бету не міняємо на старіший реліз
@@ -124,17 +147,227 @@ public final class ModUpdates {
                         now.path("version_number").asText("?"), now.path("date_published").asText("")));
             }
         } catch (IOException | InterruptedException | RuntimeException e) {
-            log.info("Mod updates are unavailable: " + e);
-            return out;
+            log.info("Mod updates are unavailable on Modrinth: " + e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                return out;
+            }
+            modrinthOk = false;
+        }
+        // 25.11.2026: чого Modrinth не знає (чи Modrinth не відповів), шукаємо на CurseForge
+        Map<String, File> rest = new LinkedHashMap<String, File>();
+        for (Map.Entry<String, File> e : byHash.entrySet()) if (!onModrinth.contains(e.getKey())) rest.put(e.getKey(), e.getValue());
+        boolean curseOk = true;
+        if (!rest.isEmpty()) {
+            try {
+                found.putAll(curse(rest, game, loaders));
+            } catch (IOException | RuntimeException e) {
+                log.info("Mod updates are unavailable on CurseForge: " + e);
+                curseOk = false;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return out;
+            }
         }
         long now = System.currentTimeMillis();
         for (String h : byHash.keySet()) {
             Update u = found.get(h);
-            CACHE.put(h + suffix, new Object[]{now, u != null ? u : NONE});
+            // кешуємо лише відповіді, а не «не вдалося спитати»: інакше 30 хв без оновлень після збою мережі
+            if (u != null || modrinthOk && (curseOk || !rest.containsKey(h))) CACHE.put(h + suffix, new Object[]{now, u != null ? u : NONE});
         }
         for (Map.Entry<String, Update> e : found.entrySet()) out.put(e.getValue().file, e.getValue());
-        log.info("Mod updates: " + out.size() + " of " + byHash.size() + " in " + (System.nanoTime() - t0) / 1000000 + " ms");
+        log.info("Mod updates: " + out.size() + " of " + byHash.size() + " (" + rest.size() + " not on Modrinth) in "
+                + (System.nanoTime() - t0) / 1000000 + " ms");
         return out;
+    }
+
+    /**
+     * 25.11.2026: лише CurseForge, і для файлів, які знає Modrinth: друга спроба, коли найновіша версія з Modrinth не
+     * допомогла (виліт через клас, якого в ній немає). Без кешу. Помилки мережі: IOException.
+     */
+    public static Map<File, Update> checkCurse(List<File> jars, String game, String[] loaders) throws IOException, InterruptedException {
+        Map<String, File> byHash = new LinkedHashMap<String, File>();
+        for (File f : jars) byHash.put(ModSides.sha1Cached(f), f);
+        Map<File, Update> out = new HashMap<File, Update>();
+        for (Update u : curse(byHash, game, loaders).values()) out.put(u.file, u);
+        return out;
+    }
+
+    /**
+     * 25.11.2026: що це за мод на CurseForge (за fingerprint): дані поставленого файлу, або null (файлу там немає чи
+     * CurseForge недоступний). Для пошуку того самого мода на Modrinth.
+     */
+    public static com.gummer.launcher.curseforge.CurseForge.FileInfo curseIdentity(File jar) throws InterruptedException {
+        com.skcraft.launcher.Launcher launcher = com.gummer.launcher.curseforge.CurseBrowse.shared();
+        if (launcher == null || jar == null || !jar.isFile()) return null;
+        try {
+            long fp = com.gummer.launcher.curseforge.CurseForge.fingerprint(jar);
+            gate();
+            int[] m = com.gummer.launcher.curseforge.CurseForge.matchFingerprints(launcher, java.util.Collections.singletonList(fp)).get(fp);
+            if (m == null) return null;
+            gate();
+            List<com.gummer.launcher.curseforge.CurseForge.FileInfo> l = lookupSome(launcher, java.util.Collections.singletonList(m[0]));
+            return l.isEmpty() ? null : l.get(0);
+        } catch (IOException | RuntimeException e) {
+            log.info("CurseForge identity unavailable for " + jar.getName() + ": " + e);
+            return null;
+        }
+    }
+
+    /**
+     * 25.11.2026 («і навпаки»): мод, якого Modrinth за файлом не знає (поставлений з CurseForge), але той самий мод там
+     * є (точний збіг slug чи назви, {@link ModrinthBrowse#sameMod}): версія з Modrinth під цю гру і завантажувач,
+     * опублікована пізніше за поставлений файл ({@code currentDate}, ISO; серед новіших спершу стабільна), як оновлення
+     * цього файлу. Без дати поставленого файлу нічого не пропонується (стабільна на Modrinth буває старішою за бету з
+     * CurseForge: JEI 1.12.2 4.22 проти 4.24). null: немає чи Modrinth недоступний.
+     */
+    public static Update modrinthSame(File jar, String title, String slug, String currentNumber, String currentDate,
+                                      String game, String[] loaders) throws InterruptedException {
+        if (jar == null || title == null || currentDate == null || currentDate.isEmpty() || game == null || loaders == null
+                || loaders.length == 0 || dateOf(currentDate) <= 0) return null;
+        try {
+            ModrinthBrowse.Hit a = new ModrinthBrowse.Hit();
+            a.title = title;
+            a.slug = slug;
+            ModrinthBrowse.Hit same = ModrinthBrowse.sameMod(a, ModrinthBrowse.search(ModrinthBrowse.Kind.MOD, title, game, loaders, 0).hits);
+            if (same == null || same.id == null || !same.id.matches("[A-Za-z0-9]+")) return null;
+            StringBuilder l = new StringBuilder("[");
+            for (int i = 0; i < loaders.length; i++) l.append(i > 0 ? "," : "").append('"').append(loaders[i]).append('"');
+            JsonNode versions = ModrinthBrowse.getJson(API + "project/" + same.id + "/version?game_versions="
+                    + ModrinthBrowse.enc("[\"" + game + "\"]") + "&loaders=" + ModrinthBrowse.enc(l.append(']').toString()));
+            JsonNode chosen = null;
+            for (JsonNode v : versions) { // від найновішої; лише новіші за поставлений файл, серед них спершу стабільна
+                if (dateOf(v.path("date_published").asText("")) <= dateOf(currentDate)) break;
+                if (chosen == null) chosen = v;
+                if ("release".equals(v.path("version_type").asText(""))) {
+                    chosen = v;
+                    break;
+                }
+            }
+            if (chosen == null) return null;
+            JsonNode primary = primaryFile(chosen);
+            if (primary == null) return null;
+            if (ModSides.sha1Cached(jar).equalsIgnoreCase(primary.path("hashes").path("sha1").asText(""))) return null;
+            log.info("Same mod on Modrinth for " + jar.getName() + ": " + same.slug + " " + chosen.path("version_number").asText("?")
+                    + " (" + chosen.path("date_published").asText("") + " > " + currentDate + ")");
+            return new Update(jar, same.id, chosen.path("version_number").asText("?"), chosen, primary,
+                    currentNumber != null ? currentNumber : "?", "");
+        } catch (IOException | RuntimeException e) {
+            log.info("Same mod on Modrinth unavailable for " + jar.getName() + ": " + e);
+            return null;
+        }
+    }
+
+    /** Дата ISO (Modrinth «2026-11-21T10:00:00.123Z», CurseForge «2026-11-21T10:00:00.12Z») у мс; не розібрано: 0. */
+    static long dateOf(String iso) {
+        try {
+            return java.time.Instant.parse(iso).toEpochMilli();
+        } catch (RuntimeException e) {
+            try {
+                return java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli();
+            } catch (RuntimeException e2) {
+                return 0;
+            }
+        }
+    }
+
+    /** sha1 файлу -> fingerprint CurseForge (рахується раз на вміст). */
+    private static final Map<String, Long> FINGERPRINTS = new ConcurrentHashMap<String, Long>();
+    private static final Object GATE = new Object();
+    private static long nextCall;
+
+    /** Не частіше разу на 1,5 с усім лаунчером (ліміт проксі 60 запитів на хвилину з IP). */
+    private static void gate() throws InterruptedException {
+        long wait;
+        synchronized (GATE) {
+            long now = System.currentTimeMillis();
+            wait = nextCall - now;
+            nextCall = Math.max(now, nextCall) + 1500;
+        }
+        if (wait > 0) Thread.sleep(wait);
+    }
+
+    /** Оновлення з CurseForge для цих файлів (sha1 -> файл): sha1 -> Update. */
+    private static Map<String, Update> curse(Map<String, File> byHash, String game, String[] loaders)
+            throws IOException, InterruptedException {
+        Map<String, Update> found = new HashMap<String, Update>();
+        com.skcraft.launcher.Launcher launcher = com.gummer.launcher.curseforge.CurseBrowse.shared();
+        if (launcher == null || byHash.isEmpty() || game == null || loaders == null || loaders.length == 0) return found;
+        Map<Long, String> byFp = new LinkedHashMap<Long, String>();
+        for (Map.Entry<String, File> e : byHash.entrySet()) {
+            Long fp = FINGERPRINTS.get(e.getKey());
+            if (fp == null) {
+                fp = com.gummer.launcher.curseforge.CurseForge.fingerprint(e.getValue());
+                FINGERPRINTS.put(e.getKey(), fp);
+            }
+            byFp.put(fp, e.getKey());
+        }
+        gate();
+        Map<Long, int[]> matches = com.gummer.launcher.curseforge.CurseForge.matchFingerprints(launcher, byFp.keySet());
+        Map<Integer, Integer> currentFile = new HashMap<Integer, Integer>(); // modId -> поставлений fileId
+        Map<Integer, String> hashOfMod = new HashMap<Integer, String>();
+        for (Map.Entry<Long, int[]> e : matches.entrySet()) {
+            if (e.getValue()[1] <= 0) continue;
+            currentFile.put(e.getValue()[1], e.getValue()[0]);
+            hashOfMod.put(e.getValue()[1], byFp.get(e.getKey()));
+        }
+        if (currentFile.isEmpty()) return found;
+        gate();
+        Map<Integer, int[]> latest = com.gummer.launcher.curseforge.CurseBrowse.latestFiles(launcher, currentFile.keySet(), game, loaders);
+        Map<Integer, Integer> nextFile = new HashMap<Integer, Integer>();
+        List<Integer> ids = new ArrayList<Integer>();
+        for (Map.Entry<Integer, Integer> e : currentFile.entrySet()) {
+            int[] lf = latest.get(e.getKey());
+            if (lf == null) continue;
+            int cur = e.getValue();
+            // новіший файл має більший ID. Спершу новіший стабільний; якщо новішого стабільного немає, найновіший
+            // будь-який (так само робить Modrinth version_files/update); на старіший файл нічого не міняємо
+            int next = lf[0] > cur ? lf[0] : lf[1] > cur ? lf[1] : 0;
+            if (next > 0) {
+                nextFile.put(e.getKey(), next);
+                ids.add(next);
+                ids.add(cur);
+            }
+        }
+        if (ids.isEmpty()) return found;
+        Map<Integer, com.gummer.launcher.curseforge.CurseForge.FileInfo> info = new HashMap<Integer, com.gummer.launcher.curseforge.CurseForge.FileInfo>();
+        gate();
+        for (com.gummer.launcher.curseforge.CurseForge.FileInfo i : lookupSome(launcher, ids)) info.put(i.id, i);
+        for (Map.Entry<Integer, Integer> e : currentFile.entrySet()) {
+            Integer next = nextFile.get(e.getKey());
+            if (next == null) continue;
+            com.gummer.launcher.curseforge.CurseForge.FileInfo nx = info.get(next), cur = info.get(e.getValue());
+            String hash = hashOfMod.get(e.getKey());
+            if (nx == null || hash == null || hash.equalsIgnoreCase(nx.sha1)) continue;
+            found.put(hash, new Update(byHash.get(hash), com.gummer.launcher.curseforge.CurseBrowse.ID_PREFIX + e.getKey(),
+                    label(nx), null, null, cur != null ? label(cur) : "?", "", nx));
+        }
+        return found;
+    }
+
+    /** Дані файлів CurseForge; файл, якого вже немає (автор прибрав), просто пропускається. */
+    private static List<com.gummer.launcher.curseforge.CurseForge.FileInfo> lookupSome(com.skcraft.launcher.Launcher launcher, List<Integer> ids)
+            throws IOException, InterruptedException {
+        try {
+            return com.gummer.launcher.curseforge.CurseForge.lookup(launcher, ids);
+        } catch (IOException e) {
+            if (e.getMessage() == null || !e.getMessage().startsWith("CurseForge has no file")) throw e;
+            List<com.gummer.launcher.curseforge.CurseForge.FileInfo> out = new ArrayList<com.gummer.launcher.curseforge.CurseForge.FileInfo>();
+            for (Integer id : ids) {
+                try {
+                    out.addAll(com.gummer.launcher.curseforge.CurseForge.lookup(launcher, java.util.Collections.singletonList(id)));
+                } catch (IOException gone) {
+                    // цього файлу на CurseForge вже немає
+                }
+            }
+            return out;
+        }
+    }
+
+    /** Назва версії CurseForge для списку: як її назвав автор, інакше назва файлу без .jar. */
+    private static String label(com.gummer.launcher.curseforge.CurseForge.FileInfo i) {
+        String n = i.displayName != null && !i.displayName.trim().isEmpty() ? i.displayName.trim() : i.fileName;
+        return n == null ? "?" : n.replaceAll("(?i)\\.jar$", "");
     }
 
     /**
@@ -144,6 +377,11 @@ public final class ModUpdates {
      */
     public static File apply(Update u, String game, String[] loaders, List<String> missing, List<String> conflicts)
             throws IOException, InterruptedException {
+        if (u.cf != null) {
+            com.skcraft.launcher.Launcher launcher = com.gummer.launcher.curseforge.CurseBrowse.shared();
+            if (launcher == null) throw new IOException("CurseForge is not ready");
+            return com.gummer.launcher.curseforge.CurseBrowse.replace(launcher, u.file, u.cf, u.currentNumber, game, loaders, missing, conflicts);
+        }
         File dir = u.file.getParentFile();
         String fileName = u.primary.path("filename").asText("");
         String sha512 = u.primary.path("hashes").path("sha512").asText(null);
@@ -186,7 +424,7 @@ public final class ModUpdates {
     }
 
     private static Update rebind(Update u, File f) {
-        return new Update(f, u.projectId, u.versionNumber, u.version, u.primary, u.currentNumber, u.currentDate);
+        return new Update(f, u.projectId, u.versionNumber, u.version, u.primary, u.currentNumber, u.currentDate, u.cf);
     }
 
     /**
@@ -195,6 +433,8 @@ public final class ModUpdates {
      * версій: лише текст нової версії. Порожньо: автор нічого не написав. Не з потоку інтерфейсу.
      */
     public static String changelog(Update u, String game, String[] loaders) {
+        // 25.11.2026: список змін CurseForge наш проксі поки не віддає
+        if (u.cf != null) return com.skcraft.launcher.util.SharedLocale.tr("manage.mods.curseNoChangelog");
         StringBuilder out = new StringBuilder();
         String newDate = u.version.path("date_published").asText("");
         try {

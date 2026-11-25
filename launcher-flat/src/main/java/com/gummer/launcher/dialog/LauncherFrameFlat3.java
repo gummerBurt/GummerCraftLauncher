@@ -146,6 +146,7 @@ public class LauncherFrameFlat3 extends JFrame {
         // встановленої збірки, тоді selectRememberedInstance перемкне на «Додати інсталяцію»
         launcher.getConfig().setInstalledOnly(true);
         instancesModel.setInstalledOnly(true);
+        instancesModel.setDesktopRow(true); // 25.11.2026: рядок «Робочий стіл» угорі «Встановлених»
         rootFrame = this;
         LauncherFrameFlat.rootFrame = this; // діалоги (налаштування, збірка) шукають вікно тут, хоч який вигляд вибрано
 
@@ -450,6 +451,8 @@ public class LauncherFrameFlat3 extends JFrame {
         shelfScroll.setOpaque(false);
         shelfScroll.getViewport().setOpaque(false);
         shelfScroll.getHorizontalScrollBar().setUnitIncrement(48);
+        // 25.11.2026: полиця гортається коліщатком як сторінка CurseForge, 72 px за поділку, одразу
+        com.gummer.launcher.look.WheelScroll.install(shelfScroll, true);
         shelfScroll.getHorizontalScrollBar().putClientProperty("FlatLaf.style",
                 "width: 6; thumbArc: 999; trackArc: 999; track: #0F1013; thumb: #3A3D44");
         shelfScroll.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -1229,7 +1232,8 @@ public class LauncherFrameFlat3 extends JFrame {
                     : icon instanceof Icon ? (Icon) icon : null;
             t.title = instancesModel.titleOf(i);
             // 19.11.2026: плитка «Імпорт збірки» з тим самим фоном, що Modrinth над нею
-            String key = com.gummer.launcher.FlatBackgroundPanel3.lookKey(InstanceTableModel.isImportRow(i) || InstanceTableModel.isCurseRow(i) ? InstanceTableModel.MODRINTH : i);
+            String key = InstanceTableModel.isDesktopRow(i) ? com.gummer.launcher.FlatBackgroundPanel.DESKTOP_LOOK // 25.11.2026: плитка «Робочого столу» зі своїм фоном
+                    : com.gummer.launcher.FlatBackgroundPanel3.lookKey(InstanceTableModel.isImportRow(i) || InstanceTableModel.isCurseRow(i) ? InstanceTableModel.MODRINTH : i);
             // 17.11.2026 ~23:35: свій фон на плитці лише у «Встановлених», у «Усі» плитка розділу зі своїм оформленням
             final java.awt.image.BufferedImage art = instancesModel.isInstalledOnly() ? com.gummer.launcher.manage.InstanceArt.background(i) : null;
             if (art != null) {
@@ -1247,7 +1251,7 @@ public class LauncherFrameFlat3 extends JFrame {
             if (instancesModel.isInstalledOnly()) { // 17.11.2026: у «Встановлених» розділи як в «Усі»
                 t.group = instancesModel.installedCaption(i, r > 0 ? instancesModel.getInstanceAt(r - 1) : null);
             }
-            if (InstanceTableModel.isBrowser(i) && !InstanceTableModel.isAddRow(i)) t.group = tr("launcher.section.modrinth"); // 17.11.2026
+            if (InstanceTableModel.isBrowser(i) && !InstanceTableModel.isAddRow(i) && !InstanceTableModel.isDesktopRow(i)) t.group = tr("launcher.section.modrinth"); // 17.11.2026; 25.11.2026 без «Робочого столу»
             if (InstanceTableModel.isImportRow(i) || InstanceTableModel.isCurseRow(i)) t.group = null; // 19.11.2026: під Modrinth, у тому ж розділі
             boolean browser = InstanceTableModel.isBrowser(i); // 17.11.2026: плитка сторінки Modrinth
             t.notInstalled = !browser && !i.isLocal();
@@ -1263,6 +1267,7 @@ public class LauncherFrameFlat3 extends JFrame {
             if (updates != null) state = state + " · " + updates;
             t.tooltip = InstanceTableModel.isAddRow(i) ? t.title + " · " + tr("launcher.addBuildSub")
                     : InstanceTableModel.isImportRow(i) ? t.title + " · " + tr("launcher.importRowSub")
+                    : InstanceTableModel.isDesktopRow(i) ? t.title + " · " + tr("launcher.desktopRowSub", instancesModel.localBuilds().size())
                     : browser ? t.title + " · " + tr("launcher.modrinthRowSub")
                     : t.title + (versions ? " · " + instancesModel.pickerTitleOf(i) : "") + " · " + state;
             list.add(t);
@@ -1725,7 +1730,7 @@ public class LauncherFrameFlat3 extends JFrame {
             menuItem.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
-                    launch();
+                    launchFor(selected); // 25.11.2026: з робочого столу меню відкривається для невибраної збірки
                 }
             });
             popup.add(menuItem);
@@ -2073,6 +2078,10 @@ public class LauncherFrameFlat3 extends JFrame {
             if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> afterCatalogInstall(added.getName()));
         }, this::playBuild);
         mainHolder.add(modrinthPage, "modrinth");
+        // 25.11.2026: сторінка «Робочий стіл» (рядок угорі «Встановлених»): усі збірки сіткою чи списком
+        desktopPage = new DesktopPage(instancesModel, this::openFromDesktop, this::playFromDesktop,
+                (i, c, x, y) -> popupInstanceMenu(c, x, y, i)); // 25.11.2026: правий клік як у списку зліва
+        mainHolder.add(desktopPage, "desktop");
         curseforgePage = new ModrinthPage(launcher, true, name -> {
             // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,
             // збірка вибирається і одразу ставляться гра і завантажувач, без ще одного натискання «Встановити»
@@ -2145,12 +2154,44 @@ public class LauncherFrameFlat3 extends JFrame {
         }
         if (modrinthPage == null) return;
         boolean browse = InstanceTableModel.isBrowser(getSelectedInstance());
-        placeVote(browse ? (InstanceTableModel.isCurseRow(getSelectedInstance()) && curseforgePage != null ? curseforgePage : modrinthPage).headerSlot() : heroRightRef);
+        placeVote(browse && !InstanceTableModel.isDesktopRow(getSelectedInstance()) ? (InstanceTableModel.isCurseRow(getSelectedInstance()) && curseforgePage != null ? curseforgePage : modrinthPage).headerSlot() : heroRightRef);
         boolean curseRow = InstanceTableModel.isCurseRow(getSelectedInstance());
         ModrinthPage page = curseRow && curseforgePage != null ? curseforgePage : modrinthPage;
-        mainCards.show(mainHolder, browse ? (curseRow ? "curseforge" : "modrinth") : "main");
+        boolean desk = InstanceTableModel.isDesktopRow(getSelectedInstance());
+        mainCards.show(mainHolder, desk ? "desktop" : browse ? (curseRow ? "curseforge" : "modrinth") : "main");
+        if (desk && desktopPage != null) desktopPage.refresh();
         
-        if (browse) page.shown();
+        if (browse && !desk) page.shown();
+    }
+
+    private DesktopPage desktopPage;
+
+    /** 25.11.2026: клік по збірці на «Робочому столі»: вибрати її в списку, як клік там (вибір запам'ятовується). */
+    private void openFromDesktop(Instance instance) {
+        if (instance == null) return;
+        int row = instancesModel.rowOf(instance.getName());
+        if (row < 0 && instancesModel.revealSectionOf(instance)) row = instancesModel.rowOf(instance.getName()); // розділ був згорнутий
+        if (row < 0) return;
+        instancesTable.setRowSelectionInterval(row, row);
+        instancesTable.scrollRectToVisible(instancesTable.getCellRect(row, 0, true));
+    }
+
+    /**
+     * 25.11.2026: «Грати / Встановити» з меню збірки. Меню з робочого столу відкривається для збірки, яку в списку зліва не
+     * вибрано (вибір не міняється, щоб сторінка лишалась), тож спершу вибрати її; у списку зліва вона вже вибрана.
+     */
+    private void launchFor(Instance instance) {
+        if (instance != null && getSelectedInstance() != instance) {
+            playFromDesktop(instance);
+            return;
+        }
+        launch();
+    }
+
+    /** 25.11.2026: кнопка ▶ на «Робочому столі»: вибрати збірку і одразу запустити. */
+    private void playFromDesktop(Instance instance) {
+        openFromDesktop(instance);
+        if (getSelectedInstance() == instance) launch();
     }
 
     /** Знову вибрати збірку на ім'я (або запам'ятовану), не записуючи це як вибір гравця. */
@@ -2252,7 +2293,7 @@ public class LauncherFrameFlat3 extends JFrame {
         public void gameClosed() {
             LauncherFrameFlat3 frame = frameRef.get();
             if (frame != null) {
-                frame.setVisible(true);
+                com.gummer.launcher.look.GameReturn.reshow(frame); // 25.11.2026: без анімації появи розгорнутого вікна
                 com.gummer.launcher.look.GameReturn.shown(frame); // 21.11.2026: сірий екран після гри в ігровому режимі Steam Deck
                 return;
             }

@@ -91,7 +91,7 @@ public final class ModRollback {
      *
      * @return true, якщо старий файл уже перенесено
      */
-    static boolean keep(File old, String newName, String prevVersion, String projectId) {
+    public static boolean keep(File old, String newName, String prevVersion, String projectId) { // 25.11.2026: public для оновлень з CurseForge
         File modsDir = old.getParentFile();
         try {
             File dir = store(modsDir);

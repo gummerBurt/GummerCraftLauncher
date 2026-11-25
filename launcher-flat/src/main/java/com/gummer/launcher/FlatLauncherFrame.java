@@ -82,6 +82,7 @@ public class FlatLauncherFrame extends LauncherFrameFlat {
         if (com.skcraft.launcher.swing.InstanceTableModel.isBrowser(selected)) {
             if (!restoringSelection) com.gummer.launcher.manage.ListMemory.remember(launcher.getConfig(), selected); // 17.11.2026: Modrinth теж пам'ять «Усі»
             backgroundPanel.showPack(com.skcraft.launcher.swing.InstanceTableModel.isCurseRow(selected) ? FlatBackgroundPanel.CURSE_LOOK // 24.11.2026: свій фон CurseForge
+                    : com.skcraft.launcher.swing.InstanceTableModel.isDesktopRow(selected) ? FlatBackgroundPanel.DESKTOP_LOOK // 25.11.2026: свій фон «Робочого столу»
                     : FlatBackgroundPanel.BROWSER_LOOK, !firstSelection, null);
             firstSelection = false;
             return;

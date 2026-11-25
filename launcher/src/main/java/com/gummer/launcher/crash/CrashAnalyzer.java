@@ -58,6 +58,15 @@ public final class CrashAnalyzer {
         public File depFile;
         /** 19.11.2026: пошкоджений файл конфігу (brokenConfig), або null: тоді лише порада. */
         public File configFile;
+        /** 25.11.2026: увімкнені моди, що з'явились після останньої вдалої гри ({@link RecentMods}), для порад без винного. */
+        public java.util.List<com.gummer.launcher.manage.InstanceMods.Mod> recentMods = java.util.Collections.emptyList();
+        /** 25.11.2026: modClassMissing: клас, якого бракує, шляхом у jar ({@code a/b/C.class}), для перевірки після оновлення. */
+        public String missingClass;
+        /**
+         * 25.11.2026: modClassMissing: залежність входить у модпак GummerCraft (позначка «з модпаку»). Її версію лаунчер не
+         * міняє (оновлення модпака повернуло б стару): лише порада, винний мод вимкнути.
+         */
+        public boolean depLocked;
 
         Diagnosis(String key, Action action, String detail, File source) {
             this(key, action, detail, source, null);
@@ -110,7 +119,8 @@ public final class CrashAnalyzer {
         if (path != null) return path;
         Diagnosis d = match(t, source);
         if (d != null && d.action == Action.RESET_CONFIG) return withConfig(instance, d);
-        if (d != null) return withMod(instance, d);
+        if (d != null && "modClassMissing".equals(d.key)) return withRecent(instance, withClassOwner(instance, d));
+        if (d != null) return withRecent(instance, withMod(instance, d));
         // 20.11.2026 (тікет #88): шлях з літерами, яких немає в кодовій сторінці Windows для програм: Java бачить «?»
         // замість них і не знаходить файлів. Будь-яка версія гри; часто гра падає ще до логу, тож без умови на текст,
         // але лише коли відомої причини немає (щоб не підміняти справжню)
@@ -120,7 +130,94 @@ public final class CrashAnalyzer {
         if (exitCode == -1073741819 || exitCode == -1073740791) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
         }
-        return new Diagnosis("unknown", Action.NONE, null, source);
+        return withRecent(instance, new Diagnosis("unknown", Action.NONE, null, source));
+    }
+
+    /** Причини, де винного мода не названо: до них підказка про нові моди ({@link RecentMods}). */
+    private static final java.util.Set<String> RECENT_KEYS = new java.util.HashSet<String>(java.util.Arrays.asList(
+            "unknown", "corrupt", "modConflict", "mixin", "modCrash", "worldTick", "duplicateMod"));
+
+    /** 25.11.2026: якщо винного мода з кнопкою «Вимкнути» немає, додати моди, нові з останньої вдалої гри. */
+    private static Diagnosis withRecent(Instance instance, Diagnosis d) {
+        if (d.modFile != null || !RECENT_KEYS.contains(d.key)) return d;
+        d.recentMods = RecentMods.of(instance);
+        return d;
+    }
+
+    /**
+     * 25.11.2026 (власник, Main 26.2: «стався краш фабрік лоадера, лаунчер з ним не впорався і не запропонував нічого, окрім
+     * перевстановки»). {@code NoClassDefFoundError: dev/tr7zw/entityculling/.../EntityCullingAPIVersionless} з першим
+     * рядком стеку {@code fr.madu59.fwa.compat.entityculling.EntityCullingCompat}: мод Fancy World Animations звертається
+     * до класу EntityCulling, якого в цій версії EntityCulling немає. Раніше будь-який NoClassDefFoundError був «файли
+     * пошкоджені». Тепер: шукаємо jar, у якому лежить клас з першого рядка стеку (той, хто звертається), і jar з пакетом
+     * класу, якого бракує (до кого). Кнопка «Вимкнути» першого, «Оновити» його. Не знайшли того, хто звертається: як
+     * раніше, пошкоджені файли.
+     */
+    private static Diagnosis withClassOwner(Instance instance, Diagnosis d) {
+        Diagnosis corrupt = new Diagnosis("corrupt", Action.REINSTALL, null, d.source);
+        int arrow = d.detail.indexOf(" → ");
+        if (arrow <= 0) return corrupt;
+        String frame = d.detail.substring(0, arrow), missing = d.detail.substring(arrow + 3);
+        String entry = classEntry(frame), missingEntry = classEntry(missing);
+        String[] parts = missingEntry.split("/");
+        int keep = Math.min(3, parts.length - 1); // пакет мода: dev/tr7zw/entityculling/
+        StringBuilder pkg = new StringBuilder();
+        for (int i = 0; i < keep; i++) pkg.append(parts[i]).append('/');
+        String depGuess = keep > 0 ? parts[keep - 1] : missing;
+        com.gummer.launcher.manage.InstanceMods.Mod culprit = null;
+        File depJar = null;
+        boolean depLocked = false;
+        try {
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+                if (!m.enabled) continue;
+                try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(m.file)) {
+                    if (culprit == null && z.getEntry(entry) != null) {
+                        culprit = m;
+                        continue;
+                    }
+                    final String prefix = pkg.toString();
+                    if (depJar == null && prefix.length() > 0 && z.stream().anyMatch(e -> e.getName().startsWith(prefix))) {
+                        depJar = m.file;
+                        depLocked = m.locked;
+                    }
+                } catch (IOException | RuntimeException ignored) {
+                    // не jar чи пошкоджений: далі
+                }
+                if (culprit != null && depJar != null) break;
+            }
+        } catch (RuntimeException ignored) {
+            return corrupt;
+        }
+        if (culprit == null) return corrupt;
+        com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.of(culprit.file);
+        String name = info.name != null ? info.name : culprit.name;
+        String dep = depJar != null && com.gummer.launcher.manage.ModInfo.of(depJar).name != null ? com.gummer.launcher.manage.ModInfo.of(depJar).name : depGuess;
+        Diagnosis out = new Diagnosis("modClassMissing", culprit.locked ? Action.NONE : Action.DISABLE_MOD, name + " → " + dep, d.source,
+                culprit.locked ? null : culprit.file, name);
+        // 25.11.2026: depId для докачування, якщо залежності немає зовсім (здогад за пакетом: entityculling)
+        out.depId = depJar != null ? dep : depGuess;
+        out.depFile = depJar;
+        out.depLocked = depLocked;
+        out.missingClass = missingEntry;
+        return out;
+    }
+
+    /** Ім'я класу (з крапками чи слешами, можливо вкладеного) у шлях усередині jar. */
+    private static String classEntry(String cls) {
+        String c = cls.replace('.', '/');
+        int nested = c.indexOf('$');
+        if (nested > 0) c = c.substring(0, nested);
+        return c + ".class";
+    }
+
+    /** Код гри, Java і завантажувачів: не «мод, який звертається». */
+    private static boolean platformClass(String cls) {
+        for (String p : new String[]{"java.", "javax.", "jdk.", "sun.", "com.sun.", "net.minecraft.", "com.mojang.", "net.fabricmc.",
+                "org.quiltmc.", "cpw.mods.", "net.minecraftforge.", "net.neoforged.", "org.spongepowered.", "com.llamalad7.",
+                "org.objectweb.", "kotlin.", "scala."}) {
+            if (cls.startsWith(p)) return true;
+        }
+        return false;
     }
 
     /** Рядок журналу гри з рівнем INFO, WARN, DEBUG чи TRACE: «[12:00:00] [Render thread/WARN]: ...» чи «[main/INFO]». */
@@ -221,6 +318,14 @@ public final class CrashAnalyzer {
         Matcher mixin = Pattern.compile("Mixin apply(?: for mod ([A-Za-z0-9_\\-]+))? failed").matcher(strict);
         if (mixin.find()) {
             return new Diagnosis("mixin", Action.REINSTALL, mixin.group(1), source);
+        }
+        // 25.11.2026: мод звертається до класу іншого мода, якого немає (див. withClassOwner): перший рядок стеку після
+        // NoClassDefFoundError у коді мода, а не гри чи завантажувача, і бракує не класу самої гри
+        Matcher ncd = Pattern.compile("NoClassDefFoundError: ([A-Za-z0-9_$./]+)[^\\n]*\\n\\s*at (?:[A-Za-z0-9_.\\-]+/{1,2})?([A-Za-z0-9_$.]+)\\.[A-Za-z0-9_$<>]+\\(").matcher(strict);
+        while (ncd.find()) {
+            String missing = ncd.group(1).replace('/', '.');
+            if (missing.startsWith("net.minecraft.") || missing.startsWith("com.mojang.") || platformClass(ncd.group(2))) continue;
+            return new Diagnosis("modClassMissing", Action.NONE, ncd.group(2) + " → " + missing, source);
         }
         if (t.contains("java.util.zip.ZipException") || t.contains("zip END header not found") || t.contains("Invalid or corrupt jarfile")
                 || strict.contains("java.lang.NoClassDefFoundError") || t.contains("java.lang.ClassNotFoundException: net.minecraft")) {

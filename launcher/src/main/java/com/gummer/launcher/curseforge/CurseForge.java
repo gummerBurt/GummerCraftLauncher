@@ -184,6 +184,92 @@ public final class CurseForge {
     }
 
     /**
+     * 25.11.2026: fingerprint файлу так, як його рахує CurseForge: MurmurHash2 (32 біти, seed 1) по байтах файлу без
+     * табуляції, переносів рядка і пробілів (9, 10, 13, 32). Беззнакове значення.
+     */
+    public static long fingerprint(File f) throws IOException {
+        byte[] raw = java.nio.file.Files.readAllBytes(f.toPath());
+        byte[] b = new byte[raw.length];
+        int n = 0;
+        for (byte x : raw) {
+            if (x != 9 && x != 10 && x != 13 && x != 32) b[n++] = x;
+        }
+        return murmur2(b, n, 1);
+    }
+
+    static long murmur2(byte[] b, int len, int seed) {
+        final int m = 0x5bd1e995;
+        int h = seed ^ len;
+        int i = 0;
+        while (len - i >= 4) {
+            int k = (b[i] & 0xff) | (b[i + 1] & 0xff) << 8 | (b[i + 2] & 0xff) << 16 | (b[i + 3] & 0xff) << 24;
+            k *= m;
+            k ^= k >>> 24;
+            k *= m;
+            h *= m;
+            h ^= k;
+            i += 4;
+        }
+        switch (len - i) {
+            case 3:
+                h ^= (b[i + 2] & 0xff) << 16;
+            case 2:
+                h ^= (b[i + 1] & 0xff) << 8;
+            case 1:
+                h ^= b[i] & 0xff;
+                h *= m;
+            default:
+                break;
+        }
+        h ^= h >>> 13;
+        h *= m;
+        h ^= h >>> 15;
+        return h & 0xffffffffL;
+    }
+
+    /**
+     * 25.11.2026: ID файлів CurseForge за fingerprint (через наш проксі, лише точні збіги): fingerprint -> fileId.
+     * Старий проксі без цього запиту, CurseForge недоступний: IOException.
+     */
+    public static Map<Long, Integer> byFingerprint(Launcher launcher, java.util.Collection<Long> fingerprints)
+            throws IOException, InterruptedException {
+        Map<Long, Integer> out = new HashMap<Long, Integer>();
+        for (Map.Entry<Long, int[]> e : matchFingerprints(launcher, fingerprints).entrySet()) out.put(e.getKey(), e.getValue()[0]);
+        return out;
+    }
+
+    /**
+     * 25.11.2026 (оновлення модів з CurseForge): як {@link #byFingerprint}, але fingerprint -> {fileId, modId}.
+     * Старий проксі без цього запиту, CurseForge недоступний: IOException.
+     */
+    public static Map<Long, int[]> matchFingerprints(Launcher launcher, java.util.Collection<Long> fingerprints)
+            throws IOException, InterruptedException {
+        String proxy = launcher.getProperties().getProperty("curseforgeProxyUrl", "").trim();
+        if (proxy.isEmpty()) throw new IOException("curseforgeProxyUrl is not set");
+        Map<Long, int[]> out = new HashMap<Long, int[]>();
+        List<Long> all = new ArrayList<Long>(fingerprints);
+        for (int from = 0; from < all.size(); from += 1000) {
+            Map<String, Object> body = Collections.<String, Object>singletonMap("fingerprints", all.subList(from, Math.min(all.size(), from + 1000)));
+            JsonNode answer = MAPPER.readTree(HttpRequest.post(new URL(proxy)).bodyJson(body).execute()
+                    .expectResponseCode(200).returnContent().asString("UTF-8"));
+            if (!answer.has("matches")) throw new IOException("The CurseForge proxy does not know fingerprints yet");
+            for (JsonNode m : answer.path("matches")) {
+                long fp = m.path("fingerprint").asLong(-1);
+                int id = m.path("fileId").asInt(0);
+                if (fp >= 0 && id > 0) out.put(fp, new int[]{id, m.path("modId").asInt(0)});
+            }
+        }
+        return out;
+    }
+
+    /** 25.11.2026: slug мода з адреси сторінки ({@code https://www.curseforge.com/minecraft/mc-mods/<slug>}), або null. */
+    public static String slugOf(String modUrl) {
+        if (modUrl == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^https://www\\.curseforge\\.com/minecraft/[a-z-]+/([a-z0-9_-]+)/?$").matcher(modUrl);
+        return m.matches() ? m.group(1) : null;
+    }
+
+    /**
      * Адреса файлу для запиту. CurseForge віддає {@code downloadUrl} з назвою файлу як є: пробіли, «+», дужки
      * ({@code fabric-api-0.100.0+1.21.1.jar}, {@code Decorative Blocks-forge.jar}). Пробіл у запиті недійсний, а «+»
      * деякі сховища читають як пробіл, тож кодуємо шлях: пробіл як %20, «+» як %2B (і те, і те сервер розкодує в ту

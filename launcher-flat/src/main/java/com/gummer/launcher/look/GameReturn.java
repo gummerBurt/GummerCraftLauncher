@@ -38,6 +38,21 @@ public final class GameReturn {
         return desktop.contains("gamescope") || gw != null && !gw.isEmpty() || "1".equals(System.getenv("SteamGamepadUI"));
     }
 
+    /**
+     * 25.11.2026 (власник: «коли закривається гра, і відкривається лаунчер, він на мілісекунду стає великим в
+     * повноекранному режимі а потім зжимається»): на час гри вікно знищується ({@code dispose}), після гри Windows
+     * створює його заново, і вимкнення анімації появи ({@link WinAnim}) лишалось у старого вікна. Розгорнуте вікно
+     * тоді знову грало анімацію Windows (малюється без рамки і більшим, потім стає на місце). Тепер перед показом
+     * вимикаємо анімацію новому вікну, як на старті лаунчера; звичайному вікну анімація лишається (так просили 17.11).
+     */
+    public static void reshow(Window w) {
+        if (w == null) return;
+        if (w instanceof Frame && (((Frame) w).getExtendedState() & Frame.MAXIMIZED_BOTH) == Frame.MAXIMIZED_BOTH) {
+            WinAnim.disable(w);
+        }
+        w.setVisible(true);
+    }
+
     public static void shown(final Window w) {
         if (w == null) return;
         w.toFront();

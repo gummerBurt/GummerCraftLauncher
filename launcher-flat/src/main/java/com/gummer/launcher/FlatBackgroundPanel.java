@@ -45,10 +45,16 @@ public class FlatBackgroundPanel extends JPanel {
     public static final String BROWSER_LOOK = "modrinth";
     /** 24.11.2026 (власник: «для сторінки CurseForge зміни бекграунд на якийсь з CurseForge»): bg_curseforge.jpg, теж без лого. */
     public static final String CURSE_LOOK = "curseforge";
+    /**
+     * 25.11.2026 (власник: «придумай на робочий стіл якийсь фон, там зараз модрінт»): bg_desktop.jpg, теж без лого. Темна
+     * база, синє світіння праворуч угорі і жовте ліворуч унизу (кольори ГаммерКрафта), ледь видна крапкова сітка. Без
+     * малюнка: контур плиток на фоні плутався зі справжніми плитками сторінки. Згенеровано PIL (2400x1260), скрипт у передачі.
+     */
+    public static final String DESKTOP_LOOK = "desktop";
 
     /** Сторінка Modrinth чи CurseForge: свій фон, без лого збірки і написів. */
     public static boolean isBrowserLook(String key) {
-        return BROWSER_LOOK.equalsIgnoreCase(key) || CURSE_LOOK.equalsIgnoreCase(key);
+        return BROWSER_LOOK.equalsIgnoreCase(key) || CURSE_LOOK.equalsIgnoreCase(key) || DESKTOP_LOOK.equalsIgnoreCase(key);
     }
     /** Порожнє лого: сцена без логотипа (сторінка Modrinth). */
     static final Image NO_LOGO = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
@@ -232,7 +238,7 @@ public class FlatBackgroundPanel extends JPanel {
     private boolean prewarmHooked;
     private Timer prewarmTimer;
     /** Збірки з власним фоном (look.FrameImages), Modrinth і без оформлення (GummerCraft, свої збірки). */
-    private static final String[] PREWARM_KEYS = {"staldayz", "vanilla", "fabric", "quilt", "forge", "neoforge", "modrinth", "curseforge", "default"};
+    private static final String[] PREWARM_KEYS = {"staldayz", "vanilla", "fabric", "quilt", "forge", "neoforge", "modrinth", "curseforge", "desktop", "default"};
 
     /**
      * 18.11.2026 (власник: «лаунчер включився на модрінті, я клацнув на сталдейз - затуп пів секунди перш ніж

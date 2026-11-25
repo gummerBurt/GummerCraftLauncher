@@ -188,6 +188,7 @@ public class LauncherFrameFlat extends JFrame {
         // встановленої збірки, тоді selectRememberedInstance перемкне на «Додати інсталяцію»
         launcher.getConfig().setInstalledOnly(true);
         instancesModel.setInstalledOnly(true);
+        instancesModel.setDesktopRow(true); // 25.11.2026: рядок «Робочий стіл» угорі «Встановлених»
         // 21.11.2026: розділи «Встановлених» згортаються кліком по підпису, стан у налаштуваннях лаунчера
         instancesModel.setCollapsibleSections(launcher.getConfig().getCollapsedSections(),
                 () -> com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig()));
@@ -320,6 +321,8 @@ public class LauncherFrameFlat extends JFrame {
         instanceScroll.setPreferredSize(new Dimension(sidebarWidth - 20, 400)); // height is arbitrary
         instanceScroll.setMaximumSize(new Dimension(sidebarWidth - 20, Integer.MAX_VALUE));
         instanceScroll.setOpaque(false); // transparent
+        // 25.11.2026 (власник: «скрол пробігає 2-3 модпаки за раз», потім «хочу такий самий швидкий скрол, як у вкладці CurseForge»): 72 px за поділку, одразу
+        com.gummer.launcher.look.WheelScroll.install(instanceScroll, false);
 
         // create sidebarButtonsPanel with strict width/padding
         JPanel sidebarButtonsPanel = new JPanel();
@@ -1590,7 +1593,7 @@ public class LauncherFrameFlat extends JFrame {
             menuItem.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
-                    launch();
+                    launchFor(selected); // 25.11.2026: з робочого столу меню відкривається для невибраної збірки
                 }
             });
             popup.add(menuItem);
@@ -2013,6 +2016,10 @@ public class LauncherFrameFlat extends JFrame {
             if (added != null) InstanceManageDialog.installOnly(this, launcher, added, () -> afterCatalogInstall(added.getName()));
         }, this::playBuild);
         mainHolder.add(modrinthPage, "modrinth");
+        // 25.11.2026: сторінка «Робочий стіл» (рядок угорі «Встановлених»): усі збірки сіткою чи списком
+        desktopPage = new DesktopPage(instancesModel, this::openFromDesktop, this::playFromDesktop,
+                (i, c, x, y) -> popupInstanceMenu(c, x, y, i)); // 25.11.2026: правий клік як у списку зліва
+        mainHolder.add(desktopPage, "desktop");
         curseforgePage = new ModrinthPage(launcher, true, name -> {
             // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,
             // збірка вибирається і одразу ставляться гра і завантажувач, без ще одного натискання «Встановити»
@@ -2088,7 +2095,9 @@ public class LauncherFrameFlat extends JFrame {
         boolean browse = InstanceTableModel.isBrowser(getSelectedInstance());
         boolean curseRow = InstanceTableModel.isCurseRow(getSelectedInstance());
         ModrinthPage page = curseRow && curseforgePage != null ? curseforgePage : modrinthPage;
-        mainCards.show(mainHolder, browse ? (curseRow ? "curseforge" : "modrinth") : "main");
+        boolean desk = InstanceTableModel.isDesktopRow(getSelectedInstance());
+        mainCards.show(mainHolder, desk ? "desktop" : browse ? (curseRow ? "curseforge" : "modrinth") : "main");
+        if (desk && desktopPage != null) desktopPage.refresh();
         topAreaHeight = browse ? 12 : 150;
         if (accountBoxRef != null) accountBoxRef.setVisible(!browse); // сторінка Modrinth на всю висоту
         if (topArea != null) topArea.revalidate();
@@ -2102,7 +2111,37 @@ public class LauncherFrameFlat extends JFrame {
         // 17.11.2026 (власник: «що таке "Modrinth - не встановлено"... ми ж не встановлюємо модрінт»): на сторінці
         // модпаків кнопок запуску і «Збірка» немає, модпак ставиться кнопкою «Встановити» біля його версії
         if (launchGroupRef != null) launchGroupRef.setVisible(!browse);
-        if (browse) page.shown();
+        if (browse && !desk) page.shown();
+    }
+
+    private DesktopPage desktopPage;
+
+    /** 25.11.2026: клік по збірці на «Робочому столі»: вибрати її в списку, як клік там (вибір запам'ятовується). */
+    private void openFromDesktop(Instance instance) {
+        if (instance == null) return;
+        int row = instancesModel.rowOf(instance.getName());
+        if (row < 0 && instancesModel.revealSectionOf(instance)) row = instancesModel.rowOf(instance.getName()); // розділ був згорнутий
+        if (row < 0) return;
+        instancesTable.setRowSelectionInterval(row, row);
+        instancesTable.scrollRectToVisible(instancesTable.getCellRect(row, 0, true));
+    }
+
+    /**
+     * 25.11.2026: «Грати / Встановити» з меню збірки. Меню з робочого столу відкривається для збірки, яку в списку зліва не
+     * вибрано (вибір не міняється, щоб сторінка лишалась), тож спершу вибрати її; у списку зліва вона вже вибрана.
+     */
+    private void launchFor(Instance instance) {
+        if (instance != null && getSelectedInstance() != instance) {
+            playFromDesktop(instance);
+            return;
+        }
+        launch();
+    }
+
+    /** 25.11.2026: кнопка ▶ на «Робочому столі»: вибрати збірку і одразу запустити. */
+    private void playFromDesktop(Instance instance) {
+        openFromDesktop(instance);
+        if (getSelectedInstance() == instance) launch();
     }
 
     /** Знову вибрати збірку на ім'я (або запам'ятовану), не записуючи це як вибір гравця. */
@@ -2204,7 +2243,7 @@ public class LauncherFrameFlat extends JFrame {
         public void gameClosed() {
             LauncherFrameFlat frame = frameRef.get();
             if (frame != null) {
-                frame.setVisible(true);
+                com.gummer.launcher.look.GameReturn.reshow(frame); // 25.11.2026: без анімації появи розгорнутого вікна
                 com.gummer.launcher.look.GameReturn.shown(frame); // 21.11.2026: сірий екран після гри в ігровому режимі Steam Deck
                 return;
             }

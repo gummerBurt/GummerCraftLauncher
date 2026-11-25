@@ -40,9 +40,9 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 **Modrinth, mods and modpacks**
 - One-click Modrinth modpacks with search and filters. Modpack updates with the authors' changelog and a way back to the previous version.
 - Search and install mods, resource packs and shaders right in the Build window. Required dependencies are installed automatically, every file is checked against the Modrinth hash, and each mod shows whether it is client-side, server-side or needed on both.
-- Update your mods one by one or with "Update all". The old version of a mod is kept for 30 days: if the game starts crashing after an update, the mod goes back with one button.
+- Update your mods one by one or with "Update all", from Modrinth and CurseForge. The old version of a mod is kept for 30 days: if the game starts crashing after an update, the mod goes back with one button.
 - CurseForge modpacks: browse and install them on the CurseForge page, like Modrinth, or open a CurseForge `.zip`. Modrinth `.mrpack` works too. Mods whose authors allow downloads only from the CurseForge website are listed with a "Download" button, and the launcher picks the downloaded files up from your Downloads folder by itself.
-- "Share build": a `.mrpack` or `.zip` file with all the mods that both our launcher and Prism can open.
+- "Share build": a `.mrpack` file of a few kilobytes with mods from Modrinth and CurseForge saved as links, or a `.zip` with all the mods. Our launcher opens both, Prism too (it skips CurseForge mods from a `.mrpack`).
 - Import builds from Prism Launcher, PolyMC, ATLauncher, CurseForge, the old Modrinth App, TLauncher, SKlauncher and the official Minecraft launcher (MultiMC and any other launcher: pick the folder by hand). Mods, settings, resource packs and shaders are moved over, worlds if you want.
 
 **Helper: when something goes wrong**
@@ -79,39 +79,17 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.40.1
+## What's new in 1.41.0
 
-**Hotfix:** chat works again in Minecraft 1.16.4 and 1.16.5 builds with an offline account (imported builds, Modrinth and CurseForge modpacks, Main 1.16). Before, opening the chat showed "Unable to send messages".
+- **A "Desktop" with all your builds.** The first row in "Installed" opens a page with all your builds together, as a grid or a list, by name, mod loader or date. The ▶ button starts the game right away, and a star pins a build to the top.
+- **Scrolling like on the CurseForge page.** One wheel notch scrolls by a little over one build instead of two or three.
+- **Modrinth and CurseForge back each other up.** Mod updates and downloads of required mods now use both sources: what one of them lacks, the launcher takes from the other, but only the same mod.
+- **Smarter crash help.** When mods do not fit each other, the launcher updates or downloads the needed mod by itself and checks that it helped. After a crash with no visible reason it lists the mods added since the last good run and can turn them off.
+- **"My mods":** "Newest first", the date each mod was added, and your own mods can be deleted (the file goes to the Recycle Bin).
+- **Share a build in a few kilobytes:** mods from Modrinth and CurseForge are saved as links, your friend's launcher downloads them itself.
+- **Also:** fewer micro-stutters in Java 8 builds, the game output in support requests, modpacks on old Forge (Minecraft 1.7.10 - 1.10.2) install again, the maximized launcher no longer flashes after the game.
 
-**1.40.0, a big update: CurseForge integration.**
-
-- **CurseForge page** on the left, under Modrinth in "One-click modpacks": CurseForge modpacks and mods, with search, loader, game version, category and sorting, just like Modrinth. "Install" puts the modpack in under its own name and icon; the "Mods" tab installs a mod into a fitting build with the mods it needs.
-- **CurseForge next to Modrinth in the "Build" window**: "Find mods", "Find resource packs", "Find shaders" and "Modpacks" switch between "Find on Modrinth" and "Find on CurseForge".
-- **CurseForge zip modpacks** open with "Open build file" (an export from the CurseForge App or a file from curseforge.com).
-- **Files the authors allow only from the CurseForge website** are first looked up on Modrinth by sha1 (the very same file) and downloaded from there. Whatever is left is listed in a window: "Download" opens the file page, and the launcher picks the file up from your Downloads folder by itself.
-- **Required mods from both sources**: if CurseForge lacks a required mod for this game version, it comes from Modrinth, and the other way round.
-- **16 download threads instead of 6**, and one dropped file no longer breaks a modpack install.
-- **The GummerCraft server in the Multiplayer list is now added only to Vanilla builds.**
-- **A red X-ray note**, a separate "Performance (FPS)" section in "Manage build", a highlighted "Build settings" button and a faster interface.
-
-**Also new in 1.36.18:**
-
-- **Replacing the old exe is now reliable.** After the launcher closes, the new signed `GummerCraft.exe` starts right away, as soon as Java releases its files, so there are no longer a few silent seconds that invite a second click. The old exe file itself is swapped in the background: if it is still busy (for example, the old exe was opened again), the launcher keeps trying for ~90 s instead of giving up after the first try.
-
-**Also new in 1.36.17:**
-
-- **Old exe files are now really replaced:** the old `Gummer_Craft_launcher.exe` is swapped for the signed `GummerCraft.exe` in place right after the launcher closes, and the launcher's own Java update starts by itself (in 1.36.15-1.36.16 this did not run).
-
-**Also new in 1.36.15:**
-
-
-- **The launcher is now signed.** The launcher exe files are signed with a Certum developer certificate: the file properties and Windows show the publisher "Open Source Developer, Mykola Netreba" instead of "Unknown publisher", with fewer antivirus false positives.
-- **Old exe files replace themselves.** If you start the old `Gummer_Craft_launcher.exe` (without built-in Java), the launcher downloads the new signed `GummerCraft.exe` with built-in Java once, puts it in place of the old file under the same name (shortcuts keep working) and restarts with it. Installs with built-in Java get the signed exe the same way. Builds, accounts and settings stay, the player folder is the same.
-- **A clear error window.** If the exe could not start Java, the window is now called "GummerCraft Launcher" (it used to say "Please install Java" for any error) and says what to do: download GummerCraft.exe again from gummercraft.fun.
-
-**Previous version, 1.36.14:** the game launch no longer hangs at 90% on PCs where Windows is slow to report the list of graphics cards.
-
-**Every change in every version: [CHANGELOG.md](CHANGELOG.md#english-changelog).**
+The full list of changes is in the [CHANGELOG](CHANGELOG.md#english-changelog).
 
 ## Security and transparency
 

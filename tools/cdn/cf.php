@@ -26,6 +26,15 @@
  *   {"projectFiles":{"id","game"?,"loader"?}} -> {"files":[... "deps":[{"modId","type":required|incompatible}]],
  *     "mod":{...}, "latest":[{"game","loader","file","type"}]} (лише моди, ресурспаки, шейдери; кеш 30 хв).
  *
+ * З 25.11.2026 (експорт збірки .mrpack: моди CurseForge посиланням «проект + файл», а не файлом):
+ *   {"fingerprints":[uint32, ...]} (до 2000, fingerprint CurseForge: MurmurHash2 з seed 1 по байтах файлу без 9, 10,
+ *     13, 32) -> {"matches":[{"fingerprint","fileId","modId"}]} лише точні збіги. Дані файлів і модів далі звичайним
+ *     {"files":[...]}. Збіги кешуються на 30 днів (файл з тим самим вмістом той самий).
+ *
+ * З 25.11.2026 (оновлення модів і докачування з CurseForge, а не лише з Modrinth):
+ *   {"modsLatest":{"ids":[modId,...],"game","loaders":[...]}} -> {"latest":[{"modId","file","type","loader"}]}:
+ *     найновіші файли модів під цю гру і завантажувачі (latestFilesIndexes, кеш 1 година).
+ *
  * Ключ: .secrets/curseforge.php поруч (<?php return '...';), тека з крапкою, nginx на неї 403, а через PHP файл нічого
  * не виводить. Кеш: .cfcache/ (дані файлу CurseForge не міняються, тримаємо 30 днів; мод 1 день). Обмеження: 60 запитів
  * на хвилину з однієї IP (з 1.40.0, бо пошук) (IP так само, як у design-like.php: останній X-Forwarded-For від nginx хоста).
@@ -403,6 +412,91 @@ function do_categories(int $cls): void
     reply(200, $res);
 }
 
+/** 25.11.2026: файли CurseForge за fingerprint (лише точні збіги). */
+function do_fingerprints($list): void
+{
+    if (!is_array($list) || count($list) === 0 || count($list) > MAX_IDS) reply(400, ['error' => 'bad fingerprints']);
+    $want = [];
+    foreach ($list as $v) {
+        if (!is_int($v) || $v < 0 || $v > 4294967295) reply(400, ['error' => 'bad fingerprints']);
+        $want[$v] = true;
+    }
+    $matches = [];
+    $miss = [];
+    foreach (array_keys($want) as $fp) {
+        $c = cache_key_get(hash('sha256', "fp|$fp"), FILE_TTL);
+        if ($c !== null) $matches[] = $c; else $miss[] = $fp;
+    }
+    foreach (array_chunk($miss, 500) as $chunk) {
+        $data = cf_post('/fingerprints/432', ['fingerprints' => $chunk]);
+        foreach ($data['exactMatches'] ?? [] as $m) {
+            $f = $m['file'] ?? null;
+            if (!is_array($f)) continue;
+            $fp = (int)($f['fileFingerprint'] ?? -1);
+            if (!isset($want[$fp])) continue;
+            $v = ['fingerprint' => $fp, 'fileId' => (int)($f['id'] ?? 0), 'modId' => (int)($f['modId'] ?? 0)];
+            if ($v['fileId'] <= 0) continue;
+            $matches[] = $v;
+            cache_key_put(hash('sha256', "fp|$fp"), $v);
+        }
+    }
+    reply(200, ['matches' => $matches]);
+}
+
+/**
+ * 25.11.2026 (оновлення модів з CurseForge, як з Modrinth): найновіші файли модів під цю гру одним запитом на весь
+ * список ({@code latestFilesIndexes} CurseForge: найновіший файл на кожну пару гра + завантажувач і тип релізу).
+ * Запит {"modsLatest":{"ids":[modId,...],"game":"1.21.1","loaders":["fabric",...]}} (до 2000 id, до 4 завантажувачів)
+ * -> {"latest":[{"modId","file","type","loader"}]} лише для цієї гри і цих завантажувачів. Кеш на мод 1 година.
+ */
+function do_mods_latest(array $q): void
+{
+    $ids = ids_from($q['ids'] ?? null);
+    $game = (string)($q['game'] ?? '');
+    if (!preg_match('/^[0-9A-Za-z._-]{1,20}$/', $game)) reply(400, ['error' => 'bad game']);
+    $loaders = $q['loaders'] ?? [];
+    if (!is_array($loaders) || count($loaders) === 0 || count($loaders) > 4) reply(400, ['error' => 'bad loaders']);
+    $want = [];
+    foreach ($loaders as $l) {
+        if (!is_string($l) || !isset(LOADERS[$l])) reply(400, ['error' => 'bad loader']);
+        $want[LOADERS[$l]] = $l;
+    }
+    $index = [];
+    $miss = [];
+    foreach ($ids as $id) {
+        $c = cache_key_get(hash('sha256', "latest|$id"), 3600);
+        if ($c !== null) $index[$id] = $c; else $miss[] = $id;
+    }
+    foreach (array_chunk($miss, 500) as $chunk) {
+        $got = [];
+        foreach (cf_post('/mods', ['modIds' => $chunk]) as $m) {
+            $id = (int)($m['id'] ?? 0);
+            if ($id <= 0) continue;
+            $x = [];
+            foreach ($m['latestFilesIndexes'] ?? [] as $i) {
+                $x[] = ['g' => (string)($i['gameVersion'] ?? ''), 'l' => (int)($i['modLoader'] ?? 0),
+                    'f' => (int)($i['fileId'] ?? 0), 't' => (int)($i['releaseType'] ?? 1)];
+            }
+            $v = ['x' => $x];
+            $index[$id] = $v;
+            $got[$id] = true;
+            cache_key_put(hash('sha256', "latest|$id"), $v);
+        }
+        foreach ($chunk as $id) {
+            if (!isset($got[$id])) cache_key_put(hash('sha256', "latest|$id"), $index[$id] = ['x' => []]);
+        }
+    }
+    $out = [];
+    foreach ($index as $id => $v) {
+        foreach ($v['x'] as $i) {
+            if ($i['g'] !== $game || !isset($want[$i['l']]) || $i['f'] <= 0) continue;
+            $out[] = ['modId' => (int)$id, 'file' => $i['f'],
+                'type' => [1 => 'release', 2 => 'beta', 3 => 'alpha'][$i['t']] ?? 'release', 'loader' => $want[$i['l']]];
+        }
+    }
+    reply(200, ['latest' => $out]);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') reply(405, ['error' => 'POST only']);
 $raw = file_get_contents('php://input', false, null, 0, 200000);
 $req = json_decode((string)$raw, true);
@@ -415,6 +509,8 @@ if (isset($req['packFiles'])) {
     do_pack_files($req['packFiles']);
 }
 if (isset($req['projectFiles']) && is_array($req['projectFiles'])) do_project_files($req['projectFiles']);
+if (isset($req['fingerprints'])) do_fingerprints($req['fingerprints']);
+if (isset($req['modsLatest']) && is_array($req['modsLatest'])) do_mods_latest($req['modsLatest']);
 if (isset($req['categories'])) do_categories(is_int($req['categories']) ? class_of(['class' => $req['categories']]) : 4471);
 
 $fileIds = ids_from($req['files'] ?? null);

@@ -217,6 +217,7 @@ public class CardInstanceTable extends InstanceTable {
         // збірки будуть під одною категорією "модпаки одним кліком", хз навіщо той чат додав окрему, таку ж категорію»):
         // рядок CurseForge теж; у Бібліотеці і Класиці це вже було, у Склі забули
         if (InstanceTableModel.isImportRow(inst) || InstanceTableModel.isCurseRow(inst)) return null;
+        if (InstanceTableModel.isDesktopRow(inst)) return null; // 25.11.2026: «Робочий стіл» угорі «Встановлених» без підпису
         if (InstanceTableModel.isBrowser(inst) && !InstanceTableModel.isAddRow(inst)) return tr("launcher.section.modrinth");
         Instance prev = row > 0 ? instanceAt(row - 1) : null;
         InstanceTableModel m = (InstanceTableModel) getModel();

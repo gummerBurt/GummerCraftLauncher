@@ -48,6 +48,13 @@ import java.util.zip.ZipOutputStream;
  *
  * <p>Копія модпаку GummerCraft ({@value #FROM_PACK} у теці збірки): моди поза Modrinth не експортуються (це файли
  * наших модпаків), вони йдуть у {@link #skipped}.</p>
+ *
+ * <p>25.11.2026 (власник: «чи можемо ми зробити якийсь такий експорт ... шоб він важив там кілька кілобайт/мегабайт і
+ * містив лише інфу "що лаунчер має скачати"», «тоді роби»): моди, яких немає на Modrinth, шукаються на CurseForge за
+ * fingerprint (через наш проксі) і йдуть у {@value #CF_FILE} поруч з {@code modrinth.index.json} (проект, файл, sha1),
+ * а не у файл. Посилань на CDN CurseForge у {@code modrinth.index.json} немає: Modrinth прибрав forgecdn зі
+ * специфікації .mrpack, Modrinth App і Prism такі посилання не беруть. Тому ці моди ставить лише наш лаунчер (через
+ * API CurseForge, з вікном для заборонених автором файлів, як при імпорті zip CurseForge); інші лаунчери їх пропустять.</p>
  */
 public final class MrpackExport implements Callable<File>, ProgressObservable {
 
@@ -63,6 +70,12 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
     private final boolean selfContained;
     /** Що не потрапило у файл (моди модпака GummerCraft поза Modrinth). */
     public final List<String> skipped = new ArrayList<String>();
+    /** 25.11.2026: список модів CurseForge у файлі .mrpack (читає {@link MrpackPacks}). */
+    public static final String CF_FILE = "gummercraft-curseforge.json";
+    /** 25.11.2026: для запиту до проксі CurseForge; null: моди поза Modrinth ідуть у файл, як раніше. */
+    public volatile com.skcraft.launcher.Launcher launcher;
+    /** Скільки модів пішло посиланнями на Modrinth і на CurseForge (для повідомлення після експорту). */
+    public volatile int modrinthLinks, curseLinks;
     private volatile String status = "";
     private volatile double progress = -1;
 
@@ -97,7 +110,7 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
             String l = i.path("loader").asText("vanilla"), v = i.path("loaderVersion").asText(null);
             if ("vanilla".equals(l)) return new String[0]; // 20.11.2026: .mrpack без завантажувача (і наш експорт Vanilla)
             if (v == null) return null;
-            if ("forge".equals(l) && v.contains("-")) v = v.substring(v.indexOf('-') + 1);
+            if ("forge".equals(l)) v = forgeShort(v);
             String key = "fabric".equals(l) ? "fabric-loader" : "quilt".equals(l) ? "quilt-loader" : l;
             return new String[]{key, v};
         }
@@ -114,10 +127,20 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
             if (v == null) return null;
             boolean forge = com.gummer.launcher.forge.ForgeVersions.kindOf(instance) == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE;
             // у maven Forge версія повна (1.20.1-47.3.0), у .mrpack без версії гри
-            if (forge && v.contains("-")) v = v.substring(v.indexOf('-') + 1);
+            if (forge) v = forgeShort(v);
             return new String[]{forge ? "forge" : "neoforge", v};
         }
         return null;
+    }
+
+    /**
+     * Версія Forge для .mrpack: без версії гри спереду і (25.11.2026, тікет #115) без хвоста гілки старих версій:
+     * {@code 1.7.10-10.13.4.1614-1.7.10} -> {@code 10.13.4.1614}, {@code 1.20.1-47.3.0} -> {@code 47.3.0}.
+     */
+    static String forgeShort(String v) {
+        if (v.contains("-")) v = v.substring(v.indexOf('-') + 1);
+        int dash = v.indexOf('-');
+        return dash > 0 ? v.substring(0, dash) : v;
     }
 
     @Override
@@ -167,9 +190,24 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
         index.put("summary", "GummerCraft Launcher");
         ArrayNode files = index.putArray("files");
         List<File[]> overrides = new ArrayList<File[]>(); // {файл, шлях у zip}
+        // 2б. 25.11.2026: решту шукаємо на CurseForge (не для .zip «усе всередині» і не для копій наших модпаків)
+        Map<File, com.gummer.launcher.curseforge.CurseForge.FileInfo> curse = selfContained || fromPack
+                ? new HashMap<File, com.gummer.launcher.curseforge.CurseForge.FileInfo>()
+                : curseForgeOf(byHash, known);
+        ArrayNode cfFiles = MAPPER.createArrayNode();
         for (Map.Entry<String, File> e : byHash.entrySet()) {
             File f = e.getValue();
             JsonNode k = known.get(f);
+            com.gummer.launcher.curseforge.CurseForge.FileInfo cf = curse.get(f);
+            if (k == null && cf != null) {
+                ObjectNode o = cfFiles.addObject();
+                o.put("projectID", cf.modId);
+                o.put("fileID", cf.id);
+                o.put("path", "mods/" + cf.fileName);
+                o.put("sha1", e.getKey());
+                o.put("name", cf.title());
+                continue;
+            }
             if (k != null) {
                 ObjectNode o = files.addObject();
                 o.put("path", "mods/" + f.getName());
@@ -202,6 +240,15 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
             zip.putNextEntry(new ZipEntry("modrinth.index.json"));
             zip.write(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(index));
             zip.closeEntry();
+            if (cfFiles.size() > 0) {
+                ObjectNode cf = MAPPER.createObjectNode();
+                cf.put("formatVersion", 1);
+                cf.put("note", "GummerCraft Launcher: mods from CurseForge (projectID/fileID), installed through the CurseForge API");
+                cf.set("files", cfFiles);
+                zip.putNextEntry(new ZipEntry(CF_FILE));
+                zip.write(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(cf));
+                zip.closeEntry();
+            }
             byte[] buf = new byte[64 * 1024];
             int n = 0;
             for (File[] o : overrides) {
@@ -220,9 +267,51 @@ public final class MrpackExport implements Callable<File>, ProgressObservable {
             throw e;
         }
         Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        log.info("Exported " + instance.getName() + " to " + target + ": " + known.size() + " mods as links, "
-                + overrides.size() + " files inside, " + skipped.size() + " skipped");
+        modrinthLinks = known.size();
+        curseLinks = cfFiles.size();
+        log.info("Exported " + instance.getName() + " to " + target + ": " + known.size() + " mods as Modrinth links, "
+                + cfFiles.size() + " as CurseForge links, " + overrides.size() + " files inside, " + skipped.size() + " skipped");
         return target;
+    }
+
+    /**
+     * 25.11.2026: моди поза Modrinth, які є на CurseForge точно цим файлом (fingerprint, потім sha1 з CurseForge, якщо
+     * він там є). Без інтернету чи зі старим проксі: порожньо, моди підуть у файл.
+     */
+    private Map<File, com.gummer.launcher.curseforge.CurseForge.FileInfo> curseForgeOf(Map<String, File> byHash, Map<File, JsonNode> known) {
+        Map<File, com.gummer.launcher.curseforge.CurseForge.FileInfo> out = new HashMap<File, com.gummer.launcher.curseforge.CurseForge.FileInfo>();
+        if (launcher == null) return out;
+        Map<Long, File> byFp = new LinkedHashMap<Long, File>();
+        Map<File, String> sha = new HashMap<File, String>();
+        try {
+            for (Map.Entry<String, File> e : byHash.entrySet()) {
+                if (known.containsKey(e.getValue())) continue;
+                status = e.getValue().getName();
+                byFp.put(com.gummer.launcher.curseforge.CurseForge.fingerprint(e.getValue()), e.getValue());
+                sha.put(e.getValue(), e.getKey());
+            }
+            if (byFp.isEmpty()) return out;
+            Map<Long, Integer> ids = com.gummer.launcher.curseforge.CurseForge.byFingerprint(launcher, byFp.keySet());
+            if (ids.isEmpty()) return out;
+            List<Integer> list = new ArrayList<Integer>(new java.util.LinkedHashSet<Integer>(ids.values()));
+            Map<Integer, com.gummer.launcher.curseforge.CurseForge.FileInfo> infos = new HashMap<Integer, com.gummer.launcher.curseforge.CurseForge.FileInfo>();
+            for (com.gummer.launcher.curseforge.CurseForge.FileInfo i : com.gummer.launcher.curseforge.CurseForge.lookup(launcher, list)) infos.put(i.id, i);
+            for (Map.Entry<Long, Integer> e : ids.entrySet()) {
+                File f = byFp.get(e.getKey());
+                com.gummer.launcher.curseforge.CurseForge.FileInfo i = infos.get(e.getValue());
+                if (f == null || i == null || !"mods".equals(i.folder())) continue;
+                if (i.sha1 != null && !i.sha1.equalsIgnoreCase(sha.get(f))) continue; // fingerprint збігся, а файл інший
+                if (i.fileName.isEmpty() || i.fileName.contains("/") || i.fileName.contains("\\")) continue;
+                out.put(f, i);
+            }
+        } catch (IOException | RuntimeException e) {
+            log.info("CurseForge lookup for export is unavailable, these mods go into the file: " + e);
+            out.clear();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            out.clear();
+        }
+        return out;
     }
 
     private static void collect(File dir, String prefix, List<File[]> out) {

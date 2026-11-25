@@ -57,6 +57,140 @@ public final class CurseBrowse {
         shared = launcher;
     }
 
+    /** 25.11.2026: лаунчер для запитів проксі (оновлення модів, докачування), або null до старту. */
+    public static Launcher shared() {
+        return shared;
+    }
+
+    /**
+     * 25.11.2026 (власник: «обов'язково задіюємо і курсфордж ... чого немає на модрінті, потрібно спробувати знайти на
+     * курс форджі та навпаки»): найновіший файл кожного мода під цю гру одним запитом на весь список (проксі
+     * {@code modsLatest}). Завантажувачі за порядком переваги (Quilt, потім Fabric): для першого, де щось є.
+     * modId -> {найновіший стабільний fileId або 0, найновіший будь-який fileId}. Старий проксі чи CurseForge
+     * недоступний: IOException.
+     */
+    public static Map<Integer, int[]> latestFiles(Launcher launcher, java.util.Collection<Integer> modIds, String game,
+                                                 String[] loaders) throws IOException, InterruptedException {
+        Map<Integer, int[]> out = new HashMap<Integer, int[]>();
+        if (modIds.isEmpty() || game == null || loaders == null || loaders.length == 0) return out;
+        Map<String, Object> q = new LinkedHashMap<String, Object>();
+        q.put("ids", new ArrayList<Integer>(modIds));
+        q.put("game", game);
+        q.put("loaders", java.util.Arrays.asList(loaders));
+        JsonNode a = call(launcher, Collections.<String, Object>singletonMap("modsLatest", q));
+        if (!a.has("latest")) throw new IOException("The CurseForge proxy does not know modsLatest yet");
+        Map<Integer, int[]> best = new HashMap<Integer, int[]>(); // modId -> {ранг завантажувача, стабільний, будь-який}
+        for (JsonNode x : a.path("latest")) {
+            int mod = x.path("modId").asInt(0), file = x.path("file").asInt(0);
+            int rank = java.util.Arrays.asList(loaders).indexOf(x.path("loader").asText(""));
+            if (mod <= 0 || file <= 0 || rank < 0) continue;
+            boolean stable = "release".equals(x.path("type").asText("release"));
+            int[] b = best.get(mod);
+            if (b == null || rank < b[0]) best.put(mod, b = new int[]{rank, 0, 0});
+            if (rank > b[0]) continue;
+            if (stable && file > b[1]) b[1] = file;
+            if (file > b[2]) b[2] = file;
+        }
+        for (Map.Entry<Integer, int[]> e : best.entrySet()) out.put(e.getKey(), new int[]{e.getValue()[1], e.getValue()[2]});
+        return out;
+    }
+
+    /** 25.11.2026: дата публікації файлу мода на CurseForge (ISO), з файлів під цю гру; null, якщо не знайдено. */
+    public static String fileDate(Launcher launcher, int modId, int fileId, String game, String[] loaders)
+            throws IOException, InterruptedException {
+        if (launcher == null || loaders == null) return null;
+        for (String l : loaders) {
+            for (JsonNode f : projectFiles(launcher, ID_PREFIX + modId, game, l).path("files")) {
+                if (f.path("id").asInt() == fileId) return f.path("date").asText(null);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 25.11.2026: поставити файл CurseForge {@code info} замість мода {@code old} (оновлення). Качається поруч
+     * (заборонений автором для лаунчерів: точна копія з Modrinth за sha1, інакше вікно «Скачай з CurseForge»), звіряється
+     * sha1, стара версія йде у сховище відкату ({@link com.gummer.launcher.manage.ModRollback}), вимкнений мод лишається
+     * вимкненим. Далі обов'язкові залежності нової версії, як при встановленні з пошуку. Повертає новий файл.
+     */
+    public static File replace(Launcher launcher, File old, CurseForge.FileInfo info, String currentNumber, String game,
+                               String[] loaders, List<String> missing, List<String> conflicts)
+            throws IOException, InterruptedException {
+        File dir = old.getParentFile();
+        String fileName = info.fileName;
+        if (fileName == null || fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\") || fileName.startsWith(".")
+                || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+            throw new IOException("Unexpected file name: " + fileName);
+        }
+        boolean disabled = old.getName().toLowerCase(java.util.Locale.ROOT).endsWith(com.gummer.launcher.manage.InstanceMods.DISABLED);
+        File target = new File(dir, disabled ? fileName + com.gummer.launcher.manage.InstanceMods.DISABLED : fileName);
+        String hitId = ID_PREFIX + info.modId;
+        CurseForge.ModrinthCopy exact = info.downloadUrl == null && info.sha1 != null
+                ? CurseForge.modrinthCopies(Collections.singletonList(info.sha1)).get(info.sha1.toLowerCase(java.util.Locale.ROOT)) : null;
+        File part = new File(dir, "." + fileName + ".part");
+        try {
+            download(info, exact, part, info.title());
+            if (!target.equals(old) && target.exists()) {
+                // нова версія вже лежить поруч (поставили руками): лишаємо її, прибираємо стару
+                if (!com.gummer.launcher.manage.ModRollback.keep(old, target.getName(), currentNumber, hitId)) java.nio.file.Files.delete(old.toPath());
+            } else if (target.equals(old)) {
+                com.gummer.launcher.manage.ModRollback.keep(old, target.getName(), currentNumber, hitId);
+                java.nio.file.Files.move(part.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                java.nio.file.Files.move(part.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                if (!com.gummer.launcher.manage.ModRollback.keep(old, target.getName(), currentNumber, hitId)) java.nio.file.Files.deleteIfExists(old.toPath());
+            }
+        } finally {
+            part.delete();
+        }
+        ModrinthBrowse.record(dir, hitId, fileName);
+        java.util.logging.Logger.getLogger(CurseBrowse.class.getName()).info("Mod updated from CurseForge: " + old.getName() + " -> " + target.getName());
+        // залежності нової версії: у projectFiles під цю гру (там і deps), лише якщо файл там є
+        java.util.Set<String> seen = new java.util.HashSet<String>(Collections.singleton(hitId));
+        for (String l : loaders) {
+            JsonNode file = null;
+            try {
+                for (JsonNode f : projectFiles(launcher, hitId, game, l).path("files")) {
+                    if (f.path("id").asInt() == info.id) file = f;
+                }
+            } catch (IOException e) {
+                break;
+            }
+            if (file != null) {
+                dependencies(launcher, file, game, loaders, dir, null, missing, conflicts, seen, 0);
+                break;
+            }
+        }
+        return target;
+    }
+
+    /**
+     * 25.11.2026: обов'язкові залежності мода {@code modFile} за даними CurseForge (мод знайдено за fingerprint): для
+     * «Докачати», коли мода немає на Modrinth. Нічого не знайдено чи CurseForge недоступний: нічого не робить.
+     */
+    public static void dependenciesOf(File modFile, String game, String[] loaders, File dir, List<String> installed,
+                                      List<String> missing) throws InterruptedException {
+        Launcher l = shared;
+        if (l == null || modFile == null || !modFile.isFile() || game == null || loaders == null) return;
+        try {
+            long fp = CurseForge.fingerprint(modFile);
+            int[] hit = CurseForge.matchFingerprints(l, Collections.singletonList(fp)).get(fp);
+            if (hit == null || hit[1] <= 0) return;
+            String hitId = ID_PREFIX + hit[1];
+            java.util.Set<String> seen = new java.util.HashSet<String>(Collections.singleton(hitId));
+            for (String loader : loaders) {
+                for (JsonNode f : projectFiles(l, hitId, game, loader).path("files")) {
+                    if (f.path("id").asInt() == hit[0]) {
+                        dependencies(l, f, game, loaders, dir, installed, missing, null, seen, 0);
+                        return;
+                    }
+                }
+            }
+        } catch (IOException e) {
+            java.util.logging.Logger.getLogger(CurseBrowse.class.getName()).info("CurseForge dependencies unavailable for " + modFile.getName() + ": " + e.getMessage());
+        }
+    }
+
     /**
      * 24.11.2026 (власник: «чого немає на курсфордж, можна спробувати знайти на модрінт, і навпаки»): обов'язкова
      * залежність мода Modrinth, якої на Modrinth немає під цю гру, ставиться з CurseForge, якщо там той самий мод
@@ -276,7 +410,10 @@ public final class CurseBrowse {
             mod = a.path("mod");
             JsonNode fallback = null;
             for (JsonNode f : a.path("files")) {
-                if (l != null && !contains(f.path("loaders"), l)) continue;
+                // 25.11.2026: старі файли (Minecraft 1.12.2 і раніше, Baubles 1.5.2) CurseForge не позначав завантажувачем
+                // зовсім, а під фільтр Forge віддає їх сам; тоді інших завантажувачів ще не було, тож лише для Forge
+                boolean untaggedForge = "forge".equals(l) && f.path("loaders").size() == 0;
+                if (l != null && !untaggedForge && !contains(f.path("loaders"), l)) continue;
                 if ("release".equals(f.path("type").asText("release"))) {
                     chosen = f;
                     break;
@@ -312,23 +449,7 @@ public final class CurseBrowse {
         }
         File part = new File(dir, "." + fileName + ".part");
         try {
-            if (info.downloadUrl != null) {
-                HttpRequest.get(CurseForge.fileUrl(info.downloadUrl)).execute().expectResponseCode(200).saveContent(part);
-            } else if (exact != null) {
-                HttpRequest.get(new URL(exact.url)).execute().expectResponseCode(200).saveContent(part);
-                if (!CurseForge.sha512(part).equalsIgnoreCase(exact.sha512)) throw new IOException("sha512 mismatch for " + fileName);
-            } else {
-                CurseForge.BlockedHandler h = CurseForge.blockedHandler();
-                if (h == null || info.length <= 0) throw new IOException(NOT_DOWNLOADED);
-                CurseForge.Blocked b = new CurseForge.Blocked(info, part);
-                h.resolve(hit.title, Collections.singletonList(b));
-                if (!b.isDone()) throw new IOException(NOT_DOWNLOADED);
-            }
-            if (info.sha1 != null) {
-                if (!CurseForge.sha1(part).equalsIgnoreCase(info.sha1)) throw new IOException("sha1 mismatch for " + fileName);
-            } else if (info.length > 0 && part.length() != info.length) {
-                throw new IOException("Size mismatch for " + fileName);
-            }
+            download(info, exact, part, hit.title);
             if (kind == ModrinthBrowse.Kind.MOD) {
                 // мод з таким id уже є під іншою назвою файлу: другого такого самого гра не запустить, лишаємо наявний
                 String existing = ModrinthBrowse.alreadyProvided(dir, part);
@@ -348,6 +469,31 @@ public final class CurseBrowse {
             dependencies(launcher, chosen, game, loaders, dir, installed, missing, conflicts, seen, depth);
         }
         return fileName;
+    }
+
+    /**
+     * Файл CurseForge у {@code part}: напряму з CDN CurseForge, або точна копія з Modrinth ({@code exact}), або (автор
+     * дозволяє лише сайт) через вікно «Скачай з CurseForge». Далі звірка sha1 (без sha1 розміру).
+     */
+    private static void download(CurseForge.FileInfo info, CurseForge.ModrinthCopy exact, File part, String title)
+            throws IOException, InterruptedException {
+        if (info.downloadUrl != null) {
+            HttpRequest.get(CurseForge.fileUrl(info.downloadUrl)).execute().expectResponseCode(200).saveContent(part);
+        } else if (exact != null) {
+            HttpRequest.get(new URL(exact.url)).execute().expectResponseCode(200).saveContent(part);
+            if (!CurseForge.sha512(part).equalsIgnoreCase(exact.sha512)) throw new IOException("sha512 mismatch for " + info.fileName);
+        } else {
+            CurseForge.BlockedHandler h = CurseForge.blockedHandler();
+            if (h == null || info.length <= 0) throw new IOException(NOT_DOWNLOADED);
+            CurseForge.Blocked b = new CurseForge.Blocked(info, part);
+            h.resolve(title, Collections.singletonList(b));
+            if (!b.isDone()) throw new IOException(NOT_DOWNLOADED);
+        }
+        if (info.sha1 != null) {
+            if (!CurseForge.sha1(part).equalsIgnoreCase(info.sha1)) throw new IOException("sha1 mismatch for " + info.fileName);
+        } else if (info.length > 0 && part.length() != info.length) {
+            throw new IOException("Size mismatch for " + info.fileName);
+        }
     }
 
     /** Обов'язкові залежності файлу ставляться, несумісні, що вже є в теці, йдуть у {@code conflicts}. */

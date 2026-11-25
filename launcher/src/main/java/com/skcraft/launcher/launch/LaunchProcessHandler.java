@@ -57,6 +57,24 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         this.owner = owner;
     }
 
+    /** Файл з виводом гри (stdout і stderr) останнього запуску, у теці збірки поруч з instance.json, не в теці гри. */
+    public static final String CONSOLE_FILE = "game-console.log";
+    private static final int CONSOLE_FILE_MAX_CHARS = 512 * 1024;
+
+    private void saveConsole(String console, int exitCode) {
+        if (instance == null || instance.getDir() == null) return;
+        try {
+            String text = console == null ? "" : console;
+            if (text.length() > CONSOLE_FILE_MAX_CHARS) text = text.substring(text.length() - CONSOLE_FILE_MAX_CHARS);
+            String head = "# GummerCraft Launcher: game console, exit code " + exitCode + ", "
+                    + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date()) + "\n";
+            java.nio.file.Files.write(new java.io.File(instance.getDir(), CONSOLE_FILE).toPath(),
+                    (head + text).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException | RuntimeException e) {
+            log.log(Level.INFO, "Could not save the game console", e);
+        }
+    }
+
     @Override
     public ProcessConsoleFrame apply(final Process process) {
         log.info("Watching process " + process);
@@ -112,10 +130,21 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
         } catch (IllegalThreadStateException ignored) {
         }
         final int exitCode = exit;
+        String console = "";
+        try {
+            console = consoleFrame != null ? consoleFrame.getMessageLog().getPastableText() : "";
+        } catch (RuntimeException e) {
+            log.log(Level.INFO, "Could not read the game console", e);
+        }
+        // 25.11.2026 (тікет #111): гра, що падає до старту свого логу (код 1, без logs/latest.log і crash-report),
+        // лишала звернення без тексту помилки: він був лише у вікні «Консоль». Хвіст консолі цього запуску кладемо в теку
+        // збірки, SupportService додає його до звернення як game-console.log.
+        saveConsole(console, exitCode);
+        // 25.11.2026: збірка закрилась без помилки: моди, що з'являться після цього, вважатимуться новими (RecentMods)
+        if (exitCode == 0 && instance != null) com.gummer.launcher.crash.RecentMods.markOk(instance, startedAt);
         com.gummer.launcher.crash.CrashAnalyzer.Diagnosis diagnosis = null;
         if (exitCode != 0 && instance != null) {
             try {
-                String console = consoleFrame != null ? consoleFrame.getMessageLog().getPastableText() : "";
                 diagnosis = com.gummer.launcher.crash.CrashAnalyzer.analyze(instance, startedAt, console, exitCode);
                 log.info("Game exited with code " + exitCode + ", crash diagnosis: " + diagnosis.key);
             } catch (RuntimeException e) {

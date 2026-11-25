@@ -228,6 +228,68 @@ public class InstanceTableModel extends AbstractTableModel {
 
     public static final ImportRow IMPORT = new ImportRow();
 
+    /**
+     * 25.11.2026 (власник: «додати "Робочий стіл" усіх модпаків: сіткою і списком (на вибір), без прив'язки до категорій
+     * та сортуванням за іменем, завантажувачем та датою додавання»): перший рядок «Встановлених», якщо там є хоч одна
+     * збірка. Як і Modrinth, не збірка ({@link #isBrowser} true): вікна показують на його місці сторінку DesktopPage.
+     */
+    public static final class DesktopRow extends BrowserRow {
+        DesktopRow() {
+            super("gc-desktop", "Desktop");
+        }
+
+        @Override
+        public String getTitle() {
+            return SharedLocale.tr("launcher.desktopRow");
+        }
+    }
+
+    public static final DesktopRow DESKTOP = new DesktopRow();
+
+    /** Рядок «Робочий стіл». */
+    public static boolean isDesktopRow(Instance instance) {
+        return instance instanceof DesktopRow;
+    }
+
+    /** Усі збірки «Встановлених» (локальні, без рядків-сторінок) у загальному порядку списку: для робочого столу. */
+    public List<Instance> localBuilds() {
+        List<Instance> out = new ArrayList<Instance>();
+        synchronized (instances) {
+            for (Instance i : instances.getInstances()) {
+                if (i.isLocal() && !isBrowser(i)) out.add(i);
+            }
+        }
+        return out;
+    }
+
+    /** Іконка рядка «Робочий стіл»: чотири плитки 2x2, без файлу картинки. */
+    private static final Icon DESKTOP_ICON = new Icon() {
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new java.awt.Color(90, 169, 230, 60));
+            g2.fillOval(x + 1, y + 1, 30, 30);
+            g2.setColor(new java.awt.Color(120, 190, 240));
+            for (int r = 0; r < 2; r++) {
+                for (int col = 0; col < 2; col++) {
+                    g2.fillRoundRect(x + 9 + col * 8, y + 9 + r * 8, 6, 6, 3, 3);
+                }
+            }
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return 32;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return 32;
+        }
+    };
+
     /** Рядок «Імпорт збірки». */
     public static boolean isImportRow(Instance instance) {
         return instance instanceof ImportRow;
@@ -488,6 +550,9 @@ public class InstanceTableModel extends AbstractTableModel {
             }
             for (List<Instance> list : byKey.values()) rows.addAll(list);
             collapseRows();
+            // 25.11.2026: «Робочий стіл» першим рядком, лише коли є що показати (порожні «Встановлені» лишаються з одним
+            // «+ Додати збірку», на це спирається картка EmptyInstalled)
+            if (filter == null && desktopRow && !rows.isEmpty()) rows.add(0, DESKTOP);
             if (filter == null) rows.add(ADD);
             return;
         }
@@ -516,8 +581,27 @@ public class InstanceTableModel extends AbstractTableModel {
     private static final java.util.Set<String> INSTALLED_SECTIONS = new java.util.HashSet<String>(java.util.Arrays.asList(
             "vanilla", "fabric", "quilt", "forge", "neoforge"));
 
+    /** 25.11.2026: вигляд уміє показати сторінку «Робочий стіл» (усі три вигляди вмикають). */
+    private boolean desktopRow;
+
+    public void setDesktopRow(boolean on) {
+        this.desktopRow = on;
+    }
+
+    /**
+     * 25.11.2026: зі сторінки «Робочий стіл» відкрили збірку, чий розділ згорнуто: розгорнути його, щоб рядок з'явився
+     * в списку і його можна було вибрати. true, якщо список перебудовано.
+     */
+    public boolean revealSectionOf(Instance instance) {
+        if (!isCollapsible() || instance == null || isBrowser(instance)) return false;
+        if (!collapsedSections.remove(installedSectionOf(instance))) return false;
+        if (collapsedSave != null) collapsedSave.run();
+        update();
+        return true;
+    }
+
     /** Розділ збірки в «Встановлених»: gummercraft (модпаки з CDN), vanilla, fabric, quilt, forge, neoforge або other. */
-    private static String installedSectionOf(Instance instance) {
+    public static String installedSectionOf(Instance instance) {
         if (!instance.isBuiltIn()) return "gummercraft";
         String g = instance.getGroup();
         return g != null && INSTALLED_SECTIONS.contains(g) ? g : "other";
@@ -582,6 +666,7 @@ public class InstanceTableModel extends AbstractTableModel {
         for (int r = 0; r < getRowCount(); r++) {
             Instance i = getInstanceAt(r);
             if (isCollapsedStub(i)) stubs = true;
+            else if (isDesktopRow(i)) continue; // 25.11.2026: робочий стіл не вибирається сам
             else if (!stubs && isAddRow(i)) continue;
             else if (!isAddRow(i)) return r;
         }
@@ -609,6 +694,7 @@ public class InstanceTableModel extends AbstractTableModel {
      */
     public String installedCaption(Instance instance, Instance previous) {
         if (!installedOnly || instance == null || isBrowser(instance)) return null;
+        if (isBrowser(previous)) previous = null; // 25.11.2026: під «Робочим столом» перший розділ теж з підписом
         String s = installedSectionOf(instance);
         if (previous != null && s.equals(installedSectionOf(previous))) return null;
         return SharedLocale.tr("launcher.installed.section." + s);
@@ -1136,64 +1222,7 @@ public class InstanceTableModel extends AbstractTableModel {
         Instance instance;
         switch (columnIndex) {
             case 0:
-                instance = getInstanceAt(rowIndex);
-                if (isAddRow(instance)) return ADD_ICON;
-                if (isImportRow(instance)) return IMPORT_ICON;
-                if (isCurseRow(instance)) return CURSEFORGE_ICON;
-                if (isBrowser(instance)) {
-                    return modrinthIcon;
-                }
-                // 17.11.2026 (власник: «в форджі змінилась іконка. Так не треба, іконка нехай міняється лише в
-                // встановлені збірки»): рядок розділу завжди з іконкою розділу, навіть коли в ньому вибрано копію чи
-                // модпак; своя іконка копії і іконка модпака лише в списку «Встановлені», де кожна збірка окремо
-                boolean sectionRow = groupTitleFor(instance) != null;
-                if (sectionRow && isDerived(instance)) {
-                    Icon section = sectionIconOf(instance.getGroup());
-                    if (section != null) return section;
-                }
-                // своя іконка копії збірки (InstanceArt), кеш за картинкою: список малюється часто
-                java.awt.image.BufferedImage art = sectionRow ? null : com.gummer.launcher.manage.InstanceArt.icon(instance);
-                if (art != null) {
-                    synchronized (artIcons) {
-                        Icon cached = artIcons.get(art);
-                        if (cached == null) artIcons.put(art, cached = new CrispIcon(art, 32, 32));
-                        return cached;
-                    }
-                }
-                // 1.33 (власник 13.11): у трьох розділів завжди своя іконка, без іконки «не встановлено»:
-                // Vanilla - логотип Minecraft (MinecraftIcon.webp власника), GummerCraft і StalDayZ - іконки їхніх паків
-                if (instance.isVanilla()) {
-                    return vanillaIcon;
-                }
-                if (instance.isFabric()) {
-                    return fabricIcon;
-                }
-                if (instance.isForgeLike()) {
-                    return com.gummer.launcher.forge.ForgeVersions.kindOf(instance) == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE ? forgeIcon : neoforgeIcon;
-                }
-                if (instance.isQuilt()) {
-                    return quiltIcon;
-                }
-                if (instance.isMrpack()) {
-                    Icon own = packIcon(instance);
-                    if (own != null) return own;
-                    com.fasterxml.jackson.databind.JsonNode info = com.gummer.launcher.modrinth.MrpackPacks.info(instance);
-                    return info != null && "curseforge".equals(info.path("source").asText(null)) ? CURSEFORGE_ICON : modrinthIcon;
-                }
-                if ("main".equals(instance.getGroup())) {
-                    return gummercraftIcon;
-                }
-                if (isStalDayZ(instance)) {
-                    return staldayzIcon;
-                }
-                if (instance.isLocal()) {
-                    File icon = new File(instance.getContentDir(), "instance_icon.png");
-                    if (icon.exists()) {
-                        return new ImageIcon(SwingExtras.readIconImage(icon)
-                                .getScaledInstance(32, 32, Image.SCALE_SMOOTH));
-                    }
-                }
-                return instanceIcon;
+                return iconOf(getInstanceAt(rowIndex));
             case 1:
                 instance = getInstanceAt(rowIndex);
                 //return instance.getTitle();
@@ -1214,6 +1243,70 @@ public class InstanceTableModel extends AbstractTableModel {
             default:
                 return null;
         }
+    }
+
+    /**
+     * Іконка збірки чи рядка-сторінки, як у першій колонці списку. 25.11.2026: окремим методом для сторінки «Робочий стіл».
+     */
+    public Icon iconOf(Instance instance) {
+        if (isDesktopRow(instance)) return DESKTOP_ICON;
+        if (isAddRow(instance)) return ADD_ICON;
+        if (isImportRow(instance)) return IMPORT_ICON;
+        if (isCurseRow(instance)) return CURSEFORGE_ICON;
+        if (isBrowser(instance)) {
+            return modrinthIcon;
+        }
+        // 17.11.2026 (власник: «в форджі змінилась іконка. Так не треба, іконка нехай міняється лише в
+        // встановлені збірки»): рядок розділу завжди з іконкою розділу, навіть коли в ньому вибрано копію чи
+        // модпак; своя іконка копії і іконка модпака лише в списку «Встановлені», де кожна збірка окремо
+        boolean sectionRow = groupTitleFor(instance) != null;
+        if (sectionRow && isDerived(instance)) {
+            Icon section = sectionIconOf(instance.getGroup());
+            if (section != null) return section;
+        }
+        // своя іконка копії збірки (InstanceArt), кеш за картинкою: список малюється часто
+        java.awt.image.BufferedImage art = sectionRow ? null : com.gummer.launcher.manage.InstanceArt.icon(instance);
+        if (art != null) {
+            synchronized (artIcons) {
+                Icon cached = artIcons.get(art);
+                if (cached == null) artIcons.put(art, cached = new CrispIcon(art, 32, 32));
+                return cached;
+            }
+        }
+        // 1.33 (власник 13.11): у трьох розділів завжди своя іконка, без іконки «не встановлено»:
+        // Vanilla - логотип Minecraft (MinecraftIcon.webp власника), GummerCraft і StalDayZ - іконки їхніх паків
+        if (instance.isVanilla()) {
+            return vanillaIcon;
+        }
+        if (instance.isFabric()) {
+            return fabricIcon;
+        }
+        if (instance.isForgeLike()) {
+            return com.gummer.launcher.forge.ForgeVersions.kindOf(instance) == com.gummer.launcher.forge.ForgeVersions.Kind.FORGE ? forgeIcon : neoforgeIcon;
+        }
+        if (instance.isQuilt()) {
+            return quiltIcon;
+        }
+        if (instance.isMrpack()) {
+            Icon own = packIcon(instance);
+            if (own != null) return own;
+            com.fasterxml.jackson.databind.JsonNode info = com.gummer.launcher.modrinth.MrpackPacks.info(instance);
+            return info != null && "curseforge".equals(info.path("source").asText(null)) ? CURSEFORGE_ICON : modrinthIcon;
+        }
+        if ("main".equals(instance.getGroup())) {
+            return gummercraftIcon;
+        }
+        if (isStalDayZ(instance)) {
+            return staldayzIcon;
+        }
+        if (instance.isLocal()) {
+            File icon = new File(instance.getContentDir(), "instance_icon.png");
+            if (icon.exists()) {
+                return new ImageIcon(SwingExtras.readIconImage(icon)
+                        .getScaledInstance(32, 32, Image.SCALE_SMOOTH));
+            }
+        }
+        return instanceIcon;
     }
 
     /** Іконка розділу завантажувача за групою (vanilla, fabric, quilt, forge, neoforge), або null. */
@@ -1258,6 +1351,9 @@ public class InstanceTableModel extends AbstractTableModel {
         }
         if (isImportRow(instance)) {
             return line(part(GREY, SharedLocale.tr("launcher.importRowSub")));
+        }
+        if (isDesktopRow(instance)) {
+            return line(part(GREY, SharedLocale.tr("launcher.desktopRowSub", localBuilds().size())));
         }
         if (isBrowser(instance)) {
             return line(part(GREY, SharedLocale.tr("launcher.modrinthRowSub")));

@@ -359,17 +359,39 @@ public final class MrpackPacks implements ProgressObservable {
                     pool.shutdownNow();
                     filesPhase = false;
                 }
+                // 25.11.2026: моди CurseForge з нашого експорту (MrpackExport.CF_FILE): проект і файл, ставляться через
+                // API CurseForge, як у zip-збірках CurseForge
+                final java.util.List<com.gummer.launcher.curseforge.CurseForge.FileInfo> cfTodo =
+                        new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.FileInfo>();
+                final java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> cfBlockedFiles =
+                        new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.Blocked>();
+                ZipEntry cfe = zip.getEntry(MrpackExport.CF_FILE);
+                if (cfe != null) {
+                    JsonNode cf;
+                    try (InputStream in = zip.getInputStream(cfe)) {
+                        cf = MAPPER.readTree(in);
+                    }
+                    java.util.List<Integer> ids = new java.util.ArrayList<Integer>();
+                    for (JsonNode f : cf.path("files")) {
+                        int id = f.path("fileID").asInt(0);
+                        if (id > 0 && !ids.contains(id)) ids.add(id);
+                    }
+                    if (!ids.isEmpty()) cfDownload(launcher, ids, content, cfTodo, cfBlockedFiles);
+                }
                 status = com.skcraft.launcher.util.SharedLocale.tr("mrpack.status.overrides");
                 progress = -1;
                 java.util.List<String> extracted = new java.util.ArrayList<String>();
                 extract(zip, "overrides/", content, extracted);
                 extract(zip, "client-overrides/", content, extracted);
+                cfBlocked(title, cfBlockedFiles);
                 for (JsonNode f : todo) {
                     ObjectNode e = manifest.putObject(f.path("path").asText("").replace('\\', '/'));
                     e.put("sha1", f.path("hashes").path("sha1").asText(""));
                     String project = projectOf(f);
                     if (project != null) e.put("project", project);
                 }
+                com.fasterxml.jackson.databind.node.ArrayNode cfMissing = MAPPER.createArrayNode();
+                cfManifest(manifest, cfMissing, cfTodo, cfBlockedFiles);
                 for (String path : extracted) {
                     ObjectNode e = manifest.putObject(path);
                     e.put("sha1", sha1(new File(content, path)));
@@ -388,6 +410,7 @@ public final class MrpackPacks implements ProgressObservable {
                 if (preferredVersionNumber != null) info.put("versionNumber", preferredVersionNumber);
                 info.put("file", mrpack.getName());
                 if (projectId != null) info.put("projectId", projectId);
+                if (cfMissing.size() > 0) info.set("missing", cfMissing);
                 MAPPER.writerWithDefaultPrettyPrinter().writeValue(new File(dir, INFO), info);
                 forgetInfo(dir);
             } catch (Exception e) {
@@ -470,16 +493,72 @@ public final class MrpackPacks implements ProgressObservable {
                 int id = f.path("fileID").asInt(0);
                 if (id > 0 && !ids.contains(id)) ids.add(id);
             }
+            final java.util.List<com.gummer.launcher.curseforge.CurseForge.FileInfo> todo =
+                    new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.FileInfo>();
+            final java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> blocked =
+                    new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.Blocked>();
+            cfDownload(launcher, ids, content, todo, blocked);
+
+            status = com.skcraft.launcher.util.SharedLocale.tr("mrpack.status.overrides");
+            progress = -1;
+            String overrides = m.path("overrides").asText("overrides").replace('\\', '/');
+            if (overrides.isEmpty()) overrides = "overrides";
+            java.util.List<String> extracted = new java.util.ArrayList<String>();
+            extract(zip, overrides.endsWith("/") ? overrides : overrides + "/", content, extracted);
+
+            int fromModrinth = cfBlocked(title, blocked);
+
+            ObjectNode manifest = MAPPER.createObjectNode();
+            com.fasterxml.jackson.databind.node.ArrayNode missing = MAPPER.createArrayNode();
+            cfManifest(manifest, missing, todo, blocked);
+            for (String path : extracted) {
+                ObjectNode e = manifest.putObject(path);
+                e.put("sha1", sha1(new File(content, path)));
+            }
+            ObjectNode filesInfo = MAPPER.createObjectNode();
+            filesInfo.set("files", manifest);
+            MAPPER.writerWithDefaultPrettyPrinter().writeValue(new File(dir, FILES), filesInfo);
+
+            ObjectNode info = MAPPER.createObjectNode();
+            info.put("name", title);
+            info.put("mc", mc);
+            info.put("loader", loader);
+            if (lv != null) info.put("loaderVersion", lv);
+            info.put("source", "curseforge");
+            // 1.40.0: зі сторінки CurseForge лаунчера «cf-<id>» (як projectId Modrinth: «Встановлено», «Грати»)
+            if (projectId != null) info.put("projectId", projectId);
+            if (preferredVersionId != null) info.put("cfFileId", preferredVersionId);
+            info.put("versionNumber", preferredVersionNumber != null ? preferredVersionNumber : m.path("version").asText(""));
+            info.put("author", m.path("author").asText(""));
+            info.put("file", source.getName());
+            if (missing.size() > 0) info.set("missing", missing);
+            MAPPER.writerWithDefaultPrettyPrinter().writeValue(new File(dir, INFO), info);
+            forgetInfo(dir);
+            log.info("Imported CurseForge pack " + source.getName() + " as " + name + " (Minecraft " + mc + ", " + loader
+                    + " " + lv + ", " + todo.size() + " files, " + blocked.size() + " blocked by authors (" + fromModrinth
+                    + " of them from Modrinth by sha1), "
+                    + missing.size() + " still missing)");
+        } catch (Exception e) {
+            deleteTree(dir);
+            throw e;
+        }
+        return name;
+    }
+
+    /**
+     * Файли CurseForge за ID: дані через проксі, дозволені качаються в {@code content} (16 потоків, sha1 і розмір) і
+     * йдуть у {@code todo}, заборонені автором у {@code blocked} (їх далі {@link #cfBlocked}). 25.11.2026: винесено з
+     * {@link #importCurseForge}, щоб тим самим кодом ставити моди CurseForge з нашого експорту .mrpack.
+     */
+    private void cfDownload(Launcher launcher, java.util.List<Integer> ids, final File content,
+                            final java.util.List<com.gummer.launcher.curseforge.CurseForge.FileInfo> todo,
+                            final java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> blocked) throws Exception {
+        {
             status = com.skcraft.launcher.util.SharedLocale.tr("curseforge.status.lookup", ids.size());
             progress = -1;
             java.util.List<com.gummer.launcher.curseforge.CurseForge.FileInfo> infos = ids.isEmpty()
                     ? new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.FileInfo>()
                     : com.gummer.launcher.curseforge.CurseForge.lookup(launcher, ids);
-
-            final java.util.List<com.gummer.launcher.curseforge.CurseForge.FileInfo> todo =
-                    new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.FileInfo>();
-            final java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> blocked =
-                    new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.Blocked>();
             long size = 0;
             for (com.gummer.launcher.curseforge.CurseForge.FileInfo i : infos) {
                 File target = safe(content, i.folder() + "/" + i.fileName);
@@ -539,89 +618,62 @@ public final class MrpackPacks implements ProgressObservable {
                 pool.shutdownNow();
                 filesPhase = false;
             }
-
-            status = com.skcraft.launcher.util.SharedLocale.tr("mrpack.status.overrides");
-            progress = -1;
-            String overrides = m.path("overrides").asText("overrides").replace('\\', '/');
-            if (overrides.isEmpty()) overrides = "overrides";
-            java.util.List<String> extracted = new java.util.ArrayList<String>();
-            extract(zip, overrides.endsWith("/") ? overrides : overrides + "/", content, extracted);
-
-            int fromModrinth = 0;
-            if (!blocked.isEmpty()) {
-                // 1.40.0: спершу точні копії на Modrinth за sha1 (той самий файл, без браузера)
-                fromModrinth = takeFromModrinth(blocked);
-            }
-            if (!blocked.isEmpty()) {
-                // спершу те, що гравець уже колись качав (збірку ставлять вдруге), потім вікно
-                com.gummer.launcher.curseforge.CurseForge.pickup(blocked, com.gummer.launcher.curseforge.CurseForge.downloadDirs());
-                boolean left = false;
-                for (com.gummer.launcher.curseforge.CurseForge.Blocked b : blocked) left |= !b.isDone();
-                com.gummer.launcher.curseforge.CurseForge.BlockedHandler h = com.gummer.launcher.curseforge.CurseForge.blockedHandler();
-                if (left && h != null) {
-                    // у вікні лише те, чого немає ні на Modrinth, ні в «Завантаженнях»
-                    java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> rest =
-                            new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.Blocked>();
-                    for (com.gummer.launcher.curseforge.CurseForge.Blocked b : blocked) if (!b.isDone()) rest.add(b);
-                    status = com.skcraft.launcher.util.SharedLocale.tr("curseforge.status.blocked", rest.size());
-                    h.resolve(title, rest);
-                }
-            }
-
-            ObjectNode manifest = MAPPER.createObjectNode();
-            com.fasterxml.jackson.databind.node.ArrayNode missing = MAPPER.createArrayNode();
-            for (com.gummer.launcher.curseforge.CurseForge.FileInfo i : todo) {
-                ObjectNode e = manifest.putObject(i.folder() + "/" + i.fileName);
-                e.put("sha1", i.sha1 != null ? i.sha1 : "");
-                e.put("curseforge", i.modId);
-            }
-            for (com.gummer.launcher.curseforge.CurseForge.Blocked b : blocked) {
-                if (b.isDone()) {
-                    ObjectNode e = manifest.putObject(b.file.folder() + "/" + b.file.fileName);
-                    e.put("sha1", b.file.sha1 != null ? b.file.sha1 : "");
-                    e.put("curseforge", b.file.modId);
-                    if (b.modrinthProject != null) e.put("modrinth", b.modrinthProject);
-                } else {
-                    ObjectNode x = missing.addObject();
-                    x.put("name", b.file.title());
-                    x.put("file", b.file.folder() + "/" + b.file.fileName);
-                    x.put("page", b.file.downloadPage());
-                    x.put("sha1", b.file.sha1 != null ? b.file.sha1 : "");
-                    x.put("length", b.file.length);
-                }
-            }
-            for (String path : extracted) {
-                ObjectNode e = manifest.putObject(path);
-                e.put("sha1", sha1(new File(content, path)));
-            }
-            ObjectNode filesInfo = MAPPER.createObjectNode();
-            filesInfo.set("files", manifest);
-            MAPPER.writerWithDefaultPrettyPrinter().writeValue(new File(dir, FILES), filesInfo);
-
-            ObjectNode info = MAPPER.createObjectNode();
-            info.put("name", title);
-            info.put("mc", mc);
-            info.put("loader", loader);
-            if (lv != null) info.put("loaderVersion", lv);
-            info.put("source", "curseforge");
-            // 1.40.0: зі сторінки CurseForge лаунчера «cf-<id>» (як projectId Modrinth: «Встановлено», «Грати»)
-            if (projectId != null) info.put("projectId", projectId);
-            if (preferredVersionId != null) info.put("cfFileId", preferredVersionId);
-            info.put("versionNumber", preferredVersionNumber != null ? preferredVersionNumber : m.path("version").asText(""));
-            info.put("author", m.path("author").asText(""));
-            info.put("file", source.getName());
-            if (missing.size() > 0) info.set("missing", missing);
-            MAPPER.writerWithDefaultPrettyPrinter().writeValue(new File(dir, INFO), info);
-            forgetInfo(dir);
-            log.info("Imported CurseForge pack " + source.getName() + " as " + name + " (Minecraft " + mc + ", " + loader
-                    + " " + lv + ", " + todo.size() + " files, " + blocked.size() + " blocked by authors (" + fromModrinth
-                    + " of them from Modrinth by sha1), "
-                    + missing.size() + " still missing)");
-        } catch (Exception e) {
-            deleteTree(dir);
-            throw e;
         }
-        return name;
+    }
+
+    /**
+     * Заборонені автором файли CurseForge: спершу точні копії на Modrinth за sha1, потім те, що гравець уже колись
+     * качав («Завантаження»), потім вікно з браузером. Повертає, скільки взято з Modrinth. 25.11.2026: винесено з
+     * {@link #importCurseForge}.
+     */
+    private int cfBlocked(String title, java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> blocked) throws InterruptedException {
+        int fromModrinth = 0;
+        if (!blocked.isEmpty()) {
+            // 1.40.0: спершу точні копії на Modrinth за sha1 (той самий файл, без браузера)
+            fromModrinth = takeFromModrinth(blocked);
+        }
+        if (!blocked.isEmpty()) {
+            // спершу те, що гравець уже колись качав (збірку ставлять вдруге), потім вікно
+            com.gummer.launcher.curseforge.CurseForge.pickup(blocked, com.gummer.launcher.curseforge.CurseForge.downloadDirs());
+            boolean left = false;
+            for (com.gummer.launcher.curseforge.CurseForge.Blocked b : blocked) left |= !b.isDone();
+            com.gummer.launcher.curseforge.CurseForge.BlockedHandler h = com.gummer.launcher.curseforge.CurseForge.blockedHandler();
+            if (left && h != null) {
+                // у вікні лише те, чого немає ні на Modrinth, ні в «Завантаженнях»
+                java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> rest =
+                        new java.util.ArrayList<com.gummer.launcher.curseforge.CurseForge.Blocked>();
+                for (com.gummer.launcher.curseforge.CurseForge.Blocked b : blocked) if (!b.isDone()) rest.add(b);
+                status = com.skcraft.launcher.util.SharedLocale.tr("curseforge.status.blocked", rest.size());
+                h.resolve(title, rest);
+            }
+        }
+        return fromModrinth;
+    }
+
+    /** Файли CurseForge у {@value #FILES} (поставлені) і в {@code missing} (так і не скачані). 25.11.2026: винесено. */
+    private static void cfManifest(ObjectNode manifest, com.fasterxml.jackson.databind.node.ArrayNode missing,
+                                   java.util.List<com.gummer.launcher.curseforge.CurseForge.FileInfo> todo,
+                                   java.util.List<com.gummer.launcher.curseforge.CurseForge.Blocked> blocked) {
+        for (com.gummer.launcher.curseforge.CurseForge.FileInfo i : todo) {
+            ObjectNode e = manifest.putObject(i.folder() + "/" + i.fileName);
+            e.put("sha1", i.sha1 != null ? i.sha1 : "");
+            e.put("curseforge", i.modId);
+        }
+        for (com.gummer.launcher.curseforge.CurseForge.Blocked b : blocked) {
+            if (b.isDone()) {
+                ObjectNode e = manifest.putObject(b.file.folder() + "/" + b.file.fileName);
+                e.put("sha1", b.file.sha1 != null ? b.file.sha1 : "");
+                e.put("curseforge", b.file.modId);
+                if (b.modrinthProject != null) e.put("modrinth", b.modrinthProject);
+            } else {
+                ObjectNode x = missing.addObject();
+                x.put("name", b.file.title());
+                x.put("file", b.file.folder() + "/" + b.file.fileName);
+                x.put("page", b.file.downloadPage());
+                x.put("sha1", b.file.sha1 != null ? b.file.sha1 : "");
+                x.put("length", b.file.length);
+            }
+        }
     }
 
     private static void extract(ZipFile zip, String prefix, File content, java.util.List<String> paths) throws IOException {

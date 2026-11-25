@@ -1094,9 +1094,23 @@ public class InstanceManageDialog extends JDialog {
                 filterMods();
             }
         });
-        JPanel tools = new JPanel(new MigLayout("insets 0, gap 10, fillx", "[grow,fill][]", "[32!]"));
+        JPanel tools = new JPanel(new MigLayout("insets 0, gap 10, fillx", "[grow,fill][][]", "[32!]"));
         tools.setOpaque(false);
         tools.add(modsSearch, "wmin 0, h 32!");
+        // 25.11.2026 (власник: «"останні додані", щоб можна було глянути останні додані моди (сортування за назвою/за
+        // датою)»): нові спершу за датою появи файлу в теці (InstanceMods.Mod#added); вибір запам'ятовується
+        modsSort.addItem(tr("manage.mods.sortName"));
+        modsSort.addItem(tr("manage.mods.sortDate"));
+        modsSort.setSelectedIndex(modsByDate() ? 1 : 0);
+        modsSort.setFocusable(false);
+        modsSort.addActionListener(e -> {
+            boolean date = modsSort.getSelectedIndex() == 1;
+            if (date == modsByDate()) return;
+            com.gummer.launcher.prefs.LauncherPrefs.set(PREF_MODS_SORT, date ? "date" : "name");
+            modsShown = null;
+            fillMods();
+        });
+        tools.add(modsSort, "h 32!");
         modsCount.setForeground(pal.text3);
         modsCount.setFont(modsCount.getFont().deriveFont(12f));
         tools.add(modsCount);
@@ -1116,6 +1130,13 @@ public class InstanceManageDialog extends JDialog {
     }
 
     private final JTextField modsSearch = new JTextField();
+    private final JComboBox<String> modsSort = new JComboBox<String>();
+    /** 25.11.2026: порядок «Моїх модів» ({@code launcher-ui.json}): name або date (нові спершу). */
+    private static final String PREF_MODS_SORT = "modsSort";
+
+    private static boolean modsByDate() {
+        return "date".equals(com.gummer.launcher.prefs.LauncherPrefs.getString(PREF_MODS_SORT, "name"));
+    }
     private final JLabel modsCount = new JLabel();
     private final List<ModRow> modRows = new ArrayList<ModRow>();
     /** Підпис вмісту списку модів: файли (назва, розмір, дата) і вибір необов'язкових модів. */
@@ -1264,7 +1285,11 @@ public class InstanceManageDialog extends JDialog {
      * Рядки модів у список. 24.11.2026: перші {@value #MOD_ROWS_FIRST} одразу, решта порціями наступними подіями: на
      * збірці зі 196 модами створення і розкладка всіх рядків разом тримали вікно ~0,1-0,15 с.
      */
-    private void showModRows(final List<Object[]> rows, final int gen) {
+    private void showModRows(final List<Object[]> byName, final int gen) {
+        final List<Object[]> rows = new ArrayList<Object[]>(byName);
+        if (modsByDate()) { // нові спершу; однакова дата: за назвою, як прийшло
+            rows.sort((a, b) -> Long.compare(((InstanceMods.Mod) b[0]).added, ((InstanceMods.Mod) a[0]).added));
+        }
         modsList.removeAll();
         final String q = modsSearch.getText().trim().toLowerCase(Locale.ROOT);
         final int[] at = {0};
@@ -1837,7 +1862,9 @@ public class InstanceManageDialog extends JDialog {
 
             JPanel meta = new JPanel(new MigLayout("insets 0, gap 10", "[]", "[]"));
             meta.setOpaque(false);
-            JLabel file = small(mod.name + " · " + InstanceManageDialog.size(mod.size));
+            // 25.11.2026: дата появи мода в теці (для «Спершу нові»)
+            String added = mod.added > 0 ? " · " + tr("manage.mods.added", java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(new java.util.Date(mod.added))) : "";
+            JLabel file = small(mod.name + " · " + InstanceManageDialog.size(mod.size) + added);
             meta.add(file, "wmin 0");
             warn.setFont(warn.getFont().deriveFont(Font.BOLD, 12f));
             warn.setForeground(new Color(0xE5, 0x6B, 0x5D));
@@ -1856,11 +1883,62 @@ public class InstanceManageDialog extends JDialog {
                 });
                 meta.add(site);
             }
+            // 25.11.2026 (власник: «щоб моди в списку модів можна було не лише вимикати, а й видаляти»): лише свої моди
+            // гравця; мод модпаку повернеться з першим оновленням чи перевіркою збірки, його вимикають
+            if (mod.source == InstanceMods.Source.OWN && !mod.locked) {
+                JLabel del = new JLabel(tr("manage.mods.delete"));
+                del.setFont(del.getFont().deriveFont(12f));
+                del.setForeground(new Color(0xE5, 0x6B, 0x5D));
+                del.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                del.setToolTipText(tr("manage.mods.deleteTip"));
+                del.addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mouseClicked(MouseEvent e) {
+                        deleteMod();
+                    }
+                });
+                meta.add(del);
+            }
             add(meta, "skip 1, wmin 0, wrap");
             add(warn, "skip 1, wmin 0, hidemode 3");
 
             box.addActionListener(e -> toggle());
             paintState();
+        }
+
+        /**
+         * 25.11.2026: видалити свій мод. Файл іде в кошик Windows (Java 9+), а де кошика немає, у
+         * {@code .gummer/deleted-mods} збірки: випадкове видалення можна повернути.
+         */
+        private void deleteMod() {
+            java.util.List<ModRow> deps = dependentsOf(this);
+            StringBuilder names = new StringBuilder();
+            for (ModRow r : deps) names.append(names.length() > 0 ? ", " : "").append(r.info.name);
+            String text = tr("manage.mods.deleteConfirm", info.name) + (deps.isEmpty() ? "" : "\n\n" + tr("manage.mods.deleteDeps", names.toString()));
+            if (JOptionPane.showConfirmDialog(InstanceManageDialog.this, text, tr("manage.mods.deleteTitle"),
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) return;
+            try {
+                boolean trash = false;
+                try {
+                    if (Desktop.isDesktopSupported()) {
+                        Object ok = Desktop.class.getMethod("moveToTrash", java.io.File.class).invoke(Desktop.getDesktop(), mod.file);
+                        trash = Boolean.TRUE.equals(ok);
+                    }
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    // Java 8 або система без кошика: нижче
+                }
+                if (!trash) {
+                    java.io.File dir = new java.io.File(new java.io.File(instance.getContentDir(), ".gummer"), "deleted-mods");
+                    dir.mkdirs();
+                    java.nio.file.Files.move(mod.file.toPath(), new java.io.File(dir, System.currentTimeMillis() + "-" + mod.file.getName()).toPath());
+                }
+                changed = true;
+                toast(tr(trash ? "manage.mods.deletedTrash" : "manage.mods.deletedFolder", info.name));
+                modsShown = null;
+                fillMods();
+            } catch (IOException ex) {
+                SwingHelper.showErrorDialog(InstanceManageDialog.this, tr("manage.mods.deleteFailed", mod.name), tr("errorTitle"), ex);
+            }
         }
 
         private void toggle() {
@@ -3244,6 +3322,7 @@ public class InstanceManageDialog extends JDialog {
         File f = chooser.getSelectedFile();
         if (!f.getName().toLowerCase(Locale.ROOT).endsWith("." + ext)) f = new File(f.getPath() + "." + ext);
         final com.gummer.launcher.modrinth.MrpackExport exporter = new com.gummer.launcher.modrinth.MrpackExport(instance, f, packs, zip);
+        exporter.launcher = launcher; // 25.11.2026: моди CurseForge посиланнями (запит до проксі)
         final com.google.common.util.concurrent.ListenableFuture<File> task = launcher.getExecutor().submit(exporter);
         com.skcraft.concurrency.ObservableFuture<File> future = new com.skcraft.concurrency.ObservableFuture<File>(task, exporter);
         com.skcraft.launcher.dialog.ProgressDialog.showProgress(this, future, tr("manage.share.exportTitle"), tr("manage.share.exporting"));
@@ -3251,7 +3330,8 @@ public class InstanceManageDialog extends JDialog {
         future.addListener(() -> {
             try {
                 File done = task.get();
-                toast(tr("manage.share.exported", done.getName()));
+                toast(zip ? tr("manage.share.exported", done.getName())
+                        : tr("manage.share.exportedLinks", done.getName(), exporter.modrinthLinks, exporter.curseLinks));
                 if (!exporter.skipped.isEmpty()) {
                     JOptionPane.showMessageDialog(this, tr("manage.share.skipped", String.join(", ", exporter.skipped)),
                             tr("manage.share.title"), JOptionPane.INFORMATION_MESSAGE);

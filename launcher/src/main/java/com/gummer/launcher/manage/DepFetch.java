@@ -20,7 +20,8 @@ import java.util.logging.Logger;
 
 /**
  * 18.11.2026 (власник: «коли моду бракує іншого мода ... а можна дати можливість докачати цей мод? Або докачати
- * автоматично»). Докачати обов'язкові залежності мода з Modrinth у теку модів збірки. Спершу сам мод шукається на
+ * автоматично»). Докачати обов'язкові залежності мода з Modrinth у теку модів збірки (з 25.11.2026: чого на Modrinth
+ * немає, з CurseForge, лише точний збіг slug чи назви; мод не з Modrinth: його залежності за даними CurseForge). Спершу сам мод шукається на
  * Modrinth за sha1 файлу: його версія знає точні проєкти залежностей (так ставиться саме те, що потрібно, під цю гру і
  * завантажувач). Мод не з Modrinth: залежність шукається за її id (на Modrinth slug зазвичай той самий) з кількома
  * відомими розбіжностями. Нічого не видаляє і не міняє: лише додає файли. Не з потоку інтерфейсу.
@@ -80,7 +81,11 @@ public final class DepFetch {
                 ModrinthBrowse.dependencies(v, game, loaders, dir, installed, miss, null, seen, 0);
                 viaMod = true;
             } catch (IOException e) {
-                log.info("Mod is not on Modrinth, looking up dependencies by id: " + modFile.getName());
+                log.info("Mod is not on Modrinth, looking up dependencies on CurseForge and by id: " + modFile.getName());
+                // 25.11.2026: мод не з Modrinth: його залежності за даними CurseForge (мод знайдено за fingerprint)
+                int before = installed.size();
+                com.gummer.launcher.curseforge.CurseBrowse.dependenciesOf(modFile, game, loaders, dir, installed, miss);
+                viaMod = installed.size() > before;
             }
         }
         // за id: якщо мода нема на Modrinth або його версія не назвала саме цієї залежності
@@ -89,13 +94,15 @@ public final class DepFetch {
             String slug = slugOf(id);
             if (slug == null) continue;
             if (viaMod && !installed.isEmpty()) break;
+            ModrinthBrowse.Hit h = new ModrinthBrowse.Hit();
+            h.slug = slug;
+            h.title = id;
             try {
                 JsonNode proj = ModrinthBrowse.getJson(API + "project/" + slug);
                 if (!"mod".equals(proj.path("project_type").asText("mod"))) {
                     miss.add(id);
                     continue;
                 }
-                ModrinthBrowse.Hit h = new ModrinthBrowse.Hit();
                 h.id = proj.path("id").asText(slug);
                 h.slug = proj.path("slug").asText(slug);
                 h.title = proj.path("title").asText(id);
@@ -103,7 +110,11 @@ public final class DepFetch {
                 ModrinthBrowse.install(ModrinthBrowse.Kind.MOD, h, game, loaders, dir, installed, miss, null);
                 seen.add(h.id);
             } catch (IOException e) {
-                miss.add(id);
+                // 25.11.2026 (власник: «чого немає на модрінті, потрібно спробувати знайти на курс форджі»): немає на
+                // Modrinth чи немає там під цю гру: той самий мод на CurseForge, лише точний збіг slug чи назви
+                String got = com.gummer.launcher.curseforge.CurseBrowse.installSameAs(h, game, loaders, dir, installed, miss, null, seen, 0);
+                if (got == null) miss.add(id);
+                else log.info("Dependency " + id + " fetched from CurseForge: " + got);
             }
         }
         if (missing != null) missing.addAll(miss);

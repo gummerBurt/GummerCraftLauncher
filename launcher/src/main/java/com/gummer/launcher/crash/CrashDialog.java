@@ -62,6 +62,60 @@ public final class CrashDialog {
         }.execute();
     }
 
+    /**
+     * 25.11.2026: modClassMissing. Залежність є: оновити її і перевірити, що потрібний клас з'явився (інакше стару
+     * повернуто). Залежності немає: докачати. Див. {@link com.gummer.launcher.manage.ClassFix}.
+     */
+    private static void fixClass(final JDialog dialog, final Window owner, final Instance instance, final CrashAnalyzer.Diagnosis d, final JButton b) {
+        final String label = b.getText();
+        b.setEnabled(false);
+        b.setText(tr("crash.action.working"));
+        new SwingWorker<com.gummer.launcher.manage.ClassFix.Result, Void>() {
+            @Override
+            protected com.gummer.launcher.manage.ClassFix.Result doInBackground() throws Exception {
+                return d.depFile != null
+                        ? com.gummer.launcher.manage.ClassFix.updateDep(instance, d.depFile, d.missingClass)
+                        : com.gummer.launcher.manage.ClassFix.fetchDep(instance, d.modFile, d.depId, d.missingClass);
+            }
+
+            @Override
+            protected void done() {
+                com.gummer.launcher.manage.ClassFix.Result r;
+                try {
+                    r = get();
+                } catch (Exception ex) {
+                    b.setText(label);
+                    b.setEnabled(true);
+                    Throwable t = ex.getCause() != null ? ex.getCause() : ex;
+                    JOptionPane.showMessageDialog(dialog, tr("crash.updateMod.failed", String.valueOf(t.getMessage())), tr("crash.windowTitle"), JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String culprit = d.modName != null ? d.modName : "?";
+                String msg;
+                switch (r.outcome) {
+                    case FIXED:
+                        dialog.dispose();
+                        JOptionPane.showMessageDialog(owner, d.depFile != null ? tr("crash.classFix.done", d.depId, r.what)
+                                : tr("crash.classFix.fetched", r.what), tr("crash.windowTitle"), JOptionPane.INFORMATION_MESSAGE);
+                        return;
+                    case NO_UPDATE:
+                        msg = tr("crash.classFix.noUpdate", d.depId, culprit);
+                        break;
+                    case NO_CLASS:
+                        msg = tr(d.depFile != null ? "crash.classFix.noClass" : "crash.classFix.fetchedNoClass", d.depId, culprit, r.what);
+                        break;
+                    default:
+                        msg = tr("crash.fetchDep.none", d.depId);
+                        break;
+                }
+                // повторне натискання нічого не змінить, крім «не знайшлося» (інтернет)
+                b.setText(label);
+                b.setEnabled(r.outcome == com.gummer.launcher.manage.ClassFix.Outcome.NOT_FOUND);
+                JOptionPane.showMessageDialog(dialog, msg, tr("crash.windowTitle"), JOptionPane.WARNING_MESSAGE);
+            }
+        }.execute();
+    }
+
     /** Оновити мод (чи застарілу залежність) до новішої версії з Modrinth під цю гру; старий файл замінюється. */
     private static void updateMod(final JDialog dialog, final Instance instance, final java.io.File file, final JButton b) {
         final String label = b.getText();
@@ -162,10 +216,26 @@ public final class CrashDialog {
 
     /** Причини в модах: для них кнопка «Моди збірки». */
     private static final java.util.Set<String> MOD_KEYS = new java.util.HashSet<String>(java.util.Arrays.asList(
-            "duplicateMod", "modConflict", "mixin", "missingDep", "depTooOld", "modCrash"));
+            "duplicateMod", "modConflict", "mixin", "missingDep", "depTooOld", "modCrash", "modClassMissing"));
     /** Причини, де стара порада радить перевстановити пак: для збірок зі своїми модами є інша (adviceOwn). */
     private static final java.util.Set<String> OWN_ADVICE = new java.util.HashSet<String>(java.util.Arrays.asList(
             "duplicateMod", "modConflict", "mixin"));
+
+    /** Назва мода для гравця: з jar (кешовано), інакше файл. */
+    private static String modTitle(com.gummer.launcher.manage.InstanceMods.Mod m) {
+        com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.peek(m.file);
+        if (info == null) info = com.gummer.launcher.manage.ModInfo.of(m.file);
+        return info != null && info.name != null ? info.name : m.name;
+    }
+
+    /** 25.11.2026: абзац «Нещодавно додані моди» під порадою, або порожньо. */
+    private static String recentHtml(CrashAnalyzer.Diagnosis d) {
+        if (d.recentMods.isEmpty()) return "";
+        java.util.List<String> names = new java.util.ArrayList<String>();
+        for (com.gummer.launcher.manage.InstanceMods.Mod m : d.recentMods) names.add(modTitle(m));
+        return "<br><br><b>" + SwingHelper.htmlEscape(tr("crash.recent.title")) + "</b><br>"
+                + SwingHelper.htmlEscape(tr("crash.recent.text", String.join(", ", names)));
+    }
 
     /** Показати з EDT. openConsole: що робить «Відкрити консоль» (може бути null). */
     public static void show(final Window owner, final Instance instance, final CrashAnalyzer.Diagnosis d, final Runnable openConsole) {
@@ -187,6 +257,9 @@ public final class CrashDialog {
                 + "<span style=\"font-size: 15px\"><b>" + SwingHelper.htmlEscape(tr("crash.headline", instance.getTitle())) + "</b></span><br><br>"
                 + "<b>" + SwingHelper.htmlEscape(tr("crash." + d.key + ".title", detail)) + "</b><br>"
                 + SwingHelper.htmlEscape(tr(adviceKey, detail)).replace("\n", "<br>")
+                + recentHtml(d)
+                + ("modClassMissing".equals(d.key) && d.depLocked
+                        ? "<br><br>" + SwingHelper.htmlEscape(tr("crash.classFix.locked", d.depId, d.modName != null ? d.modName : "?")) : "")
                 + "</div></html>";
         p.add(new JLabel(html), BorderLayout.CENTER);
 
@@ -291,7 +364,7 @@ public final class CrashDialog {
             primary = fetch;
         }
         final java.io.File updatable = "depTooOld".equals(d.key) ? d.depFile
-                : "modCrash".equals(d.key) || "mixin".equals(d.key) ? d.modFile : null;
+                : "modCrash".equals(d.key) || "mixin".equals(d.key) || "modClassMissing".equals(d.key) ? d.modFile : null;
         if (ownMods && updatable != null) {
             String name = "depTooOld".equals(d.key) ? d.depId : d.modName;
             final JButton upd = new JButton(tr("crash.action.updateMod", name != null ? name : updatable.getName()));
@@ -303,9 +376,21 @@ public final class CrashDialog {
                 buttons.add(upd);
             }
         }
+        // 25.11.2026 (власник: «а чому б не запропонувати скачати правильний ентіті кулінг? ... Якщо є якась залежність, щоб
+        // лаунчер її детектив і докачував»): головна дія лагодить залежність (оновити чи докачати з перевіркою класу),
+        // «Вимкнути» мод, що звертається, лишається поруч
+        // залежність з модпаку GummerCraft не чіпаємо (depLocked): там лише порада в тексті
+        if ("modClassMissing".equals(d.key) && d.depId != null && !d.depLocked) {
+            final boolean have = d.depFile != null;
+            final JButton fix = new JButton(tr(have ? "crash.action.updateMod" : "crash.action.fetchDep", d.depId));
+            fix.setToolTipText(tr(have ? "crash.action.fixDepTip" : "crash.action.fetchDepTip"));
+            fix.addActionListener(e -> fixClass(dialog, owner, instance, d, fix));
+            if (primary != null) buttons.add(primary);
+            primary = fix;
+        }
         // 19.11.2026 (власник: «Відкат моду після оновлення ... давай»): винний мод оновлено нещодавно, а стара версія
         // збережена (ModRollback): повернути її головною дією, бо до оновлення гра працювала
-        final com.gummer.launcher.manage.ModRollback.Entry prev = ownMods && ("modCrash".equals(d.key) || "mixin".equals(d.key))
+        final com.gummer.launcher.manage.ModRollback.Entry prev = ownMods && ("modCrash".equals(d.key) || "mixin".equals(d.key) || "modClassMissing".equals(d.key))
                 ? com.gummer.launcher.manage.ModRollback.recentFor(d.modFile) : null;
         if (prev != null) {
             final String name = d.modName != null ? d.modName : d.modFile.getName();
@@ -323,6 +408,34 @@ public final class CrashDialog {
             });
             if (primary != null) buttons.add(primary);
             primary = back;
+        }
+        // 25.11.2026 (власник: «виною були три нові моди, жоден з них наш лаунчер не задетектив»): винного мода не названо,
+        // але після останньої вдалої гри з'явились нові моди: вимкнути їх одним кліком. Головна дія, якщо іншої немає або
+        // це «невідомо» чи «пошкоджені файли» (перевстановлення нових модів гравця не прибирає)
+        if (!d.recentMods.isEmpty()) {
+            final java.util.List<com.gummer.launcher.manage.InstanceMods.Mod> recent = d.recentMods;
+            JButton off = new JButton(tr("crash.action.disableRecent", recent.size()));
+            off.addActionListener(e -> {
+                java.util.List<String> done = new java.util.ArrayList<String>();
+                for (com.gummer.launcher.manage.InstanceMods.Mod m : recent) {
+                    try {
+                        com.gummer.launcher.manage.InstanceMods.setEnabled(instance, m, false);
+                        done.add(modTitle(m));
+                    } catch (java.io.IOException ex) {
+                        SwingHelper.showErrorDialog(dialog, tr("crash.recentDisableFailed", modTitle(m)), tr("errorTitle"), ex);
+                        return;
+                    }
+                }
+                dialog.dispose();
+                JOptionPane.showMessageDialog(owner, tr("crash.recentDisabled", String.join(", ", done)), tr("crash.windowTitle"),
+                        JOptionPane.INFORMATION_MESSAGE);
+            });
+            if (primary == null || "unknown".equals(d.key) || "corrupt".equals(d.key)) {
+                if (primary != null) buttons.add(primary);
+                primary = off;
+            } else {
+                buttons.add(off);
+            }
         }
         // 19.11.2026: виліт на істоті чи блоці у світі: «Світи збірки», якщо є бекап світів цієї збірки
         final UiHooks.InstanceAction worlds = UiHooks.openWorlds;

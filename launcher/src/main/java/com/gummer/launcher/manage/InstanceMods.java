@@ -57,6 +57,12 @@ public final class InstanceMods {
         /** Вимкнути не можна: мод паку, без якого сервер не пустить (StalDayZ). */
         public final boolean locked;
         public final long size;
+        /**
+         * 25.11.2026 (власник: «останні додані» в списку модів, підказка про нові моди при вильоті): коли мод з'явився в
+         * теці, мс. Більша з дат створення і зміни файлу: Провідник при копіюванні лишає стару дату зміни, але нову дату
+         * створення; оновлений лаунчером мод це новий файл.
+         */
+        public final long added;
 
         Mod(File file, String name, boolean enabled, Source source, boolean locked) {
             this.file = file;
@@ -65,6 +71,16 @@ public final class InstanceMods {
             this.source = source;
             this.locked = locked;
             this.size = file.length();
+            this.added = Math.max(file.lastModified(), file instanceof Snap ? ((Snap) file).created : createdAt(file));
+        }
+    }
+
+    /** Дата створення файлу (мс), 0 якщо невідома. */
+    static long createdAt(File f) {
+        try {
+            return java.nio.file.Files.readAttributes(f.toPath(), java.nio.file.attribute.BasicFileAttributes.class).creationTime().toMillis();
+        } catch (IOException | RuntimeException e) {
+            return 0;
         }
     }
 
@@ -130,11 +146,13 @@ public final class InstanceMods {
     static final class Snap extends File {
         private final long len;
         private final long mod;
+        final long created;
 
-        Snap(File dir, String name, long len, long mod) {
+        Snap(File dir, String name, long len, long mod, long created) {
             super(dir, name);
             this.len = len;
             this.mod = mod;
+            this.created = created;
         }
 
         @Override
@@ -159,7 +177,7 @@ public final class InstanceMods {
                         @Override
                         public java.nio.file.FileVisitResult visitFile(java.nio.file.Path p, java.nio.file.attribute.BasicFileAttributes a) {
                             if (a.isRegularFile()) {
-                                out.add(new Snap(dir, p.getFileName().toString(), a.size(), a.lastModifiedTime().toMillis()));
+                                out.add(new Snap(dir, p.getFileName().toString(), a.size(), a.lastModifiedTime().toMillis(), a.creationTime().toMillis()));
                             }
                             return java.nio.file.FileVisitResult.CONTINUE;
                         }
