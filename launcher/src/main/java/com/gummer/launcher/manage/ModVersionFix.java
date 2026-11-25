@@ -26,7 +26,7 @@ import java.util.logging.Logger;
  * <p>
  * Як: вимоги до версій з самих jar ({@link ModInfo#minVersions}), порівняння з версією мода, що стоїть; лише «надто
  * стара» (нижня межа), на новішу ніколи не міняємо і назад не відкочуємо. Знайдене оновлюється тим самим кодом, що й
- * «Оновити» в «Мої моди» ({@link ModUpdates}): найновіша версія під гру і завантажувач збірки, файл лише з
+ * «Оновити» в «Мої моди» ({@link ModUpdates}): з 25.11.2026 перша версія, якої досить, під гру і завантажувач збірки (і під його версію), файл лише з
  * cdn.modrinth.com зі звіркою sha512. Якщо найновіша на Modrinth все одно стара чи мода там немає, нічого не міняється.
  * <p>
  * Лише збірки, моди яких веде гравець: Vanilla і завантажувачі, копії, збірки Modrinth. Модпаки GummerCraft і
@@ -102,6 +102,12 @@ public final class ModVersionFix {
     /**
      * Знайти і виправити (мережа: викликати не з потоку інтерфейсу). Повертає описи виправленого («byg 1.1.6 ->
      * 1.3.4»); що виправити не вдалось, лише в журналі. Без інтернету: порожньо, гра запускається як є.
+     * <p>
+     * 25.11.2026 (тікет #122): ставиться не найновіша версія залежності, а перша, якої досить ({@code need}) і яка йде під
+     * завантажувач збірки ({@link ModUpdates#apply(ModUpdates.Update, String, String[], List, List, String)}): найновіша
+     * може вимагати ще новіший завантажувач чи інші моди, і гра впаде вже через неї. Зроблене пишеться в
+     * {@link AutoFixLog}: поки гра після нього жодного разу не закрилась без вильоту, лаунчер сам більше нічого не
+     * міняє (інакше кожен запуск оновлював би наступний мод по ланцюжку), а відкочене гравцем не повторює.
      */
     public static List<String> fixBeforeLaunch(Instance instance) {
         List<String> done = new ArrayList<String>();
@@ -114,13 +120,24 @@ public final class ModVersionFix {
         }
         if (problems.isEmpty()) return done;
         for (Problem p : problems) log.info("Mod version problem: " + p);
+        if (AutoFixLog.unconfirmed(instance)) {
+            log.info("Mod version fix skipped: the previous auto-fix was not followed by a clean game exit");
+            return done;
+        }
         String game = ModrinthBrowse.gameVersionOf(instance);
         String[] loaders = ModrinthBrowse.loadersOf(ModrinthBrowse.Kind.MOD, instance);
         if (game == null || loaders == null || loaders.length == 0) return done;
-        List<File> files = new ArrayList<File>();
-        for (Problem p : problems) files.add(p.file);
-        Map<File, ModUpdates.Update> updates = ModUpdates.check(files, game, loaders);
+        List<Problem> todo = new ArrayList<Problem>();
         for (Problem p : problems) {
+            if (AutoFixLog.declined(instance, p.dep, p.need)) log.info("Mod version fix declined earlier: " + p.dep + " >= " + p.need);
+            else todo.add(p);
+        }
+        if (todo.isEmpty()) return done;
+        List<File> files = new ArrayList<File>();
+        for (Problem p : todo) files.add(p.file);
+        Map<File, ModUpdates.Update> updates = ModUpdates.check(files, game, loaders);
+        List<AutoFixLog.Fix> fixes = new ArrayList<AutoFixLog.Fix>();
+        for (Problem p : todo) {
             ModUpdates.Update u = updates.get(p.file);
             if (u == null) {
                 log.info("No newer " + p.dep + " on Modrinth for " + game + " " + String.join(",", loaders));
@@ -134,13 +151,16 @@ public final class ModVersionFix {
             }
             try {
                 List<String> missing = new ArrayList<String>(), conflicts = new ArrayList<String>();
-                File nf = ModUpdates.apply(u, game, loaders, missing, conflicts);
-                done.add(p.dep + " " + p.have + " → " + u.versionNumber);
+                File nf = ModUpdates.apply(u, game, loaders, missing, conflicts, p.need);
+                String to = ModInfo.of(nf).version != null ? ModInfo.of(nf).version : u.versionNumber;
+                done.add(p.dep + " " + p.have + " → " + to);
+                fixes.add(new AutoFixLog.Fix(p.dep, p.need, p.have, to, nf));
                 log.info("Mod version fixed: " + p.file.getName() + " -> " + nf.getName() + " (" + p.by + " needs " + p.need + ")");
             } catch (Exception e) {
                 log.info("Mod version fix failed for " + p.file.getName() + ": " + e);
             }
         }
+        AutoFixLog.record(instance, fixes);
         return done;
     }
 

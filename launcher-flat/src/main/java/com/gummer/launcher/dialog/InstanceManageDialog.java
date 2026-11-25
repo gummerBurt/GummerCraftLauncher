@@ -1101,11 +1101,21 @@ public class InstanceManageDialog extends JDialog {
         // датою)»): нові спершу за датою появи файлу в теці (InstanceMods.Mod#added); вибір запам'ятовується
         modsSort.addItem(tr("manage.mods.sortName"));
         modsSort.addItem(tr("manage.mods.sortDate"));
+        // 25.11.2026 (власник: «третю - "є оновлення", щоб гравець сам побачив, які моди треба оновити, а не скролив все
+        // підряд»): лише моди з позначкою «оновлення». Не запам'ятовується: наступного разу список відкривається повністю
+        modsSort.addItem(tr("manage.mods.sortUpdates"));
         modsSort.setSelectedIndex(modsByDate() ? 1 : 0);
         modsSort.setFocusable(false);
         modsSort.addActionListener(e -> {
+            if (modsUpdatesOnly()) {
+                filterMods();
+                return;
+            }
             boolean date = modsSort.getSelectedIndex() == 1;
-            if (date == modsByDate()) return;
+            if (date == modsByDate()) {
+                filterMods(); // повернення з «Є оновлення»: порядок той самий, лише показати всі
+                return;
+            }
             com.gummer.launcher.prefs.LauncherPrefs.set(PREF_MODS_SORT, date ? "date" : "name");
             modsShown = null;
             fillMods();
@@ -1136,6 +1146,11 @@ public class InstanceManageDialog extends JDialog {
 
     private static boolean modsByDate() {
         return "date".equals(com.gummer.launcher.prefs.LauncherPrefs.getString(PREF_MODS_SORT, "name"));
+    }
+
+    /** 25.11.2026: вибрано «Є оновлення» (показати лише моди, для яких знайдено новішу версію). */
+    private boolean modsUpdatesOnly() {
+        return modsSort.getSelectedIndex() == 2;
     }
     private final JLabel modsCount = new JLabel();
     private final List<ModRow> modRows = new ArrayList<ModRow>();
@@ -1358,6 +1373,8 @@ public class InstanceManageDialog extends JDialog {
     private final java.util.Map<ModRow, com.gummer.launcher.manage.ModUpdates.Update> pendingUpdates =
             new java.util.LinkedHashMap<ModRow, com.gummer.launcher.manage.ModUpdates.Update>();
     private SwingWorker<?, ?> updatesLoader;
+    /** 25.11.2026: оновлення модів ще шукаються (для «Є оновлення»: «Шукаю оновлення...», а не «Оновлень немає»). */
+    private boolean updatesChecking;
 
     /**
      * 17.11.2026: новіші версії своїх модів гравця (Modrinth за sha1, два запити на весь список), у фоні після позначок.
@@ -1366,6 +1383,7 @@ public class InstanceManageDialog extends JDialog {
     private void loadUpdates() {
         if (updatesLoader != null) updatesLoader.cancel(true);
         pendingUpdates.clear();
+        updatesChecking = false;
         updateAll.setVisible(false);
         final String game = com.gummer.launcher.manage.ModrinthBrowse.gameVersionOf(instance);
         final String[] loaders = com.gummer.launcher.manage.ModrinthBrowse.loadersOf(com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD, instance);
@@ -1400,6 +1418,7 @@ public class InstanceManageDialog extends JDialog {
             @Override
             protected void done() {
                 if (isCancelled()) return;
+                updatesChecking = false;
                 try {
                     java.util.Map<File, com.gummer.launcher.manage.ModUpdates.Update> m = get();
                     boolean changed = false;
@@ -1411,6 +1430,7 @@ public class InstanceManageDialog extends JDialog {
                         changed = true;
                     }
                     showUpdateAll();
+                    if (modsUpdatesOnly()) filterMods(); // «Є оновлення»: показати знайдене
                     // 24.11.2026: без оновлень 196 рядків не перекладаються вдруге (~0,1 с завмирання)
                     if (changed) {
                         modsList.revalidate();
@@ -1418,10 +1438,12 @@ public class InstanceManageDialog extends JDialog {
                     }
                 } catch (Exception ignored) {
                     // без оновлень
+                    if (modsUpdatesOnly()) filterMods();
                 }
             }
         };
         updatesLoader = w;
+        updatesChecking = true;
         w.execute();
     }
 
@@ -1534,6 +1556,7 @@ public class InstanceManageDialog extends JDialog {
         footerProgress(tr("manage.mods.progress", 0, todo.size(), todo.isEmpty() ? "" : todo.get(0).file.getName()), 0, todo.size());
         final List<String> missing = java.util.Collections.synchronizedList(new ArrayList<String>());
         final List<String> conflicts = java.util.Collections.synchronizedList(new ArrayList<String>());
+        final List<String> loaderOld = java.util.Collections.synchronizedList(new ArrayList<String>());
         new SwingWorker<int[], Object[]>() {
             @Override
             protected void process(List<Object[]> chunks) {
@@ -1551,6 +1574,8 @@ public class InstanceManageDialog extends JDialog {
                         ok++;
                     } catch (IOException e) {
                         failed++;
+                        // 25.11.2026 (тікет #122): жодна новіша версія не йде під завантажувач збірки: сказати гравцю чому
+                        if (e instanceof com.gummer.launcher.manage.ModUpdates.LoaderTooOld) loaderOld.add(e.getLocalizedMessage());
                         java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).log(java.util.logging.Level.WARNING,
                                 "Mod update failed: " + u.file.getName(), e);
                     }
@@ -1575,6 +1600,7 @@ public class InstanceManageDialog extends JDialog {
                 java.util.List<String> warn = new ArrayList<String>();
                 if (!missing.isEmpty()) warn.add(tr("manage.mods.updateDepsMissing", String.join(", ", missing), game));
                 if (!conflicts.isEmpty()) warn.add(tr("manage.mods.updateDepsConflict", String.join(", ", conflicts)));
+                if (!loaderOld.isEmpty()) warn.add(String.join("\n", loaderOld));
                 if (!warn.isEmpty()) {
                     JOptionPane.showMessageDialog(InstanceManageDialog.this, String.join("\n\n", warn),
                             tr("manage.browse.depsTitle"), JOptionPane.WARNING_MESSAGE);
@@ -1763,15 +1789,21 @@ public class InstanceManageDialog extends JDialog {
     private void filterMods() {
         updateDependencyWarnings();
         String q = modsSearch.getText().trim().toLowerCase(Locale.ROOT);
+        boolean updatesOnly = modsUpdatesOnly();
         int on = 0, shown = 0;
         for (ModRow r : modRows) {
             if (r.mod.enabled) on++;
-            boolean v = q.isEmpty() || r.matches(q);
+            boolean v = (q.isEmpty() || r.matches(q)) && (!updatesOnly || pendingUpdates.get(r) != null);
             r.setVisible(v);
             if (v) shown++;
         }
         modsCount.setText(tr("manage.mods.count", on, modRows.size()));
-        if (!q.isEmpty() && shown == 0) modsCount.setText(tr("manage.mods.notFound"));
+        if (updatesOnly) {
+            modsCount.setText(shown > 0 ? tr("manage.mods.updatesShown", shown)
+                    : updatesChecking ? tr("manage.mods.checking") : !q.isEmpty() ? tr("manage.mods.notFound") : tr("manage.mods.noUpdates"));
+        } else if (!q.isEmpty() && shown == 0) {
+            modsCount.setText(tr("manage.mods.notFound"));
+        }
         modsList.revalidate();
         modsList.repaint();
     }
@@ -2670,6 +2702,8 @@ public class InstanceManageDialog extends JDialog {
                                 install.setText(tr("manage.browse.install"));
                                 boolean noVersion = com.gummer.launcher.manage.ModrinthBrowse.NO_VERSION.equals(t.getMessage());
                                 toast(noVersion ? tr("manage.browse.noVersion", h.title, game != null ? game : "?")
+                                        // 25.11.2026 (тікет #122): жодна версія не йде під завантажувач збірки
+                                        : t instanceof com.gummer.launcher.manage.ModUpdates.LoaderTooOld ? t.getLocalizedMessage()
                                         : com.gummer.launcher.curseforge.CurseBrowse.NOT_DOWNLOADED.equals(t.getMessage())
                                         ? tr("cpage.notDownloaded", h.title) : tr("manage.browse.installFailed", h.title));
                                 if (!noVersion) java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).log(java.util.logging.Level.WARNING, "Install failed: " + h.id + " " + h.slug, t);

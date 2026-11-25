@@ -79,7 +79,15 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.41.0
+## What's new in 1.41.1
+
+- **Mods that fit the loader.** Mod updates, installs from search and the pre-launch auto-fix no longer install a mod version that needs a newer Fabric Loader, Quilt, Forge or NeoForge than the build has. If the game still does not start because of this, the crash window updates the loader in one click.
+- **The auto-fix no longer loops.** Before launch the launcher installs the lowest mod version that is enough, and if the game then crashes, it offers "Undo the auto-fix".
+- **"Has an update" in "My mods":** only the mods with a newer version, no need to scroll the whole list.
+- **Better crash help:** a crash on the early Forge loading screen (a "Turn off the early screen" button), a crash when Windows does not let the game write files, fewer false suggestions to update the graphics driver.
+- **Also:** the ▶ on the "Desktop" starts the game right there, modpacks that name a Forge build for another game version install again, the Java crash report in support requests, buttons start with a capital letter.
+
+**Also in 1.41.0:**
 
 - **A "Desktop" with all your builds.** The first row in "Installed" opens a page with all your builds together, as a grid or a list, by name, mod loader or date. The ▶ button starts the game right away, and a star pins a build to the top.
 - **Scrolling like on the CurseForge page.** One wheel notch scrolls by a little over one build instead of two or three.

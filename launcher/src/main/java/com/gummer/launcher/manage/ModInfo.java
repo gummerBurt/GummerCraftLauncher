@@ -77,6 +77,13 @@ public final class ModInfo {
      */
     public final Map<String, java.util.List<String>> breaksFabric = new java.util.TreeMap<String, java.util.List<String>>();
     public final Map<String, String> breaksMaven = new java.util.TreeMap<String, String>();
+    /**
+     * 25.11.2026 (тікет #122): найменша версія завантажувача, яку вимагає мод (fabric, quilt, forge, neoforge -> версія), з
+     * {@code depends.fabricloader} Fabric, {@code depends quilt_loader} Quilt і {@code versionRange} залежності forge чи
+     * neoforge. Для {@link ModUpdates}: новіша версія мода може вимагати новіший завантажувач, ніж стоїть у збірці (Create
+     * 6.0.8 для Fabric хоче Fabric Loader 0.17.2, а збірка на 0.16.0), і тоді гра не запуститься взагалі.
+     */
+    public final Map<String, String> loaderMin = new java.util.TreeMap<String, String>();
 
     private ModInfo(String id, String name, String version, String description, String url, String iconPath) {
         this.id = blankToNull(id);
@@ -287,7 +294,10 @@ public final class ModInfo {
         m.environment = n.path("minecraft").path("environment").asText(null);
         for (JsonNode d : q.path("depends")) {
             if (d.isTextual()) m.depend(d.asText());
-            else if (!d.path("optional").asBoolean(false) && !d.has("any")) m.depend(d.path("id").asText(null));
+            else if (!d.path("optional").asBoolean(false) && !d.has("any")) {
+                m.depend(d.path("id").asText(null));
+                if (d.has("versions")) m.needs(d.path("id").asText(null), fabricMin(d.path("versions")));
+            }
         }
         return m;
     }
@@ -416,7 +426,22 @@ public final class ModInfo {
     private void needs(String id, String min) {
         if (id == null || min == null) return;
         id = id.trim().toLowerCase(Locale.ROOT);
+        String loader = LOADER_IDS.get(id);
+        if (loader != null) {
+            String was = loaderMin.get(loader);
+            if (was == null || ModVersionFix.compare(min, was) > 0) loaderMin.put(loader, min);
+        }
         if (!id.isEmpty() && !SYSTEM.contains(id)) minVersions.put(id, min);
+    }
+
+    /** id залежності -> завантажувач, як його звуть {@link LoaderVersion} (fabric, quilt, forge, neoforge). */
+    private static final Map<String, String> LOADER_IDS = new java.util.HashMap<String, String>();
+    static {
+        LOADER_IDS.put("fabricloader", "fabric");
+        LOADER_IDS.put("fabric-loader", "fabric");
+        LOADER_IDS.put("quilt_loader", "quilt");
+        LOADER_IDS.put("forge", "forge");
+        LOADER_IDS.put("neoforge", "neoforge");
     }
 
     /** Нижня межа діапазону Maven: «[1.3.4,)» -> 1.3.4, «(1.2,2)» -> 1.2; «1.0» (м'яка вимога) і «*» -> null. */

@@ -224,6 +224,19 @@ public final class MrpackPacks implements ProgressObservable {
             default:
                 m = VanillaVersions.buildManifest(instance);
         }
+        // 25.11.2026 (тікет #123): Forge міг поставити іншу версію, ніж у модпаку (тієї для цієї гри не існує): у
+        // mrpack.json записати ту, що справді стоїть, щоб перевірки модів (LoaderVersion) і вікно вильоту бачили її
+        String prefix = "+" + loader + "-";
+        int at = m.getVersion() == null ? -1 : m.getVersion().indexOf(prefix);
+        if (lv != null && at > 0 && ("forge".equals(loader) || "neoforge".equals(loader))) {
+            String actual = m.getVersion().substring(at + prefix.length());
+            if (!actual.equals(lv) && i instanceof com.fasterxml.jackson.databind.node.ObjectNode) {
+                ((com.fasterxml.jackson.databind.node.ObjectNode) i).put("loaderVersion", actual);
+                MAPPER.writerWithDefaultPrettyPrinter().writeValue(new File(instance.getDir(), INFO), i);
+                forgetInfo(instance.getDir());
+                log.info(instance.getName() + ": " + loader + " " + lv + " -> " + actual + " in " + INFO);
+            }
+        }
         m.setName(instance.getName());
         m.setTitle(titleOf(instance));
         instance.setTitle(titleOf(instance));

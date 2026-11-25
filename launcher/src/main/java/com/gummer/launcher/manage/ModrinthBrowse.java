@@ -537,7 +537,7 @@ public final class ModrinthBrowse {
         }
         JsonNode versions = getJson(url.toString());
         // API віддає від найновішої: перша стабільна (release), а якщо таких немає, найновіша бета
-        JsonNode file = null, fallback = null, chosen = null, fallbackVersion = null;
+        List<JsonNode[]> releases = new ArrayList<JsonNode[]>(), others = new ArrayList<JsonNode[]>();
         for (JsonNode v : versions) {
             JsonNode primary = null;
             for (JsonNode f : v.path("files")) {
@@ -545,48 +545,53 @@ public final class ModrinthBrowse {
             }
             if (primary == null && v.path("files").size() > 0) primary = v.path("files").get(0);
             if (primary == null) continue;
-            if ("release".equals(v.path("version_type").asText("release"))) {
-                file = primary;
-                chosen = v;
-                break;
-            }
-            if (fallback == null) {
-                fallback = primary;
-                fallbackVersion = v;
-            }
+            ("release".equals(v.path("version_type").asText("release")) ? releases : others).add(new JsonNode[]{v, primary});
         }
-        if (file == null) {
-            file = fallback;
-            chosen = fallbackVersion;
-        }
-        if (file == null) throw new IOException(NO_VERSION);
-
-        String fileName = file.path("filename").asText("");
-        String fileUrl = file.path("url").asText("");
-        String sha512 = file.path("hashes").path("sha512").asText(null);
-        URL u = new URL(fileUrl);
-        if (!"https".equals(u.getProtocol()) || !CDN_HOST.equalsIgnoreCase(u.getHost())) throw new IOException("Not a Modrinth file: " + u.getHost());
-        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\") || fileName.startsWith(".")
-                || !fileName.toLowerCase(Locale.ROOT).endsWith(kind.extension)) {
-            throw new IOException("Unexpected file name: " + fileName);
-        }
-        if (sha512 == null || !sha512.matches("[0-9a-fA-F]{128}")) throw new IOException("No sha512 for " + fileName);
-
+        List<JsonNode[]> list = releases.isEmpty() ? others : releases;
+        if (list.isEmpty()) throw new IOException(NO_VERSION);
         dir.mkdirs();
-        File target = new File(dir, fileName);
-        if (target.exists() || new File(dir, fileName + ".disabled").exists()) {
-            record(dir, hit.id, fileName);
-            return fileName;
-        }
-        File part = new File(dir, "." + fileName + ".part");
+        // 25.11.2026 (тікет #122): мод ставиться найновішою версією, яка йде під завантажувач збірки (вимога з самого
+        // jar, LoaderVersion): найновіший Create для Fabric 1.20.1 хоче Fabric Loader 0.17.2, Fabric API 0.92.12 хоче
+        // 0.16.10, і на старішому гра не запускається. Вимога з часом лише росте, тож якщо найновіша не підходить,
+        // двійковий пошук по списку: до MAX_LOADER_TRIES завантажень навіть на сотню версій
+        LoaderVersion have = kind == Kind.MOD ? LoaderVersion.ofModsDir(dir) : null;
+        String[] need = {null};
+        int best = -1;
+        File bestPart = null;
         try {
-            HttpRequest.get(u).execute().expectResponseCode(200).saveContent(part);
-            String actual = sha(part, "SHA-512");
-            if (!actual.equalsIgnoreCase(sha512)) throw new IOException("sha512 mismatch for " + fileName);
+            Object first = fetchFitting(kind, hit, list.get(0), dir, have, need);
+            if (first instanceof String) return (String) first;
+            if (first != null) {
+                best = 0;
+                bestPart = (File) first;
+            } else {
+                int lo = 1, hi = list.size() - 1, tries = 1;
+                while (lo <= hi && tries < MAX_LOADER_TRIES) {
+                    int mid = (lo + hi) >>> 1;
+                    tries++;
+                    Object got = fetchFitting(kind, hit, list.get(mid), dir, have, need);
+                    if (got instanceof String) return (String) got;
+                    if (got != null) {
+                        if (bestPart != null) bestPart.delete();
+                        best = mid;
+                        bestPart = (File) got;
+                        hi = mid - 1;
+                    } else {
+                        lo = mid + 1;
+                    }
+                }
+            }
+            if (bestPart == null) {
+                if (need[0] != null && have != null) throw new ModUpdates.LoaderTooOld(hit.title, have, need[0]);
+                throw new IOException(NO_VERSION);
+            }
+            JsonNode chosen = list.get(best)[0];
+            String fileName = list.get(best)[1].path("filename").asText("");
+            File target = new File(dir, fileName);
             if (kind == Kind.MOD) {
                 // Мод з таким id уже є під іншою назвою файлу (у копіях модпаків файли названі кодами: fap.jar це
                 // Fabric API): другий такий самий мод гра не запустить, тож лишаємо наявний
-                File same = providerOf(dir, ModInfo.idOf(part));
+                File same = providerOf(dir, ModInfo.idOf(bestPart));
                 if (same != null) {
                     String existing = same.getName().endsWith(InstanceMods.DISABLED)
                             ? same.getName().substring(0, same.getName().length() - InstanceMods.DISABLED.length()) : same.getName();
@@ -595,17 +600,60 @@ public final class ModrinthBrowse {
                     return existing;
                 }
             }
-            Files.move(part.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE);
+            Files.move(bestPart.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE);
+            record(dir, hit.id, fileName);
+            log.info("Installed " + kind.projectType + " " + hit.slug + " -> " + target
+                    + (best == 0 ? "" : " (" + chosen.path("version_number").asText("?") + ", the newest does not fit " + have + ")"));
+            if (installed != null) installed.add(hit.title);
+            // обов'язкові залежності мода (Fabric API, Cloth Config тощо) і несумісні
+            if (kind == Kind.MOD) dependencies(chosen, gameVersion, shaderLoaders, dir, installed, missing, conflicts, seen, depth);
+            return fileName;
         } finally {
-            part.delete();
+            if (bestPart != null) bestPart.delete();
         }
-        record(dir, hit.id, fileName);
-        log.info("Installed " + kind.projectType + " " + hit.slug + " -> " + target);
-        if (installed != null) installed.add(hit.title);
+    }
 
-        // обов'язкові залежності мода (Fabric API, Cloth Config тощо) і несумісні
-        if (kind == Kind.MOD && chosen != null) dependencies(chosen, gameVersion, shaderLoaders, dir, installed, missing, conflicts, seen, depth);
-        return fileName;
+    /** Скільки найбільше версій качаємо, шукаючи ту, що йде під завантажувач збірки (двійковий пошук). */
+    private static final int MAX_LOADER_TRIES = 8;
+
+    /**
+     * Скачати версію {@code c} ({версія, файл}) поруч як {@code .назва.part} і звірити sha512. Повертає: назву файлу
+     * (String), якщо такий файл уже лежить у теці (нічого не качається, як було завжди); скачаний файл (File), якщо
+     * він іде під завантажувач {@code have}; null, якщо ні (вимога дописується в {@code need[0]}, найменша з бачених).
+     */
+    private static Object fetchFitting(Kind kind, Hit hit, JsonNode[] c, File dir, LoaderVersion have, String[] need)
+            throws IOException, InterruptedException {
+        JsonNode file = c[1];
+        String fileName = file.path("filename").asText("");
+        String sha512 = file.path("hashes").path("sha512").asText(null);
+        URL u = new URL(file.path("url").asText(""));
+        if (!"https".equals(u.getProtocol()) || !CDN_HOST.equalsIgnoreCase(u.getHost())) throw new IOException("Not a Modrinth file: " + u.getHost());
+        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\") || fileName.startsWith(".")
+                || !fileName.toLowerCase(Locale.ROOT).endsWith(kind.extension)) {
+            throw new IOException("Unexpected file name: " + fileName);
+        }
+        if (sha512 == null || !sha512.matches("[0-9a-fA-F]{128}")) throw new IOException("No sha512 for " + fileName);
+        if (new File(dir, fileName).exists() || new File(dir, fileName + ".disabled").exists()) {
+            record(dir, hit.id, fileName);
+            return fileName;
+        }
+        File part = new File(dir, "." + fileName + ".part");
+        boolean keep = false;
+        try {
+            HttpRequest.get(u).execute().expectResponseCode(200).saveContent(part);
+            if (!sha(part, "SHA-512").equalsIgnoreCase(sha512)) throw new IOException("sha512 mismatch for " + fileName);
+            if (kind == Kind.MOD && have != null && !have.fits(ModInfo.of(part))) {
+                String n = have.needOf(ModInfo.of(part));
+                log.info("Modrinth " + hit.slug + " " + c[0].path("version_number").asText("?") + " needs " + have.title() + " " + n
+                        + ", the pack has " + have.version);
+                if (need[0] == null || ModVersionFix.compare(n, need[0]) < 0) need[0] = n;
+                return null;
+            }
+            keep = true;
+            return part;
+        } finally {
+            if (!keep) part.delete();
+        }
     }
 
     /**
@@ -657,6 +705,11 @@ public final class ModrinthBrowse {
             if (!"mod".equals(proj.path("project_type").asText("mod")) || here || depth >= 3) continue;
             try {
                 install(Kind.MOD, d, gameVersion, loaders, dir, installed, missing, conflicts, seen, depth + 1);
+            } catch (ModUpdates.LoaderTooOld e) {
+                // 25.11.2026 (тікет #122): жодна версія залежності не йде під завантажувач збірки; з CurseForge теж не
+                // беремо (там вимоги до завантажувача не звіряються), гравця попередить вікно
+                log.info("Modrinth dependency " + d.slug + " not installed: " + e.getMessage());
+                if (missing != null) missing.add(d.title);
             } catch (IOException e) {
                 // залежності під цю гру немає чи не скачалась: 24.11.2026 той самий мод з CurseForge, а якщо і там
                 // немає, мод уже поставлено, гравця попередить вікно

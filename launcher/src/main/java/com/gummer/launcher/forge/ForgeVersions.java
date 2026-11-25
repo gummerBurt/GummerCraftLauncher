@@ -250,7 +250,22 @@ public final class ForgeVersions {
         if (jv.isInt()) java = jv.asInt();
 
         File dir = new File(new File(launcher.getBaseDir(), "loaders"), kind.group + "-" + loader);
-        File installer = downloadInstaller(kind, loader, dir);
+        File installer;
+        try {
+            installer = downloadInstaller(kind, loader, dir);
+        } catch (IOException e) {
+            // 25.11.2026 (тікет #123, модпак MineColonies+ з Modrinth): модпак на Minecraft 1.20.1 вказує Forge
+            // «1.20-46.0.14», тобто збірку Forge для 1.20. Для 1.20.1 такої немає (maven відповідає 404), і установка
+            // зупинялась. Лише на 404 (не на збій мережі) і лише якщо для цієї гри є інша версія: рекомендована Forge
+            // для цієї версії гри. Заздалегідь за списком не підміняємо: кешований список буває старішим за новий Forge
+            String alt = String.valueOf(e.getMessage()).contains("got 404") ? recommended(launcher, kind, mc, versions(launcher, kind).get(mc)) : null;
+            if (alt == null || alt.equals(loader)) throw e;
+            log.warning(kind.title + " " + loader + " does not exist for Minecraft " + mc + ", using " + alt + " instead");
+            dir.delete(); // порожня тека неіснуючої версії
+            loader = alt;
+            dir = new File(new File(launcher.getBaseDir(), "loaders"), kind.group + "-" + loader);
+            installer = downloadInstaller(kind, loader, dir);
+        }
 
         Manifest manifest = new Manifest();
         try (JarFile jar = new JarFile(installer)) {

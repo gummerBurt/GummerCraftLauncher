@@ -87,7 +87,7 @@ public final class CrashDialog {
                     b.setText(label);
                     b.setEnabled(true);
                     Throwable t = ex.getCause() != null ? ex.getCause() : ex;
-                    JOptionPane.showMessageDialog(dialog, tr("crash.updateMod.failed", String.valueOf(t.getMessage())), tr("crash.windowTitle"), JOptionPane.WARNING_MESSAGE);
+                    JOptionPane.showMessageDialog(dialog, tr("crash.updateMod.failed", String.valueOf(t.getLocalizedMessage())), tr("crash.windowTitle"), JOptionPane.WARNING_MESSAGE);
                     return;
                 }
                 String culprit = d.modName != null ? d.modName : "?";
@@ -143,7 +143,7 @@ public final class CrashDialog {
                     b.setText(label);
                     b.setEnabled(true);
                     Throwable t = ex.getCause() != null ? ex.getCause() : ex;
-                    JOptionPane.showMessageDialog(dialog, tr("crash.updateMod.failed", String.valueOf(t.getMessage())), tr("crash.windowTitle"), JOptionPane.WARNING_MESSAGE);
+                    JOptionPane.showMessageDialog(dialog, tr("crash.updateMod.failed", String.valueOf(t.getLocalizedMessage())), tr("crash.windowTitle"), JOptionPane.WARNING_MESSAGE);
                     return;
                 }
                 if (v == null) {
@@ -228,6 +228,15 @@ public final class CrashDialog {
         return info != null && info.name != null ? info.name : m.name;
     }
 
+    /** 25.11.2026 (тікет #122): абзац «Перед цим запуском лаунчер сам оновив» під порадою, або порожньо. */
+    private static String autoFixHtml(java.util.List<com.gummer.launcher.manage.AutoFixLog.Fix> fixes) {
+        if (fixes.isEmpty()) return "";
+        java.util.List<String> what = new java.util.ArrayList<String>();
+        for (com.gummer.launcher.manage.AutoFixLog.Fix f : fixes) what.add(f.dep + " " + f.from + " → " + f.to);
+        return "<br><br><b>" + SwingHelper.htmlEscape(tr("crash.autoFix.title")) + "</b><br>"
+                + SwingHelper.htmlEscape(tr("crash.autoFix.text", String.join(", ", what)));
+    }
+
     /** 25.11.2026: абзац «Нещодавно додані моди» під порадою, або порожньо. */
     private static String recentHtml(CrashAnalyzer.Diagnosis d) {
         if (d.recentMods.isEmpty()) return "";
@@ -252,11 +261,20 @@ public final class CrashDialog {
         final boolean ownMods = (instance.isMrpack() || instance.isCopy() || instance.isBuiltIn()) && !instance.isVanilla()
                 && !com.gummer.launcher.manage.InstanceMods.packModsLocked(instance);
         final boolean modCause = MOD_KEYS.contains(d.key);
-        final String adviceKey = ownMods && OWN_ADVICE.contains(d.key) ? "crash." + d.key + ".adviceOwn" : "crash." + d.key + ".advice";
+        // 25.11.2026 (тікет #122): завантажувач збірки, який можна підняти кнопкою (своя збірка, той самий завантажувач)
+        final com.gummer.launcher.manage.LoaderVersion lv = d.action == CrashAnalyzer.Action.UPDATE_LOADER && ownMods
+                ? com.gummer.launcher.manage.LoaderVersion.of(instance) : null;
+        final boolean loaderButton = lv != null && lv.loader.equals(d.loader) && !lv.satisfies(d.loaderNeed);
+        // 25.11.2026 (тікет #122): що лаунчер сам оновив перед цим запуском, а гра після того ще не закрилась без вильоту
+        final java.util.List<com.gummer.launcher.manage.AutoFixLog.Fix> autoFixes = ownMods
+                ? com.gummer.launcher.manage.AutoFixLog.pending(instance) : java.util.Collections.<com.gummer.launcher.manage.AutoFixLog.Fix>emptyList();
+        final String adviceKey = "loaderTooOld".equals(d.key) && !loaderButton ? "crash.loaderTooOld.adviceManual"
+                : ownMods && OWN_ADVICE.contains(d.key) ? "crash." + d.key + ".adviceOwn" : "crash." + d.key + ".advice";
         String html = "<html><div style=\"width: 440px\">"
                 + "<span style=\"font-size: 15px\"><b>" + SwingHelper.htmlEscape(tr("crash.headline", instance.getTitle())) + "</b></span><br><br>"
                 + "<b>" + SwingHelper.htmlEscape(tr("crash." + d.key + ".title", detail)) + "</b><br>"
                 + SwingHelper.htmlEscape(tr(adviceKey, detail)).replace("\n", "<br>")
+                + autoFixHtml(autoFixes)
                 + recentHtml(d)
                 + ("modClassMissing".equals(d.key) && d.depLocked
                         ? "<br><br>" + SwingHelper.htmlEscape(tr("crash.classFix.locked", d.depId, d.modName != null ? d.modName : "?")) : "")
@@ -352,8 +370,80 @@ public final class CrashDialog {
                     primary.addActionListener(e -> SwingHelper.openURL(url, dialog));
                 }
                 break;
+            case EARLY_WINDOW:
+                // 25.11.2026 (тікет #121): ранній екран Forge вимикається в config/fml.toml, драйвер лишається запасною порадою
+                if (d.configFile != null) {
+                    primary = new JButton(tr("crash.action.earlyWindow"));
+                    primary.setToolTipText(tr("crash.action.earlyWindowTip"));
+                    primary.addActionListener(e -> {
+                        try {
+                            CrashAnalyzer.disableEarlyWindow(d.configFile);
+                            dialog.dispose();
+                            JOptionPane.showMessageDialog(owner, tr("crash.earlyWindowDone"), tr("crash.windowTitle"), JOptionPane.INFORMATION_MESSAGE);
+                        } catch (java.io.IOException ex) {
+                            SwingHelper.showErrorDialog(dialog, tr("crash.earlyWindowFailed"), tr("errorTitle"), ex);
+                        }
+                    });
+                    final String drv = driversHelpUrl;
+                    if (drv != null && !drv.isEmpty()) {
+                        JButton b = new JButton(tr("crash.action.drivers"));
+                        b.addActionListener(e -> SwingHelper.openURL(drv, dialog));
+                        buttons.add(b);
+                    }
+                }
+                break;
+            case WINDOWS_PROTECTION:
+                // 25.11.2026 (тікети #111, #113): сторінка «Захист від програм-вимагачів» у «Безпеці Windows» (Windows 10+);
+                // не відкрилась: лише текст поради
+                if (com.skcraft.launcher.util.Environment.detectPlatform() == com.skcraft.launcher.util.Platform.WINDOWS) {
+                    primary = new JButton(tr("crash.action.windowsProtection"));
+                    primary.addActionListener(e -> {
+                        try {
+                            java.awt.Desktop.getDesktop().browse(new java.net.URI("windowsdefender://ransomwareprotection"));
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(dialog, tr("crash.windowsProtectionManual"), tr("crash.windowTitle"),
+                                    JOptionPane.INFORMATION_MESSAGE);
+                        }
+                    });
+                }
+                break;
+            case UPDATE_LOADER:
+                // 25.11.2026 (тікет #122): найменша стабільна версія, не нижча за ту, яку назвав сам завантажувач
+                if (loaderButton) {
+                    final String to = lv.pick(launcher, d.loaderNeed);
+                    primary = new JButton(tr("crash.action.updateLoader", lv.title(), to));
+                    primary.setToolTipText(tr("crash.action.updateLoaderTip", lv.title(), lv.version));
+                    primary.addActionListener(e -> {
+                        try {
+                            com.gummer.launcher.manage.LoaderVersion.raise(instance, to);
+                            dialog.dispose();
+                            JOptionPane.showMessageDialog(owner, tr("crash.loaderUpdated", lv.title(), to), tr("crash.windowTitle"), JOptionPane.INFORMATION_MESSAGE);
+                        } catch (java.io.IOException ex) {
+                            SwingHelper.showErrorDialog(dialog, tr("crash.loaderUpdateFailed", lv.title()), tr("errorTitle"), ex);
+                        }
+                    });
+                }
+                break;
             default:
                 break;
+        }
+        // 25.11.2026 (тікет #122): гра впала після того, як лаунчер сам оновив моди перед запуском: повернути як було.
+        // Головна дія лише якщо іншої немає; відкочене лаунчер більше сам не оновлює (AutoFixLog)
+        if (!autoFixes.isEmpty()) {
+            JButton undo = new JButton(tr("crash.action.undoAutoFix"));
+            undo.setToolTipText(tr("crash.action.undoAutoFixTip"));
+            undo.addActionListener(e -> {
+                try {
+                    java.util.List<String> back = com.gummer.launcher.manage.AutoFixLog.rollbackAll(instance);
+                    dialog.dispose();
+                    JOptionPane.showMessageDialog(owner, tr("crash.autoFixUndone", String.join(", ", back)), tr("crash.windowTitle"),
+                            JOptionPane.INFORMATION_MESSAGE);
+                } catch (java.io.IOException ex) {
+                    SwingHelper.showErrorDialog(dialog, tr("crash.autoFixUndoFailed"), tr("errorTitle"), ex);
+                }
+            });
+            if (primary == null) primary = undo;
+            else buttons.add(undo);
         }
         // 18.11.2026 (власник: «а можна дати можливість докачати цей мод?», «Оновити цей мод ... а можна додати?»)
         if (ownMods && "missingDep".equals(d.key) && d.depId != null) {

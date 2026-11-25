@@ -113,7 +113,7 @@ public final class ModUpdates {
                 all = false;
                 break;
             }
-            if (hit[1] instanceof Update) {
+            if (hit[1] instanceof Update && !tooNew(e.getKey(), (Update) hit[1])) {
                 Update u = (Update) hit[1];
                 out.put(e.getValue(), u.file.equals(e.getValue()) ? u : rebind(u, e.getValue()));
             }
@@ -142,6 +142,7 @@ public final class ModUpdates {
                 JsonNode primary = primaryFile(next);
                 if (primary == null) continue;
                 if (e.getKey().equalsIgnoreCase(primary.path("hashes").path("sha1").asText(""))) continue;
+                if (TOO_NEW.contains(e.getKey() + "|" + next.path("id").asText(""))) continue;
                 found.put(e.getKey(), new Update(e.getValue(), next.path("project_id").asText(null),
                         next.path("version_number").asText("?"), next, primary,
                         now.path("version_number").asText("?"), now.path("date_published").asText("")));
@@ -371,35 +372,91 @@ public final class ModUpdates {
     }
 
     /**
+     * 25.11.2026 (тікет #122): нова версія мода вимагає новіший завантажувач, ніж стоїть у збірці, і жодна з новіших
+     * за поставлену під нього не йде. Мод лишається як був.
+     */
+    public static final class LoaderTooOld extends IOException {
+        /** Завантажувач (fabric, quilt, forge, neoforge), що стоїть, і найменша версія, якої досить новішій версії мода. */
+        public final String loader;
+        public final String have;
+        public final String need;
+        public final String mod;
+
+        LoaderTooOld(String mod, LoaderVersion have, String need) {
+            super(mod + " needs " + have.title() + " " + need + " or later, the instance has " + have.version);
+            this.mod = mod;
+            this.loader = have.loader;
+            this.have = have.version;
+            this.need = need;
+        }
+
+        /** Для гравця (вікна «Мої моди», вильоту): «Новіша версія Create вимагає Fabric Loader 0.17.2 ...». */
+        @Override
+        public String getLocalizedMessage() {
+            return com.skcraft.launcher.util.SharedLocale.tr("manage.mods.loaderTooOld", mod, LoaderVersion.title(loader), need, have);
+        }
+    }
+
+    /**
+     * 25.11.2026: «sha1 поставленого файлу|id найновішої версії», для яких жодна новіша версія не йде під завантажувач
+     * збірки (до перезапуску лаунчера): таке оновлення більше не пропонується, інакше бейдж і «Оновити все» висіли б
+     * вічно, а кожне натискання качало б ті самі файли.
+     */
+    private static final java.util.Set<String> TOO_NEW = java.util.Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+
+    private static boolean tooNew(String sha1, Update u) {
+        return u.version != null && TOO_NEW.contains(sha1 + "|" + u.version.path("id").asText(""));
+    }
+
+    /** Скільки версій мода найбільше качаємо, шукаючи ту, що йде під завантажувач збірки. */
+    private static final int MAX_TRIES = 6;
+
+    /**
      * Поставити нову версію замість старого файлу: качається поруч, звіряється sha512, потім старий файл прибирається.
      * Вимкнений мод лишається вимкненим. Обов'язкові залежності нової версії ставляться, як при встановленні з
      * пошуку ({@code missing}, {@code conflicts} як у {@link ModrinthBrowse#install}). Повертає новий файл.
+     * <p>
+     * 25.11.2026 (тікет #122): найновіша версія може вимагати новіший завантажувач, ніж стоїть у збірці (Create для
+     * Fabric 6.0.8 хоче Fabric Loader 0.17.2, а збірка на 0.16.0): тоді гра не запускається взагалі. Тож вимога з
+     * самого jar звіряється з {@link LoaderVersion} збірки, і якщо не підходить, береться новіша за поставлену, але
+     * старіша версія, що підходить (до {@link #MAX_TRIES} завантажень). Жодна не підходить: {@link LoaderTooOld},
+     * мод лишається як був.
      */
     public static File apply(Update u, String game, String[] loaders, List<String> missing, List<String> conflicts)
             throws IOException, InterruptedException {
+        return apply(u, game, loaders, missing, conflicts, null);
+    }
+
+    /**
+     * Те саме, але не найновіша, а найменша версія, новіша за поставлену, у jar якої версія не нижча за {@code atLeast}
+     * (для {@link ModVersionFix}: моду потрібна версія залежності від 1.3.4, тож ставимо першу таку, а не найновішу,
+     * яка може вимагати ще щось). {@code atLeast} null: найновіша, як {@link #apply(Update, String, String[], List, List)}.
+     */
+    public static File apply(Update u, String game, String[] loaders, List<String> missing, List<String> conflicts, String atLeast)
+            throws IOException, InterruptedException {
+        File dir = u.file.getParentFile();
+        LoaderVersion have = LoaderVersion.ofModsDir(dir);
         if (u.cf != null) {
             com.skcraft.launcher.Launcher launcher = com.gummer.launcher.curseforge.CurseBrowse.shared();
             if (launcher == null) throw new IOException("CurseForge is not ready");
-            return com.gummer.launcher.curseforge.CurseBrowse.replace(launcher, u.file, u.cf, u.currentNumber, game, loaders, missing, conflicts);
+            File nf = com.gummer.launcher.curseforge.CurseBrowse.replace(launcher, u.file, u.cf, u.currentNumber, game, loaders, missing, conflicts);
+            // CurseForge: інших версій тут не перебираємо; не йде під завантажувач збірки, повертаємо як було
+            ModInfo info = ModInfo.of(nf);
+            if (have != null && !have.fits(info)) {
+                ModRollback.Entry back = ModRollback.recentFor(nf);
+                if (back != null) {
+                    ModRollback.rollback(back);
+                    log.info("Mod update rolled back, needs a newer loader: " + nf.getName() + " (" + have.needOf(info) + " > " + have.version + ")");
+                    throw new LoaderTooOld(info.name != null ? info.name : nf.getName(), have, have.needOf(info));
+                }
+            }
+            return nf;
         }
-        File dir = u.file.getParentFile();
-        String fileName = u.primary.path("filename").asText("");
-        String sha512 = u.primary.path("hashes").path("sha512").asText(null);
-        URL url = new URL(u.primary.path("url").asText(""));
-        if (!"https".equals(url.getProtocol()) || !ModrinthBrowse.CDN_HOST.equalsIgnoreCase(url.getHost())) {
-            throw new IOException("Not a Modrinth file: " + url.getHost());
-        }
-        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\") || fileName.startsWith(".")
-                || !fileName.toLowerCase(Locale.ROOT).endsWith(".jar")) {
-            throw new IOException("Unexpected file name: " + fileName);
-        }
-        if (sha512 == null || !sha512.matches("[0-9a-fA-F]{128}")) throw new IOException("No sha512 for " + fileName);
+        Picked p = pick(u, game, loaders, dir, have, atLeast);
+        String fileName = p.primary.path("filename").asText("");
         boolean disabled = u.file.getName().toLowerCase(Locale.ROOT).endsWith(InstanceMods.DISABLED);
         File target = new File(dir, disabled ? fileName + InstanceMods.DISABLED : fileName);
-        File part = new File(dir, "." + fileName + ".part");
         try {
-            HttpRequest.get(url).execute().expectResponseCode(200).saveContent(part);
-            if (!ModrinthBrowse.sha(part, "SHA-512").equalsIgnoreCase(sha512)) throw new IOException("sha512 mismatch for " + fileName);
             // 19.11.2026 (власник: «Відкат моду після оновлення ... давай»): стара версія не видаляється, а йде в
             // .gummer/mod-prev (ModRollback): після вильоту через цей мод помічник запропонує повернути її
             if (!target.equals(u.file) && target.exists()) {
@@ -408,19 +465,134 @@ public final class ModUpdates {
             } else if (target.equals(u.file)) {
                 // та сама назва файлу: стару спершу в сховище, інакше нова її перезапише
                 ModRollback.keep(u.file, target.getName(), u.currentNumber, u.projectId);
-                Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                Files.move(p.part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
             } else {
-                Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                Files.move(p.part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 if (!ModRollback.keep(u.file, target.getName(), u.currentNumber, u.projectId)) Files.deleteIfExists(u.file.toPath());
             }
         } finally {
-            part.delete();
+            p.part.delete();
         }
         if (u.projectId != null) ModrinthBrowse.record(dir, u.projectId, fileName);
-        log.info("Mod updated: " + u.file.getName() + " -> " + target.getName());
-        ModrinthBrowse.dependencies(u.version, game, loaders, dir, null, missing, conflicts,
+        log.info("Mod updated: " + u.file.getName() + " -> " + target.getName()
+                + (p.version == u.version ? "" : " (" + p.version.path("version_number").asText("?") + ", not the newest " + u.versionNumber + ")"));
+        ModrinthBrowse.dependencies(p.version, game, loaders, dir, null, missing, conflicts,
                 new java.util.HashSet<String>(java.util.Collections.singleton(String.valueOf(u.projectId))), 0);
         return target;
+    }
+
+    /** Вибрана версія: дані з Modrinth і вже скачаний і звірений файл ({@code part}, поруч з модом). */
+    private static final class Picked {
+        final JsonNode version;
+        final JsonNode primary;
+        final File part;
+
+        Picked(JsonNode version, JsonNode primary, File part) {
+            this.version = version;
+            this.primary = primary;
+            this.part = part;
+        }
+    }
+
+    /**
+     * Яку версію ставити. Звичайне оновлення: найновіша, а якщо вона не йде під завантажувач збірки, наступні від
+     * новішої вниз (лише новіші за поставлену). {@code atLeast}: від найстарішої з новіших за поставлену вгору, перша,
+     * у jar якої версія не нижча за {@code atLeast} і яка йде під завантажувач. Кожна перевіряється по самому jar.
+     */
+    private static Picked pick(Update u, String game, String[] loaders, File dir, LoaderVersion have, String atLeast)
+            throws IOException, InterruptedException {
+        long since = dateOf(u.currentDate);
+        boolean canList = since > 0 && u.projectId != null && u.projectId.matches("[A-Za-z0-9]+");
+        List<JsonNode> cands = new ArrayList<JsonNode>();
+        boolean listed = false;
+        if (atLeast != null && canList) {
+            cands.addAll(newerThan(u.projectId, game, loaders, since));
+            java.util.Collections.reverse(cands); // від найстарішої
+            listed = true;
+        }
+        if (cands.isEmpty()) cands.add(u.version);
+        String loaderNeed = null;
+        String found = null;
+        int tries = 0;
+        java.util.Set<String> seen = new java.util.HashSet<String>();
+        for (int i = 0; i < cands.size() && tries < MAX_TRIES; i++) {
+            JsonNode v = cands.get(i);
+            if (!seen.add(v.path("id").asText(""))) continue;
+            String number = v.path("version_number").asText("");
+            JsonNode primary = primaryFile(v);
+            // номер версії на Modrinth не завжди той, що в jar: без завантаження пропускаємо лише явно старі
+            boolean skip = primary == null || atLeast != null && !number.isEmpty() && Character.isDigit(number.charAt(0))
+                    && ModVersionFix.compare(ModVersionFix.strip(number, game), ModVersionFix.strip(atLeast, game)) < 0;
+            if (!skip) {
+                tries++;
+                File part = fetch(primary, dir);
+                ModInfo info = ModInfo.of(part);
+                boolean loaderOk = have == null || have.fits(info);
+                boolean versionOk = atLeast == null || info.version == null || info.version.contains("${")
+                        || ModVersionFix.compare(ModVersionFix.strip(info.version, game), ModVersionFix.strip(atLeast, game)) >= 0;
+                if (loaderOk && versionOk) return new Picked(v, primary, part);
+                part.delete();
+                if (!loaderOk) {
+                    String need = have.needOf(info);
+                    log.info(u.file.getName() + ": " + number + " needs " + have.title() + " " + need + ", the instance has " + have.version);
+                    if (loaderNeed == null || ModVersionFix.compare(need, loaderNeed) < 0) loaderNeed = need;
+                } else {
+                    found = info.version;
+                }
+            }
+            if (!listed && canList && i == cands.size() - 1) {
+                // найновіша не підійшла: далі версії від новішої вниз, лише новіші за поставлену
+                cands.addAll(newerThan(u.projectId, game, loaders, since));
+                listed = true;
+            }
+        }
+        if (loaderNeed != null && have != null) {
+            try {
+                TOO_NEW.add(ModSides.sha1Cached(u.file) + "|" + u.version.path("id").asText(""));
+            } catch (IOException ignored) {
+                // лише не запам'ятається
+            }
+            String name = ModInfo.of(u.file).name;
+            throw new LoaderTooOld(name != null ? name : u.file.getName(), have, loaderNeed);
+        }
+        throw new IOException("No fitting version of " + u.file.getName() + (atLeast != null ? " >= " + atLeast : "")
+                + (found != null ? " (found " + found + ")" : ""));
+    }
+
+    /** Версії мода під цю гру і завантажувач, опубліковані пізніше за {@code since}, від найновішої. */
+    private static List<JsonNode> newerThan(String projectId, String game, String[] loaders, long since) throws IOException, InterruptedException {
+        StringBuilder l = new StringBuilder("[");
+        for (int i = 0; i < loaders.length; i++) l.append(i > 0 ? "," : "").append('"').append(loaders[i]).append('"');
+        JsonNode versions = ModrinthBrowse.getJson(API + "project/" + projectId + "/version?game_versions="
+                + ModrinthBrowse.enc("[\"" + game + "\"]") + "&loaders=" + ModrinthBrowse.enc(l.append(']').toString()));
+        List<JsonNode> out = new ArrayList<JsonNode>();
+        for (JsonNode v : versions) if (dateOf(v.path("date_published").asText("")) > since) out.add(v);
+        return out;
+    }
+
+    /** Скачати файл версії поруч з модами як {@code .назва.part} і звірити sha512 (лише cdn.modrinth.com). */
+    private static File fetch(JsonNode primary, File dir) throws IOException, InterruptedException {
+        String fileName = primary.path("filename").asText("");
+        String sha512 = primary.path("hashes").path("sha512").asText(null);
+        URL url = new URL(primary.path("url").asText(""));
+        if (!"https".equals(url.getProtocol()) || !ModrinthBrowse.CDN_HOST.equalsIgnoreCase(url.getHost())) {
+            throw new IOException("Not a Modrinth file: " + url.getHost());
+        }
+        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\") || fileName.startsWith(".")
+                || !fileName.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+            throw new IOException("Unexpected file name: " + fileName);
+        }
+        if (sha512 == null || !sha512.matches("[0-9a-fA-F]{128}")) throw new IOException("No sha512 for " + fileName);
+        File part = new File(dir, "." + fileName + ".part");
+        boolean ok = false;
+        try {
+            HttpRequest.get(url).execute().expectResponseCode(200).saveContent(part);
+            if (!ModrinthBrowse.sha(part, "SHA-512").equalsIgnoreCase(sha512)) throw new IOException("sha512 mismatch for " + fileName);
+            ok = true;
+            return part;
+        } finally {
+            if (!ok) part.delete();
+        }
     }
 
     private static Update rebind(Update u, File f) {

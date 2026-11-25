@@ -36,6 +36,15 @@ public final class CrashAnalyzer {
         JVM_ARG,
         /** 20.11.2026: перейти на безпечну теку даних ({@link com.gummer.launcher.util.DataDirCheck#offerMove}). */
         MOVE_DATA_DIR,
+        /** 25.11.2026: вимкнути ранній екран завантаження Forge ({@code earlyWindowControl} у {@link Diagnosis#configFile}). */
+        EARLY_WINDOW,
+        /** 25.11.2026: відкрити «Захист від програм-вимагачів» у «Безпеці Windows» (Windows не дає писати в теку гри). */
+        WINDOWS_PROTECTION,
+        /**
+         * 25.11.2026 (тікет #122): моди вимагають новіший завантажувач, ніж стоїть у збірці: підняти його до
+         * {@link Diagnosis#loaderNeed} ({@link com.gummer.launcher.manage.LoaderVersion#raise}).
+         */
+        UPDATE_LOADER,
         /** Без особливої дії: лише підтримка. */
         NONE
     }
@@ -67,6 +76,9 @@ public final class CrashAnalyzer {
          * міняє (оновлення модпака повернуло б стару): лише порада, винний мод вимкнути.
          */
         public boolean depLocked;
+        /** 25.11.2026: loaderTooOld: завантажувач (fabric, quilt, forge, neoforge) і версія, якої досить усім модам. */
+        public String loader;
+        public String loaderNeed;
 
         Diagnosis(String key, Action action, String detail, File source) {
             this(key, action, detail, source, null);
@@ -87,9 +99,21 @@ public final class CrashAnalyzer {
     }
 
     private static final int TAIL = 512 * 1024;
-    /** Драйвери відеокарт AMD, NVIDIA, Intel у стеку вильоту JVM. */
+    /**
+     * Драйвери відеокарт AMD, NVIDIA, Intel у стеку вильоту JVM: лише як кадр стеку ({@code [atio6axx.dll+0x192b60]}).
+     * 25.11.2026 (тікет #113): без «+0x» шаблон ловив звичайний рядок Minecraft 1.21 «Found graphics adapter: ...
+     * openglIcdFilePath='...\nvoglv64.dll'», який є в кожному лозі, і будь-який виліт на новій версії ставав «драйвером».
+     */
     private static final Pattern DRIVER_DLL = Pattern.compile(
-            "(atio6axx|atioglxx|nvoglv64|nvoglv32|ig[0-9a-z]+icd(64|32)|igxelpicd64)\\.dll", Pattern.CASE_INSENSITIVE);
+            "(atio6axx|atioglxx|nvoglv64|nvoglv32|ig[0-9a-z]+icd(64|32)|igxelpicd64)\\.dll\\+0x", Pattern.CASE_INSENSITIVE);
+    /**
+     * 25.11.2026 (тікети #111, #113): Windows не дає грі писати у свою теку («Контрольований доступ до папок» чи
+     * антивірус). Шлях до кінця рядка або до « (Access is denied)», у ньому бувають пробіли.
+     */
+    private static final Pattern ACCESS_DENIED = Pattern.compile(
+            "AccessDeniedException: ([A-Za-z]:\\\\[^\\r\\n]+?|/[^\\r\\n]+?)\\s*$"
+                    + "|FileNotFoundException: ([^\\r\\n]+?) \\((?:Access is denied|Відмовлено в доступі|Отказано в доступе)\\)",
+            Pattern.MULTILINE);
 
     private CrashAnalyzer() {
     }
@@ -118,6 +142,11 @@ public final class CrashAnalyzer {
         Diagnosis path = oldGamePath(instance, t, source);
         if (path != null) return path;
         Diagnosis d = match(t, source);
+        boolean accessViolation = exitCode == -1073741819 || exitCode == -1073740791;
+        if ((d != null && "driver".equals(d.key)) || (d == null && accessViolation)) {
+            Diagnosis early = earlyWindow(instance, t, source);
+            if (early != null) return early;
+        }
         if (d != null && d.action == Action.RESET_CONFIG) return withConfig(instance, d);
         if (d != null && "modClassMissing".equals(d.key)) return withRecent(instance, withClassOwner(instance, d));
         if (d != null) return withRecent(instance, withMod(instance, d));
@@ -127,10 +156,102 @@ public final class CrashAnalyzer {
         path = badLettersPath(instance, source);
         if (path != null) return path;
         // відомі коди виходу Windows: 0xC0000005 (-1073741819) доступ до пам'яті, найчастіше драйвер відеокарти
-        if (exitCode == -1073741819 || exitCode == -1073740791) {
+        if (accessViolation) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
         }
         return withRecent(instance, new Diagnosis("unknown", Action.NONE, null, source));
+    }
+
+    /** Fabric сам називає потрібну версію: «Replace mod 'Fabric Loader' (fabricloader) 0.16.0 with version 0.17.2 or later.» */
+    private static final Pattern FABRIC_REPLACE = Pattern.compile(
+            "Replace mod '(?:Fabric Loader|Quilt Loader)' \\((fabricloader|quilt_loader)\\) \\S+ with version ([0-9][0-9A-Za-z.+_-]*?)\\.? or later");
+    /** «requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader)»: кожен мод окремо, береться найбільша. */
+    private static final Pattern FABRIC_REQUIRES = Pattern.compile(
+            "requires version ([0-9][0-9A-Za-z.+_-]*) or later of mod '(?:Fabric Loader|Quilt Loader)' \\((fabricloader|quilt_loader)\\)");
+    /** Forge 1.17+ і NeoForge: «Mod ID: 'forge', Requested by: 'create', Expected range: '[47.2.0,)', Actual version: '47.1.0'». */
+    private static final Pattern FORGE_RANGE = Pattern.compile(
+            "Mod ID: '(forge|neoforge)', Requested by: '[A-Za-z0-9_\\-]+', Expected range: '[\\[(]([0-9][^,'\\]]*)");
+    /** Forge 1.16: «Mod create requires forge 36.2.0 or above». */
+    private static final Pattern FORGE_OLD = Pattern.compile("Mod [A-Za-z0-9_\\-]+ (?:requires|only supports) (forge) (\\S+) or above");
+
+    /**
+     * 25.11.2026 (тікет #122, Create 6.0.8 на Fabric Loader 0.16.0): моди вимагають новіший завантажувач, ніж стоїть.
+     * Версія, якої досить усім: та, яку назвав сам Fabric, інакше найбільша з вимог модів.
+     */
+    static Diagnosis loaderTooOld(String t, File source) {
+        String loader = null, need = null;
+        Matcher m = FABRIC_REPLACE.matcher(t);
+        if (m.find()) {
+            loader = "quilt_loader".equals(m.group(1)) ? "quilt" : "fabric";
+            need = m.group(2);
+        } else {
+            for (Pattern pt : new Pattern[]{FABRIC_REQUIRES, FORGE_RANGE, FORGE_OLD}) {
+                m = pt.matcher(t);
+                while (m.find()) {
+                    boolean fabricLike = pt == FABRIC_REQUIRES;
+                    String l = fabricLike ? ("quilt_loader".equals(m.group(2)) ? "quilt" : "fabric") : m.group(1);
+                    String v = fabricLike ? m.group(1) : m.group(2);
+                    if (loader != null && !loader.equals(l)) continue;
+                    loader = l;
+                    if (need == null || com.gummer.launcher.manage.ModVersionFix.compare(v, need) > 0) need = v;
+                }
+                if (loader != null) break;
+            }
+        }
+        if (loader == null || need == null) return null;
+        need = need.trim();
+        Diagnosis d = new Diagnosis("loaderTooOld", Action.UPDATE_LOADER,
+                com.gummer.launcher.manage.LoaderVersion.title(loader) + " " + need + "+", source);
+        d.loader = loader;
+        d.loaderNeed = need;
+        return d;
+    }
+
+    /** Значення {@code earlyWindowControl} у fml.toml (рядок цілком, з відступами). */
+    private static final Pattern EARLY_WINDOW_LINE = Pattern.compile("(?m)^([ \\t]*)earlyWindowControl[ \\t]*=[ \\t]*([^\\s#]+)[^\\r\\n]*");
+
+    /**
+     * 25.11.2026 (тікет #121, moplop290, вбудована AMD Radeon, Forge 1.21.11): гра падає в драйвері ({@code atio6axx.dll})
+     * через 2 с після старту, останній рядок лога «EARLYDISPLAY: Trying GL version 4.6». Це ранній екран завантаження
+     * Forge і NeoForge (1.20.1+), він сам створює вікно з новим OpenGL; ванільне вікно, як у Fabric на тому ж ПК, працює.
+     * Лише коли гра впала саме там: є «Trying GL version», але ще немає «Backend library» (гра ще не створила свого
+     * вікна). Кнопка ставить {@code earlyWindowControl = false} у {@code config/fml.toml}; якщо там уже false, звичайна
+     * порада про драйвер.
+     */
+    private static Diagnosis earlyWindow(Instance instance, String t, File source) {
+        if (!t.contains("Trying GL version") || t.contains("Backend library")) return null;
+        File fml = new File(new File(instance.getContentDir(), "config"), "fml.toml");
+        if (fml.isFile()) {
+            try {
+                String cfg = new String(java.nio.file.Files.readAllBytes(fml.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                Matcher m = EARLY_WINDOW_LINE.matcher(cfg);
+                if (m.find() && "false".equalsIgnoreCase(m.group(2))) return null; // уже вимкнено, а гра все одно падає
+            } catch (java.io.IOException e) {
+                return null;
+            }
+        }
+        Diagnosis d = new Diagnosis("earlyWindow", Action.EARLY_WINDOW, null, source);
+        d.configFile = fml;
+        return d;
+    }
+
+    /**
+     * Вимкнути ранній екран: рядок {@code earlyWindowControl} стає {@code false}, решта файлу як була. Якщо рядка
+     * (чи самого файлу) немає, він дописується, а решту значень Forge доповнить сам.
+     */
+    public static void disableEarlyWindow(File fml) throws java.io.IOException {
+        String cfg = fml.isFile()
+                ? new String(java.nio.file.Files.readAllBytes(fml.toPath()), java.nio.charset.StandardCharsets.UTF_8) : "";
+        Matcher m = EARLY_WINDOW_LINE.matcher(cfg);
+        String nl = cfg.contains("\r\n") ? "\r\n" : "\n";
+        if (m.find()) {
+            cfg = cfg.substring(0, m.start()) + m.group(1) + "earlyWindowControl = false" + cfg.substring(m.end());
+        } else {
+            if (!cfg.isEmpty() && !cfg.endsWith("\n")) cfg += nl;
+            cfg += "earlyWindowControl = false" + nl;
+        }
+        fml.getParentFile().mkdirs();
+        java.nio.file.Files.write(fml.toPath(), cfg.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /** Причини, де винного мода не названо: до них підказка про нові моди ({@link RecentMods}). */
@@ -171,11 +292,15 @@ public final class CrashAnalyzer {
             for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
                 if (!m.enabled) continue;
                 try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(m.file)) {
+                    final String prefix = pkg.toString();
                     if (culprit == null && z.getEntry(entry) != null) {
                         culprit = m;
+                        // 25.11.2026, тікет #120: AmbientSounds 3.0.3 не знайшов свій же клас AmbientEnviroment$BiomeArea,
+                        // хоча він у тому ж jar. Це не «моди не підходять один одному»: другого мода немає, а «Докачати»
+                        // поставило б AmbientSounds вдруге. Клас бракує в тому ж моді: як раніше, пошкоджені файли.
+                        if (z.getEntry(missingEntry) != null || prefix.length() > 0 && entry.startsWith(prefix)) return corrupt;
                         continue;
                     }
-                    final String prefix = pkg.toString();
                     if (depJar == null && prefix.length() > 0 && z.stream().anyMatch(e -> e.getName().startsWith(prefix))) {
                         depJar = m.file;
                         depLocked = m.locked;
@@ -280,6 +405,10 @@ public final class CrashAnalyzer {
                 || DRIVER_DLL.matcher(t).find()) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
         }
+        // 25.11.2026 (тікет #122): моди вимагають новіший завантажувач. Вище «застарілої залежності»: Fabric пише це тими
+        // самими словами («requires version 0.17.2 or later of mod 'Fabric Loader'»), і порада оновити мод тут хибна
+        Diagnosis loader = loaderTooOld(t, source);
+        if (loader != null) return loader;
         // 17.11.2026: моду бракує іншого мода. Fabric: «Mod 'Sodium Extra' (sodium-extra) 0.5.4 requires any version of
         // sodium, which is missing!»; Forge і NeoForge: «Mod ID: 'architectury', Requested by: 'rei'»
         Matcher fabricMissing = Pattern.compile("Mod '([^'\\n]+)' \\([A-Za-z0-9_\\-]+\\)[^\\n]*? requires [^\\n]*?(?:of (?:mod )?)'?([^'\\n,]+?)'?(?: \\([A-Za-z0-9_\\-]+\\))?, which is missing").matcher(t);
@@ -314,6 +443,15 @@ public final class CrashAnalyzer {
         Matcher incompatible = Pattern.compile("(?:Incompatible mods? found!|ModResolutionException)[\\s\\S]{0,600}?(?:Mod '([^']+)'|mod ([A-Za-z0-9_\\-]+))").matcher(t);
         if (incompatible.find() || t.contains("Incompatible mods found!") || t.contains("ModResolutionException")) {
             return new Diagnosis("modConflict", Action.REINSTALL, firstGroupOrNull(incompatible), source);
+        }
+        // 25.11.2026 (тікети #111, #113, JINJI): «Контрольований доступ до папок» не дав модам записати конфіг, далі
+        // ланцюжок NoClassDefFoundError і гра не змогла навіть створити crash-reports. Стоїть вище причин у модах, бо ті
+        // вильоти лише наслідок, і нижче конфліктів модів, які Forge і Fabric визначають ще до будь-якого запису
+        Matcher denied = ACCESS_DENIED.matcher(t);
+        if (denied.find()) {
+            String path = firstGroup(denied).trim();
+            if (path.endsWith("'") || path.endsWith(",")) path = path.substring(0, path.length() - 1);
+            return new Diagnosis("accessDenied", Action.WINDOWS_PROTECTION, path, source);
         }
         Matcher mixin = Pattern.compile("Mixin apply(?: for mod ([A-Za-z0-9_\\-]+))? failed").matcher(strict);
         if (mixin.find()) {

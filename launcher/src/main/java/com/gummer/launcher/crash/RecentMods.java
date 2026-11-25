@@ -41,6 +41,8 @@ public final class RecentMods {
             File f = new File(instance.getContentDir(), FILE);
             f.getParentFile().mkdirs();
             Files.write(f.toPath(), Long.toString(startedAt).getBytes(StandardCharsets.UTF_8));
+            // 25.11.2026 (тікет #122): гра закрилась без вильоту, тож автовиправлення перед нею спрацювало
+            com.gummer.launcher.manage.AutoFixLog.markOk(instance);
         } catch (IOException | RuntimeException ignored) {
             // без запису: наступний виліт візьме запасні дні
         }

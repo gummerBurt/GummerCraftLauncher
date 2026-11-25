@@ -2138,8 +2138,17 @@ public class LauncherFrameFlat extends JFrame {
         launch();
     }
 
-    /** 25.11.2026: кнопка ▶ на «Робочому столі»: вибрати збірку і одразу запустити. */
+    /**
+     * 25.11.2026: кнопка ▶ на «Робочому столі»: одразу запуск цієї збірки, вибір акаунта поверх робочого столу
+     * (власник: «зелена ▶ має одразу показувати вибір акаунта ... без переходу на сторінку збірки»). Вибір у списку
+     * зліва не міняється, тож після гри знову робочий стіл. Не встановлена збірка: як раніше, через її сторінку.
+     */
     private void playFromDesktop(Instance instance) {
+        if (instance == null) return;
+        if (instance.isLocal() && instance.isInstalled() && !instancesModel.isFreshInstall(instance)) {
+            launch(instance);
+            return;
+        }
         openFromDesktop(instance);
         if (getSelectedInstance() == instance) launch();
     }
@@ -2189,8 +2198,12 @@ public class LauncherFrameFlat extends JFrame {
     }
 
     private void launch() {
+        launch(getSelectedInstance());
+    }
+
+    /** Запуск збірки; 25.11.2026: не обов'язково вибраної в списку (▶ на «Робочому столі»). */
+    private void launch(Instance instance) {
         boolean permitUpdate = updateCheck.isSelected();
-        Instance instance = getSelectedInstance();
         if (InstanceTableModel.isBrowser(instance)) return; // рядок Modrinth: сторінка модпаків, не збірка
         if (instance == null) return;
         // 20.11.2026 (власник: «Додати інсталяцію» це «меню суто для встановлення нових збірок»): ваніль і завантажувачі
@@ -2204,7 +2217,7 @@ public class LauncherFrameFlat extends JFrame {
 
         LaunchOptions options = new LaunchOptions.Builder()
                 .setInstance(instance)
-                .setListener(new LaunchListenerImpl(this))
+                .setListener(new LaunchListenerImpl(this, instance))
                 .setUpdatePolicy(permitUpdate ? UpdatePolicy.UPDATE_IF_SESSION_ONLINE : UpdatePolicy.NO_UPDATE)
                 .setWindow(this)
                 .build();
@@ -2216,10 +2229,10 @@ public class LauncherFrameFlat extends JFrame {
         private final Launcher launcher;
         private final Instance instance; //status callback
 
-        private LaunchListenerImpl(LauncherFrameFlat frame) {
+        private LaunchListenerImpl(LauncherFrameFlat frame, Instance instance) {
             this.frameRef = new WeakReference<LauncherFrameFlat>(frame);
             this.launcher = frame.launcher;
-            this.instance = frame.getSelectedInstance(); //status callback
+            this.instance = instance; //status callback
         }
 
         @Override

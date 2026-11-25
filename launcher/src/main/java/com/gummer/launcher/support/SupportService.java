@@ -46,6 +46,7 @@ public class SupportService {
     private static final int MAX_PER_HOUR = 3;
     /** Скільки останніх байтів кожного лога відправляти. */
     private static final int LOG_TAIL_BYTES = 1024 * 1024;
+    private static final int HS_ERR_HEAD_BYTES = 256 * 1024;
 
     private final Launcher launcher;
     private final SupportClient client;
@@ -341,6 +342,14 @@ public class SupportService {
             if (console.isFile() && System.currentTimeMillis() - console.lastModified() < 3L * 24 * HOUR_MS) {
                 addFile(files, console, "game-console.log");
             }
+            // 25.11.2026 (тікет #121): звіт JVM про нативний виліт (hs_err_pid*.log у теці гри). Головне в ньому на
+            // початку (бібліотека і зсув, «Problematic frame», стек), тож початок файлу, а не кінець. Токени ховає redact
+            File[] hsErrs = selected.getContentDir().listFiles((d, n) -> n.startsWith("hs_err_pid") && n.endsWith(".log"));
+            if (hsErrs != null && hsErrs.length > 0) {
+                File newest = hsErrs[0];
+                for (File f : hsErrs) if (f.lastModified() > newest.lastModified()) newest = f;
+                if (System.currentTimeMillis() - newest.lastModified() < 3L * 24 * HOUR_MS) addHead(files, newest, newest.getName());
+            }
             File[] crashes = new File(selected.getContentDir(), "crash-reports").listFiles((d, n) -> n.endsWith(".txt"));
             if (crashes != null && crashes.length > 0) {
                 File newest = crashes[0];
@@ -360,6 +369,17 @@ public class SupportService {
             int n = (int) Math.min(len, LOG_TAIL_BYTES);
             byte[] b = new byte[n];
             raf.seek(len - n);
+            raf.readFully(b);
+            files.add(entry(name, SupportLogBuffer.redact(new String(b, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8)));
+        } catch (IOException e) {
+            log.log(Level.INFO, "Support: could not read " + f, e);
+        }
+    }
+
+    /** Початок файлу, до {@link #HS_ERR_HEAD_BYTES} (hs_err: найважливіше вгорі, далі сотні КБ карти пам'яті). */
+    private static void addHead(List<Map.Entry<String, byte[]>> files, File f, String name) {
+        try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
+            byte[] b = new byte[(int) Math.min(raf.length(), HS_ERR_HEAD_BYTES)];
             raf.readFully(b);
             files.add(entry(name, SupportLogBuffer.redact(new String(b, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8)));
         } catch (IOException e) {
