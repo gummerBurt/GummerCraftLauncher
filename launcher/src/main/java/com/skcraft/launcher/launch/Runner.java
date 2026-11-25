@@ -174,6 +174,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
         addLegacyArgs();
 
         callLaunchModifier();
+        addOfflineAuthArgs();
 
         verifyJavaRuntime();
 
@@ -212,6 +213,35 @@ public class Runner implements Callable<Process>, ProgressObservable {
      */
     private void callLaunchModifier() {
         instance.modify(builder);
+    }
+
+    /**
+     * 25.11.2026: офлайн-акаунт на Minecraft 1.16.4-1.16.5 (authlib 2.1.x) без заглушки серверів Mojang.
+     * Гра питає api.minecraftservices.com про дозволи з несправжнім токеном, помилки не кидає і лишає чат вимкненим:
+     * при відкритті чату «Не вдається надіслати повідомлення» (збірка, імпортована зі SKlauncher, і Main 1.16).
+     * З адресою nope.invalid запит падає, гра пише «Failed to verify authentication» і бере офлайн-режим, де чат
+     * дозволено (так роблять наші модпаки StalDayZ). Не додається, якщо збірка чи гравець уже задали minecraft.api.*,
+     * для акаунта Microsoft і для інших версій authlib (1.17+ самі переходять в офлайн, у новіших заглушка зламала б
+     * перевірку підписів скінів).
+     */
+    private void addOfflineAuthArgs() {
+        if (session.isOnline()) return;
+        boolean oldAuthlib = false;
+        for (Library library : versionManifest.getLibraries()) {
+            if (library.getName() != null && library.getName().toString().startsWith("com.mojang:authlib:2.1.")) {
+                oldAuthlib = true;
+                break;
+            }
+        }
+        if (!oldAuthlib) return;
+        List<String> flags = builder.getFlags();
+        for (String flag : flags) {
+            if (flag != null && flag.startsWith("-Dminecraft.api.")) return;
+        }
+        for (String host : new String[] {"auth", "account", "session", "services"}) {
+            flags.add("-Dminecraft.api." + host + ".host=https://nope.invalid");
+        }
+        log.info("Offline account on authlib 2.1: Mojang hosts set to nope.invalid (otherwise chat is blocked)");
     }
 
     private void verifyJavaRuntime() {

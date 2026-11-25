@@ -79,9 +79,11 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.40.0
+## What's new in 1.40.1
 
-A big update: CurseForge integration.
+**Hotfix:** chat works again in Minecraft 1.16.4 and 1.16.5 builds with an offline account (imported builds, Modrinth and CurseForge modpacks, Main 1.16). Before, opening the chat showed "Unable to send messages".
+
+**1.40.0, a big update: CurseForge integration.**
 
 - **CurseForge page** on the left, under Modrinth in "One-click modpacks": CurseForge modpacks and mods, with search, loader, game version, category and sorting, just like Modrinth. "Install" puts the modpack in under its own name and icon; the "Mods" tab installs a mod into a fitting build with the mods it needs.
 - **CurseForge next to Modrinth in the "Build" window**: "Find mods", "Find resource packs", "Find shaders" and "Modpacks" switch between "Find on Modrinth" and "Find on CurseForge".
