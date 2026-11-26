@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "comment": "Набори модів лаунчера GummerCraft. Запасна копія в jar, свіжа на CDN (modSetsUrl). pick: варіанти по черзі, перший, у якому всі slug є під цю гру і завантажувач (Modrinth, інакше CurseForge); same: id модів у jar, з якими група вже є; exclusive: моди, що не стоять разом.",
+  "sets": [
+    {"id": "comfort", "groups": [
+      {"id": "recipes", "pick": [["jei"], ["rei"]], "same": ["jei", "roughlyenoughitems", "emi", "nei", "notenoughitems"]},
+      {"id": "look", "pick": [["jade"], ["wthit"]], "same": ["jade", "wthit", "waila", "hwyla", "theoneprobe"]},
+      {"id": "food", "pick": [["appleskin"]], "same": ["appleskin"]},
+      {"id": "mouse", "pick": [["mouse-tweaks"]], "same": ["mousetweaks"]},
+      {"id": "sort", "pick": [["inventory-profiles-next"]], "same": ["inventoryprofilesnext", "inventorytweaks", "invtweaks", "inventorysorter"]},
+      {"id": "keys", "pick": [["controlling"]], "same": ["controlling"]}
+    ]},
+    {"id": "map", "groups": [
+      {"id": "map", "pick": [["xaeros-minimap", "xaeros-world-map"], ["journeymap"]], "same": ["xaerominimap", "xaerominimapfair", "xaeroworldmap", "journeymap", "voxelmap"]}
+    ]},
+    {"id": "shaders", "groups": [
+      {"id": "shaderMod", "pick": [["iris", "sodium"], ["oculus", "embeddium"], ["oculus", "rubidium"]], "same": ["iris", "oculus", "optifine", "optifabric"]}
+    ],
+      "packs": {"LOW": ["makeup-ultra-fast-shaders"], "BALANCED": ["complementary-reimagined"], "HIGH": ["complementary-unbound"], "fallback": ["bsl-shaders"]}},
+    {"id": "ambience", "groups": [
+      {"id": "ambient", "pick": [["ambientsounds"]], "same": ["ambientsounds"]},
+      {"id": "physics", "pick": [["sound-physics-remastered"]], "same": ["sound_physics_remastered", "soundphysics"]},
+      {"id": "steps", "pick": [["presence-footsteps"]], "same": ["presencefootsteps"]}
+    ]}
+  ],
+  "exclusive": [["sodium", "embeddium", "rubidium", "magnesium"], ["iris", "oculus"]],
+  "notWithOptifine": ["iris", "oculus", "sodium", "embeddium", "rubidium", "magnesium"]
+}

@@ -73,10 +73,14 @@ public class LaunchSupervisor {
             if (options.getSession() != null) {
                 session = options.getSession();
             } else {
-                session = AccountSelectDialog.showAccountRequest(window, launcher);
+                boolean[] friend = new boolean[1];
+                session = AccountSelectDialog.showAccountRequest(window, launcher, instance, friend);
                 if (session == null) {
                     return;
                 }
+                // 26.11.2026: галочка «Грати з другом»: помічник ставить і налаштовує мод, далі звичайний запуск
+                com.gummer.launcher.ui.UiHooks.InstanceAction fp = com.gummer.launcher.ui.UiHooks.friendPlay;
+                if (friend[0] && fp != null) fp.run(window, instance);
             }
 
             // If we have to update, we have to update

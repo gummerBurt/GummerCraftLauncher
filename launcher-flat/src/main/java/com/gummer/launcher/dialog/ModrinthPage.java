@@ -865,6 +865,23 @@ public final class ModrinthPage extends JPanel {
                 none.setEnabled(false);
                 menu.add(none);
             }
+            // 26.11.2026 (власник: «дозволь обирати версії модів перед установкою»): збірка вище ставить найновішу версію,
+            // що підходить, а тут спершу вибір версії під вибрану збірку
+            JMenu pickInto = new JMenu(tr("mpage.mod.pickVersion"));
+            for (Object[] f : fit) {
+                final com.skcraft.launcher.Instance i = (com.skcraft.launcher.Instance) f[0];
+                final String game = (String) f[1];
+                final String[] loaders = (String[]) f[2];
+                if ((Boolean) f[3]) continue;
+                String where = loaderTitle(loaders[0]) + " " + game;
+                JMenuItem item = new JMenuItem(i.getTitle() + (i.getTitle().contains(game) ? "" : "  (" + where + ")"));
+                item.addActionListener(e -> pickVersionInto(button, i, game, loaders, vs));
+                pickInto.add(item);
+            }
+            if (pickInto.getItemCount() > 0) {
+                menu.addSeparator();
+                menu.add(pickInto);
+            }
             menu.addSeparator();
             JMenuItem create = new JMenuItem(tr("mpage.mod.newBuild"));
             create.addActionListener(e -> {
@@ -879,7 +896,48 @@ public final class ModrinthPage extends JPanel {
             menu.show(button, 0, button.getHeight());
         }
 
+        /** 26.11.2026: версії мода під вибрану збірку (CurseForge: файли у фоні), вікно вибору, далі як звичайно. */
+        private void pickVersionInto(final JButton button, final com.skcraft.launcher.Instance target, final String game,
+                                     final String[] loaders, final List<ModrinthBrowse.PackVersion> vs) {
+            final String where = loaderTitle(loaders[0]) + " " + game;
+            if (!curse) {
+                ModrinthBrowse.PackVersion v = ModVersionPicker.pick(button, hit.title, where, ModVersionPicker.forBuild(vs, game, loaders));
+                if (v != null) installInto(target, game, loaders, v.id);
+                return;
+            }
+            button.setEnabled(false);
+            button.setText(tr("manage.browse.loading"));
+            ModrinthBrowse.POOL.submit(() -> {
+                List<ModrinthBrowse.PackVersion> files;
+                try {
+                    files = com.gummer.launcher.curseforge.CurseBrowse.fileChoices(launcher, ModrinthBrowse.Kind.MOD, hit, game, loaders);
+                } catch (Exception e) {
+                    log.log(Level.INFO, "CurseForge mod files failed: " + hit.slug, e);
+                    files = null;
+                }
+                final List<ModrinthBrowse.PackVersion> got = files;
+                SwingUtilities.invokeLater(() -> {
+                    button.setEnabled(true);
+                    button.setText(tr("mpage.mod.install"));
+                    if (got == null) {
+                        status.setText(tr("manage.browse.failedCurse"));
+                        return;
+                    }
+                    if (got.isEmpty()) {
+                        toast(Notification.Type.WARNING, tr("mpage.mod.noVersion", LookUi.plainText(hit.title), game));
+                        return;
+                    }
+                    ModrinthBrowse.PackVersion v = ModVersionPicker.pick(button, hit.title, where, got);
+                    if (v != null) installInto(target, game, loaders, v.id);
+                });
+            });
+        }
+
         private void installInto(final com.skcraft.launcher.Instance target, final String game, final String[] loaders) {
+            installInto(target, game, loaders, null);
+        }
+
+        private void installInto(final com.skcraft.launcher.Instance target, final String game, final String[] loaders, final String versionId) {
             final String modTitle = LookUi.plainText(hit.title);
             toast(Notification.Type.INFO, tr("mpage.mod.installing", modTitle, target.getTitle()));
             ModrinthBrowse.POOL.submit(() -> {
@@ -887,7 +945,7 @@ public final class ModrinthPage extends JPanel {
                 final List<String> missing = new java.util.ArrayList<String>();
                 final List<String> conflicts = new java.util.ArrayList<String>();
                 try {
-                    installMod(game, loaders, com.gummer.launcher.manage.InstanceMods.modsDir(target), added, missing, conflicts);
+                    installMod(game, loaders, com.gummer.launcher.manage.InstanceMods.modsDir(target), added, missing, conflicts, versionId);
                     SwingUtilities.invokeLater(() -> {
                         added.remove(hit.title);
                         toast(Notification.Type.SUCCESS, added.isEmpty() ? tr("mpage.mod.installed", modTitle, target.getTitle())
@@ -908,11 +966,11 @@ public final class ModrinthPage extends JPanel {
 
         /** Мод (з залежностями) у теку модів: з Modrinth або, на сторінці CurseForge, з CurseForge. */
         private void installMod(String game, String[] loaders, java.io.File mods, List<String> added, List<String> missing,
-                                List<String> conflicts) throws Exception {
+                                List<String> conflicts, String versionId) throws Exception {
             if (curse) {
-                com.gummer.launcher.curseforge.CurseBrowse.installFile(launcher, ModrinthBrowse.Kind.MOD, hit, game, loaders, mods, added, missing, conflicts);
+                com.gummer.launcher.curseforge.CurseBrowse.installFile(launcher, ModrinthBrowse.Kind.MOD, hit, game, loaders, mods, added, missing, conflicts, versionId);
             } else {
-                ModrinthBrowse.install(ModrinthBrowse.Kind.MOD, hit, game, loaders, mods, added, missing, conflicts);
+                ModrinthBrowse.install(ModrinthBrowse.Kind.MOD, hit, game, loaders, mods, added, missing, conflicts, versionId);
             }
         }
 
@@ -975,7 +1033,7 @@ public final class ModrinthPage extends JPanel {
             final com.google.common.util.concurrent.ListenableFuture<String> task = launcher.getExecutor().submit(() -> {
                 String made = copier.call();
                 java.io.File mods = new java.io.File(new java.io.File(new java.io.File(launcher.getInstancesDir(), made), "minecraft"), "mods");
-                installMod(game, loaders, mods, null, null, null);
+                installMod(game, loaders, mods, null, null, null, null);
                 return made;
             });
             com.skcraft.concurrency.ObservableFuture<String> future = new com.skcraft.concurrency.ObservableFuture<String>(task, copier);

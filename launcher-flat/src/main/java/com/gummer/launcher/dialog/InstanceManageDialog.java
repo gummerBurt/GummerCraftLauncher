@@ -1094,9 +1094,23 @@ public class InstanceManageDialog extends JDialog {
                 filterMods();
             }
         });
-        JPanel tools = new JPanel(new MigLayout("insets 0, gap 10, fillx", "[grow,fill][][]", "[32!]"));
+        JPanel tools = new JPanel(new MigLayout("insets 0, gap 10, fillx", "[grow,fill][][][]", "[32!]"));
         tools.setOpaque(false);
         tools.add(modsSearch, "wmin 0, h 32!");
+        // 26.11.2026 (власник: «автоматизована гра з другом ... максимально юзер френдлі для новачка/дитини»): помічник
+        // ставить і сам налаштовує мод для гри поруч чи через інтернет (FriendPlayDialog); у збірках GummerCraft немає
+        if (com.gummer.launcher.manage.FriendPlay.availability(instance) == com.gummer.launcher.manage.FriendPlay.Availability.OK) {
+            JButton friend = LookUi.secondary(new JButton(tr("friend.button")));
+            friend.setToolTipText(tr("friend.buttonTip"));
+            friend.setFocusable(false);
+            friend.addActionListener(e -> {
+                FriendPlayDialog.open(this, launcher, instance, () -> select(IMPEX), null);
+                changed = true;
+                modsShown = null;
+                fillMods();
+            });
+            tools.add(friend, "h 32!");
+        }
         // 25.11.2026 (власник: «"останні додані", щоб можна було глянути останні додані моди (сортування за назвою/за
         // датою)»): нові спершу за датою появи файлу в теці (InstanceMods.Mod#added); вибір запам'ятовується
         modsSort.addItem(tr("manage.mods.sortName"));
@@ -1136,7 +1150,20 @@ public class InstanceManageDialog extends JDialog {
         // Forge, NeoForge і їхні копії
         Browse packs = modsBrowse != null && com.gummer.launcher.manage.ModrinthBrowse.loadersOf(com.gummer.launcher.manage.ModrinthBrowse.Kind.MODPACK, instance) != null
                 ? new Browse(com.gummer.launcher.manage.ModrinthBrowse.Kind.MODPACK, null, () -> { }) : null;
-        return tabbed(MODS, p, modsBrowse, "manage.tab.mineMods", "manage.tab.findMods", packs, "manage.tab.modpacks");
+        // 26.11.2026 (власник: «Набори модів» у «Керуванні збіркою», «робимо вже»): готові набори між «Мої моди» і
+        // «Знайти моди»; лише там, де моди веде гравець (не GummerCraft і не StalDayZ)
+        ModSetsPage sets = modsBrowse != null && com.gummer.launcher.manage.ModSets.available(instance)
+                ? new ModSetsPage(this, instance, () -> {
+                    FriendPlayDialog.open(this, launcher, instance, () -> select(IMPEX), null);
+                    changed = true;
+                    modsShown = null;
+                    fillMods();
+                }, fpsCard(), () -> {
+                    changed = true;
+                    modsShown = null;
+                    fillMods();
+                }) : null;
+        return tabbed(MODS, p, modsBrowse, "manage.tab.mineMods", "manage.tab.findMods", packs, "manage.tab.modpacks", sets, "manage.tab.sets");
     }
 
     private final JTextField modsSearch = new JTextField();
@@ -2130,6 +2157,9 @@ public class InstanceManageDialog extends JDialog {
         emptyText.setVisible(false);
         emptyTexts.put(list, emptyText);
         c.add(emptyText, "wmin 0, hidemode 3");
+        // 26.11.2026 (тікет #124, власник: «кнопка «Встановити мод для шейдерів»»): без шейдерного мода шейдери не
+        // ввімкнуться; помічник сам пропонує, що є саме для цієї збірки
+        if (page == SHADERS) p.add(shaderHelperCard(), "wmin 0, hidemode 3");
         p.add(c);
         if (locked) {
             packsBrowse = null;
@@ -2143,6 +2173,137 @@ public class InstanceManageDialog extends JDialog {
         else packsBrowse = b;
         return page == SHADERS ? tabbed(page, p, b, "manage.tab.mineShaders", "manage.tab.findShaders")
                 : tabbed(page, p, b, "manage.tab.minePacks", "manage.tab.findPacks");
+    }
+
+    /**
+     * 26.11.2026: картка «Шейдерам потрібен мод» над «Мої шейдери». Ховається, якщо в збірці вже є Iris, Oculus чи
+     * OptiFine. Інакше у фоні шукає шейдерний мод саме для цієї гри і завантажувача (Iris і Sodium, Oculus і Embeddium чи
+     * Rubidium; Modrinth, інакше CurseForge, {@link com.gummer.launcher.manage.ModSets}) і дає кнопку «Встановити мод
+     * для шейдерів». Немає такого (Forge 1.20.2+, Forge 26.3): чесне пояснення і, де є збірка Fabric цієї версії, кнопка
+     * перенести туди світи. Ванільна збірка: одразу ця кнопка.
+     */
+    private JPanel shaderHelperCard() {
+        final JPanel c = card();
+        c.setVisible(false);
+        c.add(LookUi.title(tr("shaders.helper.title"), 15f));
+        final JTextArea text = LookUi.body("", true);
+        c.add(text, "wmin 0");
+        final JPanel row = new JPanel(new MigLayout("insets 0, gap 8, hidemode 3", "[][]push", "[32!]"));
+        row.setOpaque(false);
+        final JButton install = LookUi.primary(new JButton(tr("shaders.helper.install")));
+        install.setFocusable(false);
+        final String mc = com.gummer.launcher.manage.ModrinthBrowse.gameVersionOf(instance);
+        final Instance fabric = FriendPlayDialog.fabricFor(launcher, mc);
+        final JButton toFabric = LookUi.secondary(new JButton(tr("shaders.helper.toFabric", mc == null ? "" : mc)));
+        toFabric.setFocusable(false);
+        toFabric.setToolTipText(tr("shaders.helper.toFabricTip"));
+        install.setVisible(false);
+        toFabric.setVisible(false);
+        row.add(install, "h 32!");
+        row.add(toFabric, "h 32!");
+        c.add(row, "gaptop 6, wmin 0");
+        toFabric.addActionListener(e -> moveToFabric(fabric, toFabric));
+        if (instance.isVanilla()) {
+            text.setText(tr("shaders.helper.vanilla", mc == null ? "" : mc));
+            toFabric.setVisible(fabric != null);
+            c.setVisible(true);
+            return c;
+        }
+        if (!com.gummer.launcher.manage.ModSets.available(instance)) return c; // GummerCraft, StalDayZ: свій модпак
+        final com.gummer.launcher.manage.ModSets.Plan[] plan = new com.gummer.launcher.manage.ModSets.Plan[1];
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                String have = com.gummer.launcher.manage.ModSets.shaderModIn(instance);
+                if (have != null) return have;
+                plan[0] = com.gummer.launcher.manage.ModSets.plan(instance, com.gummer.launcher.manage.ModSets.SHADERS);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    if (get() != null || plan[0] == null) return;
+                } catch (Exception ex) {
+                    return;
+                }
+                com.gummer.launcher.manage.ModSets.Group g = plan[0].group("shaderMod");
+                if (g == null || g.state == com.gummer.launcher.manage.ModSets.State.HAVE) return;
+                String[] loaders = com.gummer.launcher.manage.ModrinthBrowse.loadersOf(com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD, instance);
+                if (g.state == com.gummer.launcher.manage.ModSets.State.READY) {
+                    text.setText(tr("shaders.helper.text", g.titles()));
+                    install.setVisible(true);
+                } else {
+                    text.setText(ModSetsPage.shaderNone(ModSetsPage.loaderTitle(loaders), mc));
+                    toFabric.setVisible(fabric != null && fabric != instance && !instance.isFabric());
+                }
+                c.setVisible(true);
+                c.revalidate();
+            }
+        }.execute();
+        install.addActionListener(e -> {
+            final com.gummer.launcher.manage.ModSets.Plan pl = plan[0];
+            if (pl == null) return;
+            if (!SwingHelper.confirmDialog(this, tr("shaders.helper.confirm", pl.group("shaderMod").titles()), tr("shaders.helper.title"))) return;
+            install.setEnabled(false);
+            install.setText(tr("crash.action.working"));
+            new SwingWorker<com.gummer.launcher.manage.ModSets.Result, Void>() {
+                @Override
+                protected com.gummer.launcher.manage.ModSets.Result doInBackground() throws Exception {
+                    return com.gummer.launcher.manage.ModSets.install(instance, pl, java.util.Collections.singleton("shaderMod"), false);
+                }
+
+                @Override
+                protected void done() {
+                    install.setText(tr("shaders.helper.install"));
+                    install.setEnabled(true);
+                    com.gummer.launcher.manage.ModSets.Result r;
+                    try {
+                        r = get();
+                    } catch (Exception ex) {
+                        Throwable t = ex.getCause() != null ? ex.getCause() : ex;
+                        SwingHelper.showErrorDialog(InstanceManageDialog.this, tr("fps.failed", String.valueOf(t.getMessage())), tr("shaders.helper.title"));
+                        return;
+                    }
+                    changed = true;
+                    modsShown = null;
+                    String msg = r.installed.isEmpty() ? tr("fps.addedNone") : tr("shaders.helper.done", String.join(", ", r.installed));
+                    if (!r.skipped.isEmpty()) msg += "\n\n" + tr("fps.skipped") + "\n" + String.join("\n", r.skipped);
+                    SwingHelper.showMessageDialog(InstanceManageDialog.this, msg, tr("shaders.helper.title"), null, JOptionPane.INFORMATION_MESSAGE);
+                    if (!r.installed.isEmpty()) c.setVisible(false);
+                }
+            }.execute();
+        });
+        return c;
+    }
+
+    /** 26.11.2026: світи і налаштування гри в збірку Fabric тієї ж версії (як у «Грі з другом»), далі її «Шейдери». */
+    private void moveToFabric(final Instance fabric, final JButton button) {
+        if (fabric == null) return;
+        button.setEnabled(false);
+        new SwingWorker<Integer, Void>() {
+            @Override
+            protected Integer doInBackground() throws Exception {
+                return FriendPlayDialog.copyWorlds(instance, fabric);
+            }
+
+            @Override
+            protected void done() {
+                int n;
+                try {
+                    n = get();
+                } catch (Exception ex) {
+                    java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).log(java.util.logging.Level.WARNING, "Copy to Fabric failed", ex);
+                    button.setEnabled(true);
+                    return;
+                }
+                java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).info("Shaders: " + instance.getName() + " -> " + fabric.getName() + ", worlds " + n);
+                Window owner = getOwner();
+                host.copyCreated(fabric.getName());
+                dispose();
+                open(owner, launcher, fabric, SHADERS, host);
+            }
+        }.execute();
     }
 
     private Browse packsBrowse, shadersBrowse, modsBrowse;
@@ -2171,24 +2332,40 @@ public class InstanceManageDialog extends JDialog {
 
     /** 17.11.2026: з третьою вкладкою («Модпаки» на сторінці модів), якщо {@code extra} не null. */
     private JPanel tabbed(int page, JPanel mine, Browse find, String mineKey, String findKey, Browse extra, String extraKey) {
+        return tabbed(page, mine, find, mineKey, findKey, extra, extraKey, null, null);
+    }
+
+    /** 26.11.2026: ще «Набори модів» ({@code sets}) другою вкладкою, між своїм і пошуком, якщо не null. */
+    private JPanel tabbed(int page, JPanel mine, Browse find, String mineKey, String findKey, Browse extra, String extraKey,
+                          JComponent sets, String setsKey) {
         JPanel p = page();
         if (find == null) {
             p.add(mine, "wmin 0");
             return p;
         }
-        SubTabs t = extra == null ? new SubTabs(new String[]{tr(mineKey), tr(findKey)}, new JComponent[]{mine, find})
-                : new SubTabs(new String[]{tr(mineKey), tr(findKey), tr(extraKey)}, new JComponent[]{mine, find, extra});
+        List<String> labels = new ArrayList<String>();
+        List<JComponent> panes = new ArrayList<JComponent>();
+        labels.add(tr(mineKey));
+        panes.add(mine);
+        if (sets != null) {
+            labels.add(tr(setsKey));
+            panes.add(sets);
+        }
+        labels.add(tr(findKey));
+        panes.add(find);
+        if (extra != null) {
+            labels.add(tr(extraKey));
+            panes.add(extra);
+        }
+        SubTabs t = new SubTabs(labels.toArray(new String[0]), panes.toArray(new JComponent[0]));
         subTabs[page] = t;
         JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]", "[36!]"));
         row.setOpaque(false);
-        row.add(t, "wmin 0, wmax " + (extra == null ? 460 : 620) + ", h 36!");
+        row.add(t, "wmin 0, wmax " + (160 * panes.size() + 140) + ", h 36!");
         p.add(row, "wmin 0");
-        p.add(mine, "wmin 0, hidemode 3");
-        p.add(find, "wmin 0, hidemode 3");
-        find.setVisible(false);
-        if (extra != null) {
-            p.add(extra, "wmin 0, hidemode 3");
-            extra.setVisible(false);
+        for (JComponent c : panes) {
+            p.add(c, "wmin 0, hidemode 3");
+            c.setVisible(c == mine);
         }
         return p;
     }
@@ -2199,6 +2376,8 @@ public class InstanceManageDialog extends JDialog {
         final JComponent[] panes;
         /** Пошук, що вантажиться заздалегідь (друга вкладка); третя вантажиться лише при відкритті. */
         final Browse find;
+        /** Місце пошуку серед вкладок. */
+        final int findIndex;
         int selected, hover = -1;
 
         int at(int x) {
@@ -2209,7 +2388,17 @@ public class InstanceManageDialog extends JDialog {
         SubTabs(String[] labels, JComponent[] panes) {
             this.labels = labels;
             this.panes = panes;
-            this.find = (Browse) panes[1];
+            // 26.11.2026: пошук не обов'язково другий («Набори модів» між «Мої» і «Знайти»)
+            Browse f = null;
+            int fi = 1;
+            for (int k = 0; k < panes.length && f == null; k++) {
+                if (panes[k] instanceof Browse) {
+                    f = (Browse) panes[k];
+                    fi = k;
+                }
+            }
+            this.find = f;
+            this.findIndex = fi;
             setFont(UIManager.getFont("Label.font").deriveFont(Font.PLAIN, 13.5f));
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             addMouseListener(new java.awt.event.MouseAdapter() {
@@ -2239,7 +2428,8 @@ public class InstanceManageDialog extends JDialog {
         void select(int i) {
             selected = i;
             for (int k = 0; k < panes.length; k++) panes[k].setVisible(k == i);
-            if (i >= 2 && panes[i] instanceof Browse) ((Browse) panes[i]).loadIfNeeded();
+            if (i != findIndex && panes[i] instanceof Browse) ((Browse) panes[i]).loadIfNeeded();
+            if (panes[i] instanceof ModSetsPage) ((ModSetsPage) panes[i]).loadIfNeeded();
             Container sp = SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
             if (sp != null) {
                 sp.revalidate();
@@ -2254,7 +2444,7 @@ public class InstanceManageDialog extends JDialog {
          * було готове). На «Моди» трохи пізніше, щоб не заважати читанню списку модів.
          */
         void shown() {
-            if (selected == 1 || find.loaded) {
+            if (selected == findIndex || find.loaded) {
                 find.loadIfNeeded();
                 return;
             }
@@ -2619,11 +2809,22 @@ public class InstanceManageDialog extends JDialog {
                     add(name, "wmin 0");
                 }
                 final JButton install = LookUi.secondary(new JButton(tr("manage.browse.install")));
+                // 26.11.2026 (власник: «дозволь обирати версії модів перед установкою»): поруч «Версія...», список версій
+                // під цю збірку; «Встановити» як раніше ставить найновішу, що підходить
+                final JButton versions = LookUi.secondary(new JButton(tr("manage.version.button")));
+                versions.setToolTipText(tr("manage.version.tip"));
+                versions.setVisible(kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD && !h.installed);
                 if (h.installed) {
                     install.setText(tr("manage.browse.installed"));
                     install.setEnabled(false);
                 }
-                add(install, "spany 3, aligny center, h 32!, wrap");
+                // 26.11.2026: обидві в одній клітинці (split): схована «Версія...» в окремій колонці лишала проміжок між
+                // колонками, і «Встановлено» стояло на 6 px лівіше за «Встановити» в сусідніх рядках
+                JPanel actions = new JPanel(new MigLayout("insets 0, gap 6, hidemode 3", "[right]", "[]"));
+                actions.setOpaque(false);
+                actions.add(versions, "h 32!, split 2");
+                actions.add(install, "h 32!");
+                add(actions, "spany 3, aligny center, wrap");
                 if (h.description != null && !h.description.isEmpty()) {
                     JTextArea d = LookUi.body(cut(h.description, 200), true);
                     if (d.getCaret() instanceof javax.swing.text.DefaultCaret) {
@@ -2660,7 +2861,52 @@ public class InstanceManageDialog extends JDialog {
                         installModpack(h, install);
                         return;
                     }
+                    installHit(h, install, versions, null);
+                });
+                versions.addActionListener(e -> pickVersion(h, install, versions));
+            }
+
+            /** 26.11.2026: версії мода під цю збірку у фоні, потім вікно вибору; вибрана ставиться як звичайно. */
+            void pickVersion(final com.gummer.launcher.manage.ModrinthBrowse.Hit h, final JButton install, final JButton versions) {
+                versions.setEnabled(false);
+                versions.setText(tr("manage.browse.loading"));
+                final boolean cf = com.gummer.launcher.curseforge.CurseBrowse.isCurseId(h.id);
+                new SwingWorker<List<com.gummer.launcher.manage.ModrinthBrowse.PackVersion>, Void>() {
+                    @Override
+                    protected List<com.gummer.launcher.manage.ModrinthBrowse.PackVersion> doInBackground() throws Exception {
+                        return cf ? com.gummer.launcher.curseforge.CurseBrowse.fileChoices(launcher, kind, h, game, loaders)
+                                : ModVersionPicker.forBuild(com.gummer.launcher.manage.ModrinthBrowse.modVersions(h.id), game, loaders);
+                    }
+
+                    @Override
+                    protected void done() {
+                        versions.setEnabled(true);
+                        versions.setText(tr("manage.version.button"));
+                        List<com.gummer.launcher.manage.ModrinthBrowse.PackVersion> vs;
+                        try {
+                            vs = get();
+                        } catch (Exception ex) {
+                            java.util.logging.Logger.getLogger(InstanceManageDialog.class.getName()).log(java.util.logging.Level.INFO,
+                                    "Mod versions failed: " + h.slug, ex);
+                            toast(tr(cf ? "manage.browse.failedCurse" : "manage.browse.failed"));
+                            return;
+                        }
+                        if (vs.isEmpty()) {
+                            toast(tr("manage.browse.noVersion", h.title, game != null ? game : "?"));
+                            return;
+                        }
+                        com.gummer.launcher.manage.ModrinthBrowse.PackVersion v = ModVersionPicker.pick(InstanceManageDialog.this, h.title,
+                                loaderTitle(loaders) + " " + (game != null ? game : "?"), vs);
+                        if (v != null) installHit(h, install, versions, v.id);
+                    }
+                }.execute();
+            }
+
+            /** Поставити мод (ресурспак, шейдер): {@code versionId} вибрана версія, null найновіша, що підходить. */
+            void installHit(final com.gummer.launcher.manage.ModrinthBrowse.Hit h, final JButton install, final JButton versions,
+                            final String versionId) {
                     install.setEnabled(false);
+                    versions.setEnabled(false);
                     install.setText(tr("manage.browse.installing"));
                     final List<String> got = java.util.Collections.synchronizedList(new ArrayList<String>());
                     final List<String> missing = java.util.Collections.synchronizedList(new ArrayList<String>());
@@ -2669,9 +2915,9 @@ public class InstanceManageDialog extends JDialog {
                         @Override
                         protected String doInBackground() throws Exception {
                             if (com.gummer.launcher.curseforge.CurseBrowse.isCurseId(h.id)) {
-                                return com.gummer.launcher.curseforge.CurseBrowse.installFile(launcher, kind, h, game, loaders, dir, got, missing, conflicts);
+                                return com.gummer.launcher.curseforge.CurseBrowse.installFile(launcher, kind, h, game, loaders, dir, got, missing, conflicts, versionId);
                             }
-                            return com.gummer.launcher.manage.ModrinthBrowse.install(kind, h, game, loaders, dir, got, missing, conflicts);
+                            return com.gummer.launcher.manage.ModrinthBrowse.install(kind, h, game, loaders, dir, got, missing, conflicts, versionId);
                         }
 
                         @Override
@@ -2679,6 +2925,7 @@ public class InstanceManageDialog extends JDialog {
                             try {
                                 String file = get();
                                 install.setText(tr("manage.browse.installed"));
+                                versions.setVisible(false);
                                 if (kind == com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD) changed = true;
                                 refresh.run();
                                 java.util.List<String> deps = new ArrayList<String>(got);
@@ -2699,6 +2946,7 @@ public class InstanceManageDialog extends JDialog {
                             } catch (Exception ex) {
                                 Throwable t = ex.getCause() != null ? ex.getCause() : ex;
                                 install.setEnabled(true);
+                                versions.setEnabled(true);
                                 install.setText(tr("manage.browse.install"));
                                 boolean noVersion = com.gummer.launcher.manage.ModrinthBrowse.NO_VERSION.equals(t.getMessage());
                                 toast(noVersion ? tr("manage.browse.noVersion", h.title, game != null ? game : "?")
@@ -2710,7 +2958,6 @@ public class InstanceManageDialog extends JDialog {
                             }
                         }
                     }.execute();
-                });
             }
         }
     }
@@ -3146,12 +3393,12 @@ public class InstanceManageDialog extends JDialog {
         JButton pick = LookUi.secondary(new JButton(tr(icon ? "manage.art.pickIcon" : "manage.art.pickBackground")));
         JButton clear = LookUi.secondary(new JButton(tr("manage.art.reset")));
         pick.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setDialogTitle(tr(icon ? "manage.art.pickIcon" : "manage.art.pickBackground"));
-            chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("PNG, JPG, GIF, BMP",
-                    "png", "jpg", "jpeg", "gif", "bmp"));
-            if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
-            final File source = chooser.getSelectedFile();
+            // 26.11.2026: системне вікно Windows з ескізами картинок (було JFileChooser без прев'ю)
+            final File source = new com.gummer.launcher.swing.NativeFileDialog(this)
+                    .title(tr(icon ? "manage.art.pickIcon" : "manage.art.pickBackground"))
+                    .filter("PNG, JPG, GIF, BMP", "png", "jpg", "jpeg", "gif", "bmp")
+                    .openFile();
+            if (source == null) return;
             // зменшення великої картинки може тривати секунду: не в потоці інтерфейсу
             new SwingWorker<Void, Void>() {
                 @Override
@@ -3215,13 +3462,9 @@ public class InstanceManageDialog extends JDialog {
     private JButton addButton(final int page, final File dir, final String... ext) {
         JButton b = LookUi.secondary(new JButton(tr("manage.add")));
         b.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setMultiSelectionEnabled(true);
-            chooser.setDialogTitle(tr("manage.addTitle"));
-            chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(String.join(", ", ext), ext));
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                importFiles(Arrays.asList(chooser.getSelectedFiles()), dir, page);
-            }
+            File[] picked = new com.gummer.launcher.swing.NativeFileDialog(this).title(tr("manage.addTitle"))
+                    .filter(String.join(", ", ext), ext).openFiles();
+            if (picked != null) importFiles(Arrays.asList(picked), dir, page);
         });
         return b;
     }
@@ -3346,14 +3589,11 @@ public class InstanceManageDialog extends JDialog {
 
     private void exportPack(boolean packs, boolean zip) {
         String ext = zip ? "zip" : "mrpack";
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle(tr(zip ? "manage.share.exportZip" : "manage.share.export"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(zip ? "ZIP (.zip)" : "Modrinth (.mrpack)", ext));
         String def = com.gummer.launcher.modrinth.MrpackExport.fileNameOf(instance);
         if (zip && def.endsWith(".mrpack")) def = def.substring(0, def.length() - ".mrpack".length()) + ".zip";
-        chooser.setSelectedFile(new File(def));
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
-        File f = chooser.getSelectedFile();
+        File f = new com.gummer.launcher.swing.NativeFileDialog(this).title(tr(zip ? "manage.share.exportZip" : "manage.share.export"))
+                .filter(zip ? "ZIP (.zip)" : "Modrinth (.mrpack)", ext).fileName(def).saveFile();
+        if (f == null) return;
         if (!f.getName().toLowerCase(Locale.ROOT).endsWith("." + ext)) f = new File(f.getPath() + "." + ext);
         final com.gummer.launcher.modrinth.MrpackExport exporter = new com.gummer.launcher.modrinth.MrpackExport(instance, f, packs, zip);
         exporter.launcher = launcher; // 25.11.2026: моди CurseForge посиланнями (запит до проксі)
@@ -3379,11 +3619,9 @@ public class InstanceManageDialog extends JDialog {
 
     /** Імпорт .mrpack: нова збірка, головне вікно її вибере (той самий код, що «Модпаки»). */
     private void importPack() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle(tr("mrpack.chooseTitle"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth, CurseForge (.mrpack, .zip)", "mrpack", "zip"));
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
-        final File file = chooser.getSelectedFile();
+        final File file = new com.gummer.launcher.swing.NativeFileDialog(this).title(tr("mrpack.chooseTitle"))
+                .filter("Modrinth, CurseForge (.mrpack, .zip)", "mrpack", "zip").openFile();
+        if (file == null) return;
         final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
         final com.google.common.util.concurrent.ListenableFuture<String> task = launcher.getExecutor().submit(() -> importer.importFile(launcher, file));
         com.skcraft.concurrency.ObservableFuture<String> future = new com.skcraft.concurrency.ObservableFuture<String>(task, importer);

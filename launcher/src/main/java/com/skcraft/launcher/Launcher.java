@@ -105,6 +105,7 @@ public final class Launcher {
         com.gummer.launcher.util.JavaSecurity.protectLauncherJvm(); // 1.36.1, java4shell: прапорець для Java лаунчера
         this.instances = new InstanceList(this);
         com.gummer.launcher.curseforge.CurseBrowse.use(this); // 24.11.2026: залежності модів Modrinth можуть прийти з CurseForge
+        com.gummer.launcher.manage.ModSets.useUrl(getProperties().getProperty("modSetsUrl")); // 26.11.2026: набори модів, свіжий список з CDN
         this.assets = new AssetsRoot(new File(baseDir, "assets"));
         this.accounts = Persistence.load(new File(configDir, "accounts.dat"), AccountList.class);
 

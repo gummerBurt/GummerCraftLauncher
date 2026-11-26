@@ -42,15 +42,27 @@ public class AccountSelectDialog extends JDialog {
 
 	private final Launcher launcher;
 	private Session selected;
+	/**
+	 * 26.11.2026 (власник: галочка «Гра з другом», «нехай це з'являється під час обрання аккаунта»): збірка, яку
+	 * запускаємо, і галочка «Грати з другом». Видно лише там, де помічник працює і мода для гри з другом ще немає.
+	 */
+	private final com.skcraft.launcher.Instance instance;
+	private final JCheckBox friendBox = new JCheckBox();
+	private boolean friendWanted;
 
     // Define a uniform minimum button width
     int minButtonWidth = 230;
     int minButtonHeight = 35;
 
 	public AccountSelectDialog(Window owner, Launcher launcher) {
+		this(owner, launcher, null);
+	}
+
+	public AccountSelectDialog(Window owner, Launcher launcher, com.skcraft.launcher.Instance instance) {
 		super(owner, ModalityType.DOCUMENT_MODAL);
 
 		this.launcher = launcher;
+		this.instance = instance;
 		this.accountList = new JList<>(launcher.getAccounts());
 
 		setTitle(SharedLocale.tr("accounts.title"));
@@ -153,7 +165,17 @@ public class AccountSelectDialog extends JDialog {
         // Create the overall right column using BorderLayout.
         JPanel rightColumn = new JPanel(new BorderLayout());
         rightColumn.add(topRightPanel, BorderLayout.NORTH);
-        rightColumn.add(loginButtonPanel, BorderLayout.SOUTH);
+        // 26.11.2026: галочка «Грати з другом» над кнопкою запуску (лише для збірок, де помічник працює)
+        JPanel playColumn = new JPanel(new BorderLayout(0, 6));
+        playColumn.setOpaque(false);
+        friendBox.setText("<html>" + SharedLocale.tr("accounts.friend") + " <span style='background:#FFD500;color:#3A2A00'>&nbsp;"
+                + SharedLocale.tr("accounts.friendNew") + "&nbsp;</span></html>");
+        friendBox.setToolTipText(SharedLocale.tr("accounts.friendTip"));
+        friendBox.setFocusable(false);
+        friendBox.setVisible(friendOffered());
+        playColumn.add(friendBox, BorderLayout.NORTH);
+        playColumn.add(loginButtonPanel, BorderLayout.SOUTH);
+        rightColumn.add(playColumn, BorderLayout.SOUTH);
 
         // --- Main Container ---
         // Create a container that holds the left and right columns side by side.
@@ -238,8 +260,17 @@ public class AccountSelectDialog extends JDialog {
 	}
 
 	public static Session showAccountRequest(Window owner, Launcher launcher) {
-		AccountSelectDialog dialog = new AccountSelectDialog(owner, launcher);
+		return showAccountRequest(owner, launcher, null, null);
+	}
+
+	/**
+	 * 26.11.2026: те саме для запуску збірки {@code instance}; {@code friend[0]} стає true, якщо гравець поставив
+	 * галочку «Грати з другом» (тоді перед запуском відкривається помічник).
+	 */
+	public static Session showAccountRequest(Window owner, Launcher launcher, com.skcraft.launcher.Instance instance, boolean[] friend) {
+		AccountSelectDialog dialog = new AccountSelectDialog(owner, launcher, instance);
 		dialog.setVisible(true);
+		if (friend != null && friend.length > 0) friend[0] = dialog.friendWanted;
 
 		if (dialog.selected != null && dialog.selected.isOnline()) {
 			launcher.getAccounts().update(dialog.selected.toSavedSession());
@@ -256,7 +287,29 @@ public class AccountSelectDialog extends JDialog {
 
 	private void setResult(Session result) {
 		this.selected = result;
+		this.friendWanted = result != null && friendBox.isVisible() && friendBox.isSelected();
 		dispose();
+	}
+
+	/**
+	 * Чи пропонувати галочку: є помічник (головне вікно зареєструвало {@code UiHooks.friendPlay}), збірка з
+	 * завантажувачем гравця (не Main, не StalDayZ) і мода для гри з другом у ній ще немає. Моди читаються з кешу
+	 * {@code ModInfo}; якщо не встигли за 300 мс, галочки цього разу немає (вікно не чекає).
+	 */
+	private boolean friendOffered() {
+		if (instance == null || com.gummer.launcher.ui.UiHooks.friendPlay == null) return false;
+		if (com.gummer.launcher.manage.FriendPlay.availability(instance) != com.gummer.launcher.manage.FriendPlay.Availability.OK) return false;
+		java.util.concurrent.FutureTask<Boolean> has = new java.util.concurrent.FutureTask<Boolean>(
+				() -> com.gummer.launcher.manage.FriendPlay.hasFriendMod(instance));
+		Thread t = new Thread(has, "friend-mod-check");
+		t.setDaemon(true);
+		t.start();
+		try {
+			return !has.get(300, java.util.concurrent.TimeUnit.MILLISECONDS);
+		} catch (Exception e) {
+			has.cancel(true);
+			return false;
+		}
 	}
 
 	private void attemptMicrosoftLogin(String status) {

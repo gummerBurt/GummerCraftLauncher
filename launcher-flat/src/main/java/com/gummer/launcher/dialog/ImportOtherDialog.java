@@ -151,11 +151,8 @@ public final class ImportOtherDialog {
         root.add(buttons, "gaptop 6");
 
         pick.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setDialogTitle(SharedLocale.tr("import.pickTitle"));
-            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            if (chooser.showOpenDialog(d) != JFileChooser.APPROVE_OPTION) return;
-            File dir = chooser.getSelectedFile();
+            File dir = new com.gummer.launcher.swing.NativeFileDialog(d).title(SharedLocale.tr("import.pickTitle")).openFolder();
+            if (dir == null) return;
             d.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
             launcher.getExecutor().submit(() -> {
                 List<LauncherImport.Found> found;

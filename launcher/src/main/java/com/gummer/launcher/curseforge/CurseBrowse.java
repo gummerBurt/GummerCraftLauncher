@@ -393,12 +393,87 @@ public final class CurseBrowse {
     public static String installFile(Launcher launcher, ModrinthBrowse.Kind kind, ModrinthBrowse.Hit hit, String game,
                                      String[] loaders, File dir, List<String> installed, List<String> missing,
                                      List<String> conflicts) throws IOException, InterruptedException {
-        return installFile(launcher, kind, hit, game, loaders, dir, installed, missing, conflicts, new java.util.HashSet<String>(), 0);
+        return installFile(launcher, kind, hit, game, loaders, dir, installed, missing, conflicts, new java.util.HashSet<String>(), 0, null);
+    }
+
+    /**
+     * 26.11.2026 (власник: «дозволь обирати версії модів перед установкою»): як вище, але саме файл {@code fileId}, який
+     * гравець вибрав зі списку ({@link #fileChoices}). null: як раніше, найновіший.
+     */
+    public static String installFile(Launcher launcher, ModrinthBrowse.Kind kind, ModrinthBrowse.Hit hit, String game,
+                                     String[] loaders, File dir, List<String> installed, List<String> missing,
+                                     List<String> conflicts, String fileId) throws IOException, InterruptedException {
+        return installFile(launcher, kind, hit, game, loaders, dir, installed, missing, conflicts, new java.util.HashSet<String>(), 0, fileId);
+    }
+
+    /**
+     * 26.11.2026: файли мода (ресурспака, шейдера) під цю гру і завантажувач збірки, від новішого, у вигляді версій
+     * Modrinth: для вибору версії перед встановленням. {@code id} це id файлу CurseForge.
+     */
+    public static List<ModrinthBrowse.PackVersion> fileChoices(Launcher launcher, ModrinthBrowse.Kind kind, ModrinthBrowse.Hit hit,
+                                                               String game, String[] loaders) throws IOException, InterruptedException {
+        List<ModrinthBrowse.PackVersion> out = new ArrayList<ModrinthBrowse.PackVersion>();
+        java.util.Set<String> ids = new java.util.HashSet<String>();
+        String[] tries = kind == ModrinthBrowse.Kind.MOD && loaders != null ? loaders : new String[]{null};
+        for (String l : tries) {
+            for (JsonNode f : projectFiles(launcher, hit.id, game, l).path("files")) {
+                boolean untaggedForge = "forge".equals(l) && f.path("loaders").size() == 0;
+                if (l != null && !untaggedForge && !contains(f.path("loaders"), l)) continue;
+                String id = String.valueOf(f.path("id").asInt());
+                if (!ids.add(id)) continue;
+                ModrinthBrowse.PackVersion v = new ModrinthBrowse.PackVersion();
+                v.id = id;
+                v.name = f.path("name").asText(f.path("fileName").asText(id));
+                v.number = v.name;
+                v.type = f.path("type").asText("release");
+                v.date = f.path("date").asText("");
+                if (game != null) v.games.add(game);
+                if (l != null) v.loaders.add(l);
+                out.add(v);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 26.11.2026 (сумісні версії з CurseForge, {@link com.gummer.launcher.manage.CompatFix}): лише сам файл {@code fileId}
+     * мода {@code hitId} (без залежностей і без запису в журнал) у {@code part}, зі звіркою sha1. Повертає назву файлу,
+     * як вона на CurseForge. Файл, який автор дозволяє лише на сайті і якого немає на Modrinth: IOException (без вікна).
+     */
+    public static String downloadFile(Launcher launcher, String hitId, String game, String[] loaders, String fileId, File part)
+            throws IOException, InterruptedException {
+        for (String l : loaders) {
+            JsonNode a = projectFiles(launcher, hitId, game, l);
+            for (JsonNode f : a.path("files")) {
+                if (!fileId.equals(String.valueOf(f.path("id").asInt()))) continue;
+                ModrinthBrowse.Hit h = new ModrinthBrowse.Hit();
+                h.id = hitId;
+                CurseForge.FileInfo info = fileInfo(f, a.path("mod"), numericId(hitId), h);
+                String fileName = info.fileName;
+                if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\") || fileName.startsWith(".")
+                        || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+                    throw new IOException("Unexpected file name: " + fileName);
+                }
+                CurseForge.ModrinthCopy exact = info.downloadUrl == null && info.sha1 != null
+                        ? CurseForge.modrinthCopies(Collections.singletonList(info.sha1)).get(info.sha1.toLowerCase(java.util.Locale.ROOT)) : null;
+                if (info.downloadUrl == null && exact == null) throw new IOException(NOT_DOWNLOADED);
+                download(info, exact, part, fileName);
+                return fileName;
+            }
+        }
+        throw new IOException(ModrinthBrowse.NO_VERSION);
     }
 
     private static String installFile(Launcher launcher, ModrinthBrowse.Kind kind, ModrinthBrowse.Hit hit, String game,
                                       String[] loaders, File dir, List<String> installed, List<String> missing,
                                       List<String> conflicts, java.util.Set<String> seen, int depth)
+            throws IOException, InterruptedException {
+        return installFile(launcher, kind, hit, game, loaders, dir, installed, missing, conflicts, seen, depth, null);
+    }
+
+    private static String installFile(Launcher launcher, ModrinthBrowse.Kind kind, ModrinthBrowse.Hit hit, String game,
+                                      String[] loaders, File dir, List<String> installed, List<String> missing,
+                                      List<String> conflicts, java.util.Set<String> seen, int depth, String fileId)
             throws IOException, InterruptedException {
         seen.add(hit.id);
         // як у Modrinth: мод без завантажувача не ставимо (прийшла б Forge-збірка у Fabric)
@@ -414,6 +489,14 @@ public final class CurseBrowse {
                 // зовсім, а під фільтр Forge віддає їх сам; тоді інших завантажувачів ще не було, тож лише для Forge
                 boolean untaggedForge = "forge".equals(l) && f.path("loaders").size() == 0;
                 if (l != null && !untaggedForge && !contains(f.path("loaders"), l)) continue;
+                if (fileId != null) {
+                    // вибір гравця: лише цей файл
+                    if (fileId.equals(String.valueOf(f.path("id").asInt()))) {
+                        chosen = f;
+                        break;
+                    }
+                    continue;
+                }
                 if ("release".equals(f.path("type").asText("release"))) {
                     chosen = f;
                     break;

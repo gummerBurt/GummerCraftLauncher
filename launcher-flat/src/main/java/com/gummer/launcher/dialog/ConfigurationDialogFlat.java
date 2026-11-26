@@ -405,33 +405,20 @@ public class ConfigurationDialogFlat extends JDialog {
         installDirText.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent mouseEvent) {
-                JFileChooser fc = new JFileChooser(BootstrapConfig.get().getWorkingDirectory());
-                fc.setFileFilter(new FileFilter() {
-                    @Override
-                    public boolean accept(File f) {
-                        return f.isDirectory();
-                    }
-                    @Override
-                    public String getDescription() {
-                        return SharedLocale.tr("options.installDir.fileChooser.fileType");
-                    }
-                });
-                fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                fc.addActionListener(action -> {
-                    if (action.getActionCommand().equals("ApproveSelection")) {
-                        fc.setVisible(false);
-                        BootstrapConfig.get().setWorkingDirectory(fc.getSelectedFile());
-                        BootstrapConfig.get().save();
-                        installDirText.setText(BootstrapConfig.get().getWorkingDirectory().getAbsolutePath());
-                        save();
-                        SelfRestart.restartRequiredDialog(
-                            ConfigurationDialogFlat.class,
-                            SharedLocale.tr("options.needrestartforsuretitle"),
-                            SharedLocale.tr("options.needrestartforsure")
-                        );
-                    }
-                });
-                fc.showDialog(ConfigurationDialogFlat.this, SharedLocale.tr("options.installDir.fileChooser.buttonAccept"));
+                File picked = new com.gummer.launcher.swing.NativeFileDialog(ConfigurationDialogFlat.this)
+                        .folder(BootstrapConfig.get().getWorkingDirectory())
+                        .okLabel(SharedLocale.tr("options.installDir.fileChooser.buttonAccept"))
+                        .openFolder();
+                if (picked == null) return;
+                BootstrapConfig.get().setWorkingDirectory(picked);
+                BootstrapConfig.get().save();
+                installDirText.setText(BootstrapConfig.get().getWorkingDirectory().getAbsolutePath());
+                save();
+                SelfRestart.restartRequiredDialog(
+                    ConfigurationDialogFlat.class,
+                    SharedLocale.tr("options.needrestartforsuretitle"),
+                    SharedLocale.tr("options.needrestartforsure")
+                );
             }
         });
 
@@ -441,14 +428,11 @@ public class ConfigurationDialogFlat extends JDialog {
                 jvmRuntime.setSelectedItem(null);
                 jvmRuntime.setPopupVisible(false);
 
-                JFileChooser chooser = new JFileChooser();
-                chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                chooser.setFileFilter(new JavaRuntimeFileFilter());
-                chooser.setDialogTitle("Choose a Java executable");
-
-                int result = chooser.showOpenDialog(this);
-                if (result == JFileChooser.APPROVE_OPTION) {
-                    JavaRuntime runtime = JavaRuntimeFinder.getRuntimeFromPath(chooser.getSelectedFile().getAbsolutePath());
+                File javaExe = new com.gummer.launcher.swing.NativeFileDialog(this).title("Choose a Java executable")
+                        .filter("Java (java, javaw)", new JavaRuntimeFileFilter(), "java.exe", "javaw.exe", "java", "javaw")
+                        .openFile();
+                if (javaExe != null) {
+                    JavaRuntime runtime = JavaRuntimeFinder.getRuntimeFromPath(javaExe.getAbsolutePath());
 
                     MutableComboBoxModel<JavaRuntime> model = (MutableComboBoxModel<JavaRuntime>) jvmRuntime.getModel();
                     model.insertElementAt(runtime, 0);

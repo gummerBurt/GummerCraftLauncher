@@ -335,28 +335,27 @@ public final class FpsPresets {
             // id мода в jar не завжди як slug на Modrinth (ferrite-core -> ferritecore)
             if (have.contains(slug.replace("-", "")) || have.contains(slug) || ModrinthBrowse.looksInstalled(dir, null, slug)) continue;
             List<String> got = new ArrayList<String>(), conflicts = new ArrayList<String>(), missing = new ArrayList<String>();
-            ModrinthBrowse.Hit h = new ModrinthBrowse.Hit();
+            // 26.11.2026: Modrinth, а якщо там немає під цю збірку, той самий мод з CurseForge (ModSources)
+            ModSources.Found h;
             try {
-                com.fasterxml.jackson.databind.JsonNode proj = ModrinthBrowse.getJson("https://api.modrinth.com/v2/project/" + slug);
-                h.id = proj.path("id").asText(slug);
-                h.slug = proj.path("slug").asText(slug);
-                h.title = proj.path("title").asText(slug);
-                if (ModrinthBrowse.looksInstalled(dir, h.id, h.slug)) continue;
+                h = ModSources.find(slug, ModrinthBrowse.Kind.MOD, game, loaders);
+                if (h == null) throw new IOException(ModrinthBrowse.NO_VERSION);
+                if (ModrinthBrowse.looksInstalled(dir, h.hit.id, h.hit.slug)) continue;
                 java.util.Set<String> before = names(dir);
                 try {
-                    ModrinthBrowse.install(ModrinthBrowse.Kind.MOD, h, game, loaders, dir, null, missing, conflicts);
+                    ModSources.install(h, ModrinthBrowse.Kind.MOD, game, loaders, dir, null, missing, conflicts);
                 } finally {
                     // install дає назви модів, а прибирати треба файли: що з'явилось у теці
                     for (String f : names(dir)) if (!before.contains(f)) got.add(f);
                 }
             } catch (IOException e) {
-                r.skipped.add((h.title != null ? h.title : slug) + ": " + com.skcraft.launcher.util.SharedLocale.tr("fps.mods.noVersion"));
+                r.skipped.add(slug + ": " + com.skcraft.launcher.util.SharedLocale.tr("fps.mods.noVersion"));
                 continue;
             }
             if (!conflicts.isEmpty() || !missing.isEmpty()) {
                 // несумісний з наявним модом чи без залежності: краще без нього, ніж зламана збірка
                 for (String f : got) new File(dir, f).delete();
-                r.skipped.add(h.title + ": " + (conflicts.isEmpty() ? com.skcraft.launcher.util.SharedLocale.tr("fps.mods.noDeps")
+                r.skipped.add(h.title() + ": " + (conflicts.isEmpty() ? com.skcraft.launcher.util.SharedLocale.tr("fps.mods.noDeps")
                         : com.skcraft.launcher.util.SharedLocale.tr("fps.mods.conflict", String.join(", ", conflicts))));
                 continue;
             }

@@ -20,7 +20,6 @@ import net.miginfocom.swing.MigLayout;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -572,10 +571,8 @@ public class ServerAccountDialog extends JDialog {
         }
 
         private void choosePng() {
-            JFileChooser fc = new JFileChooser();
-            fc.setFileFilter(new FileNameExtensionFilter(tr("serverAccount.pngFilter"), "png"));
-            if (fc.showOpenDialog(ServerAccountDialog.this) != JFileChooser.APPROVE_OPTION) return;
-            File f = fc.getSelectedFile();
+            File f = new com.gummer.launcher.swing.NativeFileDialog(ServerAccountDialog.this).filter(tr("serverAccount.pngFilter"), "png").openFile();
+            if (f == null) return;
             try {
                 byte[] data = Files.readAllBytes(f.toPath());
                 BufferedImage img = data.length > 65536 ? null : ImageIO.read(new ByteArrayInputStream(data));

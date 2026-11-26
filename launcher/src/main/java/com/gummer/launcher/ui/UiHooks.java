@@ -44,6 +44,9 @@ public final class UiHooks {
     /** 19.11.2026: вікно «Збірка» на вкладці «Світи» (помічник при вильоті у світі: бекапи). */
     public static volatile InstanceAction openWorlds;
 
+    /** 26.11.2026: помічник «Гра з другом» (галочка у вікні вибору акаунта перед запуском), модальний. */
+    public static volatile InstanceAction friendPlay;
+
     private UiHooks() {
     }
 }

@@ -511,11 +511,36 @@ public final class ModrinthBrowse {
      */
     public static String install(Kind kind, Hit hit, String gameVersion, String[] shaderLoaders, File dir, List<String> installed,
                                  List<String> missing, List<String> conflicts) throws IOException, InterruptedException {
-        return install(kind, hit, gameVersion, shaderLoaders, dir, installed, missing, conflicts, new java.util.HashSet<String>(), 0);
+        return install(kind, hit, gameVersion, shaderLoaders, dir, installed, missing, conflicts, new java.util.HashSet<String>(), 0, null, false);
+    }
+
+    /**
+     * 26.11.2026 (власник: «дозволь обирати версії модів перед установкою»): як вище, але саме версію {@code versionId},
+     * яку гравець вибрав зі списку ({@link #modVersions}). Якщо вона не йде під завантажувач збірки, нічого не ставиться
+     * ({@link ModUpdates.LoaderTooOld}), іншу версію замість вибраної лаунчер не підсовує. null: як раніше, найновіша.
+     */
+    public static String install(Kind kind, Hit hit, String gameVersion, String[] shaderLoaders, File dir, List<String> installed,
+                                 List<String> missing, List<String> conflicts, String versionId) throws IOException, InterruptedException {
+        return install(kind, hit, gameVersion, shaderLoaders, dir, installed, missing, conflicts, new java.util.HashSet<String>(), 0,
+                versionId, versionId != null);
     }
 
     private static String install(Kind kind, Hit hit, String gameVersion, String[] shaderLoaders, File dir, List<String> installed,
                                   List<String> missing, List<String> conflicts, java.util.Set<String> seen, int depth)
+            throws IOException, InterruptedException {
+        return install(kind, hit, gameVersion, shaderLoaders, dir, installed, missing, conflicts, seen, depth, null, false);
+    }
+
+    /**
+     * @param versionId версія, яку ставити першою: вибрана гравцем або та, яку автор мода вказав у залежності
+     *                  (26.11.2026: Iris 1.11.7 для 26.3 вказує Sodium 0.9.2, а найновіший Sodium 0.9.3 оголошує
+     *                  Iris до 1.12.0 несумісним, і гра з ними не запускається)
+     * @param strict    true: лише {@code versionId} (вибір гравця); false: якщо її немає під цю гру чи вона не йде під
+     *                  завантажувач, як раніше, найновіша, що підходить
+     */
+    private static String install(Kind kind, Hit hit, String gameVersion, String[] shaderLoaders, File dir, List<String> installed,
+                                  List<String> missing, List<String> conflicts, java.util.Set<String> seen, int depth,
+                                  String versionId, boolean strict)
             throws IOException, InterruptedException {
         seen.add(hit.id);
         // 17.11.2026: мод без завантажувача не ставимо: без фільтра API віддає будь-яку версію, і для Fabric
@@ -538,6 +563,7 @@ public final class ModrinthBrowse {
         JsonNode versions = getJson(url.toString());
         // API віддає від найновішої: перша стабільна (release), а якщо таких немає, найновіша бета
         List<JsonNode[]> releases = new ArrayList<JsonNode[]>(), others = new ArrayList<JsonNode[]>();
+        JsonNode[] pinned = null;
         for (JsonNode v : versions) {
             JsonNode primary = null;
             for (JsonNode f : v.path("files")) {
@@ -545,10 +571,22 @@ public final class ModrinthBrowse {
             }
             if (primary == null && v.path("files").size() > 0) primary = v.path("files").get(0);
             if (primary == null) continue;
-            ("release".equals(v.path("version_type").asText("release")) ? releases : others).add(new JsonNode[]{v, primary});
+            JsonNode[] c = new JsonNode[]{v, primary};
+            if (versionId != null && versionId.equals(v.path("id").asText(""))) pinned = c;
+            ("release".equals(v.path("version_type").asText("release")) ? releases : others).add(c);
         }
-        List<JsonNode[]> list = releases.isEmpty() ? others : releases;
+        if (versionId != null && pinned == null) {
+            if (strict) throw new IOException(NO_VERSION);
+            log.info("Modrinth " + hit.slug + ": the pinned version " + versionId + " is not for " + gameVersion + ", taking the newest");
+        }
+        List<JsonNode[]> list = strict ? java.util.Collections.singletonList(pinned) : releases.isEmpty() ? others : releases;
         if (list.isEmpty()) throw new IOException(NO_VERSION);
+        if (pinned != null && !strict) {
+            // вказана автором версія першою, далі як раніше (якщо вона не йде під завантажувач)
+            list = new ArrayList<JsonNode[]>(list);
+            list.remove(pinned);
+            list.add(0, pinned);
+        }
         dir.mkdirs();
         // 25.11.2026 (тікет #122): мод ставиться найновішою версією, яка йде під завантажувач збірки (вимога з самого
         // jar, LoaderVersion): найновіший Create для Fabric 1.20.1 хоче Fabric Loader 0.17.2, Fabric API 0.92.12 хоче
@@ -665,6 +703,8 @@ public final class ModrinthBrowse {
                                      List<String> missing, List<String> conflicts, java.util.Set<String> seen, int depth)
             throws IOException, InterruptedException {
         java.util.Map<String, String> wanted = new java.util.LinkedHashMap<String, String>(); // проєкт -> required / incompatible
+        // 26.11.2026: проєкт -> версія, яку вказав автор мода; ставиться саме вона, а не найновіша
+        java.util.Map<String, String> pins = new java.util.HashMap<String, String>();
         for (JsonNode dep : version.path("dependencies")) {
             String type = dep.path("dependency_type").asText("");
             if (!"required".equals(type) && !"incompatible".equals(type)) continue;
@@ -679,6 +719,7 @@ public final class ModrinthBrowse {
             }
             if (pid == null || !pid.matches("[A-Za-z0-9]+") || seen.contains(pid) || wanted.containsKey(pid)) continue;
             wanted.put(pid, type);
+            if (vid != null && vid.matches("[A-Za-z0-9]+")) pins.put(pid, vid);
         }
         if (wanted.isEmpty()) return;
         JsonNode projects;
@@ -704,7 +745,7 @@ public final class ModrinthBrowse {
             seen.add(pid);
             if (!"mod".equals(proj.path("project_type").asText("mod")) || here || depth >= 3) continue;
             try {
-                install(Kind.MOD, d, gameVersion, loaders, dir, installed, missing, conflicts, seen, depth + 1);
+                install(Kind.MOD, d, gameVersion, loaders, dir, installed, missing, conflicts, seen, depth + 1, pins.get(pid), false);
             } catch (ModUpdates.LoaderTooOld e) {
                 // 25.11.2026 (тікет #122): жодна версія залежності не йде під завантажувач збірки; з CurseForge теж не
                 // беремо (там вимоги до завантажувача не звіряються), гравця попередить вікно

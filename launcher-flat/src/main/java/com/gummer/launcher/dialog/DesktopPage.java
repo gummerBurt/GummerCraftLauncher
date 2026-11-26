@@ -47,6 +47,9 @@ import static com.skcraft.launcher.util.SharedLocale.tr;
  * першими за будь-якого сортування (між собою за тим самим сортуванням). Зберігаються назви збірок ({@code desktopPinned}).
  * Дата додавання це дата створення теки збірки на диску (для старих збірок, перенесених іншою програмою, може бути
  * дата перенесення). Однакова в трьох виглядах, кольори з {@link LookTheme}.
+ * 26.11.2026 (власник: «в іконки модпаків додай іконку шестерні котра відкриватиме налаштування збірки ... шестерню має
+ * бути видно коли гравець наведеться»): шестерня під мишею, у сітці під кнопкою ▶ (праворуч від іконки), у списку між ▶ і
+ * зірочкою; клік відкриває «Керування збіркою» (те саме вікно, що «Керування збіркою...» в меню збірки).
  */
 public final class DesktopPage extends JPanel {
 
@@ -61,6 +64,9 @@ public final class DesktopPage extends JPanel {
     private final InstanceTableModel model;
     private final Consumer<Instance> open;
     private final Consumer<Instance> play;
+    private final Consumer<Instance> settings;
+    /** 26.11.2026: помічник «Гра з другом» (іконка двох людей на плитці, як шестерня), null: немає. */
+    private Consumer<Instance> friend;
     private final Menu menu;
 
     /** Меню збірки по правому кліку, те саме, що в списку зліва (вікно, у якому сторінка). */
@@ -81,6 +87,8 @@ public final class DesktopPage extends JPanel {
         int loaderRank;
         long added;
         boolean pinned;
+        /** помічник «Гра з другом» працює в цій збірці */
+        boolean friendOk;
         Icon icon;
     }
 
@@ -91,12 +99,14 @@ public final class DesktopPage extends JPanel {
      * @param play вибрати і одразу запустити
      * @param menu меню збірки по правому кліку (25.11.2026, власник: «клацати пкм по іконках в робочому столі та в списку з тим
      *             самим результатом, як пкм по елементу в боковому меню»); вибір у списку зліва не міняється, сторінка лишається
+     * @param settings вікно «Керування збіркою» (шестерня на плитці); сторінка лишається
      */
-    public DesktopPage(InstanceTableModel model, Consumer<Instance> open, Consumer<Instance> play, Menu menu) {
+    public DesktopPage(InstanceTableModel model, Consumer<Instance> open, Consumer<Instance> play, Consumer<Instance> settings, Menu menu) {
         super(new BorderLayout());
         this.model = model;
         this.open = open;
         this.play = play;
+        this.settings = settings;
         this.menu = menu;
         setOpaque(false);
         LookTheme.Palette p = LookTheme.palette();
@@ -147,6 +157,15 @@ public final class DesktopPage extends JPanel {
         add(scroll, BorderLayout.CENTER);
     }
 
+    /**
+     * 26.11.2026 (власник: «в саму кнопку, так само як ми додали шестерню, можна додати іконку "дві людини", типу
+     * мультиплеєр»): помічник «Гра з другом» з плитки. Іконка видно під мишею, лише на збірках, де він працює.
+     */
+    public void setFriend(Consumer<Instance> friend) {
+        this.friend = friend;
+        board.repaint();
+    }
+
     /** Перечитати збірки (вікно показує сторінку чи список змінився). */
     public void refresh() {
         items.clear();
@@ -167,6 +186,7 @@ public final class DesktopPage extends JPanel {
             it.date = it.added > 0 ? df.format(new Date(it.added)) : "";
             it.icon = bigIcon(model.iconOf(i));
             it.pinned = pins.contains(i.getName());
+            it.friendOk = com.gummer.launcher.manage.FriendPlay.availability(i) == com.gummer.launcher.manage.FriendPlay.Availability.OK;
             items.add(it);
         }
         sortItems();
@@ -230,9 +250,9 @@ public final class DesktopPage extends JPanel {
 
     /** Поле з плитками або рядками: усе малюється тут, без компонента на кожну збірку. */
     private final class Board extends JComponent implements Scrollable {
-        static final int TILE_W = 156, TILE_H = 140, ROW_H = 58, GAP = 10, ICON = 48, PLAY = 30, STAR = 22;
+        static final int TILE_W = 156, TILE_H = 140, ROW_H = 58, GAP = 10, ICON = 48, PLAY = 30, STAR = 22, GEAR = 22;
         private int hover = -1;
-        private boolean hoverPlay, hoverStar;
+        private boolean hoverPlay, hoverStar, hoverGear, hoverFriend;
         private int cols = 1;
 
         Board() {
@@ -250,6 +270,8 @@ public final class DesktopPage extends JPanel {
                     hover = -1;
                     hoverPlay = false;
                     hoverStar = false;
+                    hoverGear = false;
+                    hoverFriend = false;
                     setToolTipText(null);
                     repaint();
                 }
@@ -281,6 +303,8 @@ public final class DesktopPage extends JPanel {
                     Instance inst = items.get(i).instance;
                     if (onStar(i, e.getPoint())) togglePin(items.get(i));
                     else if (onPlay(i, e.getPoint())) play.accept(inst);
+                    else if (settings != null && onGear(i, e.getPoint())) settings.accept(inst);
+                    else if (friendOn(i) && onFriend(i, e.getPoint())) friend.accept(inst);
                     else open.accept(inst);
                 }
             };
@@ -322,10 +346,42 @@ public final class DesktopPage extends JPanel {
             return new Rectangle(r.x + r.width - PLAY - 8, r.y + 8, PLAY, PLAY);
         }
 
-        /** Зірочка: у сітці лівий верхній кут, у списку перед кнопкою ▶. */
+        /** Шестерня: у сітці під кнопкою ▶, у списку між ▶ і зірочкою. */
+        private Rectangle gearBounds(int i) {
+            Rectangle r = bounds(i);
+            if (listMode) return new Rectangle(r.x + r.width - PLAY - 14 - GEAR - 12, r.y + (r.height - GEAR) / 2, GEAR, GEAR);
+            Rectangle pb = playBounds(i);
+            return new Rectangle(pb.x + (PLAY - GEAR) / 2, pb.y + PLAY + 8, GEAR, GEAR);
+        }
+
+        boolean onGear(int i, Point p) {
+            Rectangle b = gearBounds(i);
+            b.grow(3, 3);
+            return b.contains(p);
+        }
+
+        /** «Гра з другом»: у сітці під шестернею, у списку між шестернею і зірочкою. */
+        private Rectangle friendBounds(int i) {
+            Rectangle r = bounds(i);
+            if (listMode) return new Rectangle(r.x + r.width - PLAY - 14 - GEAR - 12 - GEAR - 12, r.y + (r.height - GEAR) / 2, GEAR, GEAR);
+            Rectangle gb = gearBounds(i);
+            return new Rectangle(gb.x, gb.y + GEAR + 8, GEAR, GEAR);
+        }
+
+        boolean friendOn(int i) {
+            return friend != null && i >= 0 && i < items.size() && items.get(i).friendOk;
+        }
+
+        boolean onFriend(int i, Point p) {
+            Rectangle b = friendBounds(i);
+            b.grow(3, 3);
+            return b.contains(p);
+        }
+
+        /** Зірочка: у сітці лівий верхній кут, у списку перед іконкою «Гра з другом». */
         private Rectangle starBounds(int i) {
             Rectangle r = bounds(i);
-            if (listMode) return new Rectangle(r.x + r.width - PLAY - 14 - STAR - 12, r.y + (r.height - STAR) / 2, STAR, STAR);
+            if (listMode) return new Rectangle(r.x + r.width - PLAY - 14 - GEAR - 12 - GEAR - 12 - STAR - 12, r.y + (r.height - STAR) / 2, STAR, STAR);
             return new Rectangle(r.x + 10, r.y + 10, STAR, STAR);
         }
 
@@ -350,11 +406,16 @@ public final class DesktopPage extends JPanel {
             int i = indexAt(p);
             boolean pl = i >= 0 && onPlay(i, p);
             boolean st = i >= 0 && onStar(i, p);
-            if (i != hover || pl != hoverPlay || st != hoverStar) {
+            boolean gr = i >= 0 && !pl && !st && settings != null && onGear(i, p);
+            boolean fr = i >= 0 && !pl && !st && !gr && friendOn(i) && onFriend(i, p);
+            if (i != hover || pl != hoverPlay || st != hoverStar || gr != hoverGear || fr != hoverFriend) {
                 hover = i;
                 hoverPlay = pl;
                 hoverStar = st;
-                setToolTipText(i < 0 ? null : pl ? tr("desktop.play") : st ? tr(items.get(i).pinned ? "desktop.unpin" : "desktop.pin")
+                hoverGear = gr;
+                hoverFriend = fr;
+                setToolTipText(i < 0 ? null : pl ? tr("desktop.play") : gr ? tr("desktop.settings") : fr ? tr("desktop.friend")
+                        : st ? tr(items.get(i).pinned ? "desktop.unpin" : "desktop.pin")
                         : items.get(i).title + " · " + items.get(i).sub
                         + (items.get(i).date.isEmpty() ? "" : " · " + tr("desktop.added", items.get(i).date)));
                 repaint();
@@ -394,15 +455,17 @@ public final class DesktopPage extends JPanel {
                 g2.drawRoundRect(r.x, r.y, r.width - 1, r.height - 1, arc, arc);
                 if (listMode) {
                     paintIcon(g2, it.icon, r.x + 12, r.y + (r.height - 36) / 2, 36);
+                    // 26.11.2026: мод для гри з другом уже стоїть
+                    if (com.gummer.launcher.manage.FriendReady.of(it.instance)) com.gummer.launcher.manage.FriendReady.paintBadge(g2, r.x + 12, r.y + (r.height - 36) / 2, 36, 36);
                     int tx = r.x + 60;
                     int dateW = 0;
                     if (!it.date.isEmpty()) {
                         g2.setFont(subFont);
                         dateW = g2.getFontMetrics().stringWidth(it.date);
                         g2.setColor(p.text3);
-                        g2.drawString(it.date, r.x + r.width - PLAY - 30 - STAR - 14 - dateW, r.y + r.height / 2 + 4);
+                        g2.drawString(it.date, r.x + r.width - PLAY - 30 - GEAR - 12 - GEAR - 12 - STAR - 14 - dateW, r.y + r.height / 2 + 4);
                     }
-                    int maxW = r.width - (tx - r.x) - PLAY - 50 - STAR - 14 - dateW;
+                    int maxW = r.width - (tx - r.x) - PLAY - 50 - GEAR - 12 - GEAR - 12 - STAR - 14 - dateW;
                     g2.setFont(titleFont);
                     g2.setColor(p.text);
                     g2.drawString(fit(g2, it.title, maxW), tx, r.y + 24);
@@ -411,7 +474,10 @@ public final class DesktopPage extends JPanel {
                     g2.drawString(fit(g2, it.sub, maxW), tx, r.y + 42);
                 } else {
                     paintIcon(g2, it.icon, r.x + (r.width - ICON) / 2, r.y + 18, ICON);
+                    if (com.gummer.launcher.manage.FriendReady.of(it.instance)) com.gummer.launcher.manage.FriendReady.paintBadge(g2, r.x + (r.width - ICON) / 2, r.y + 18, ICON, ICON);
                     int maxW = r.width - 20;
+                    // під мишею іконка «Гра з другом» стоїть праворуч на рівні назви: назва вужча, щоб не налазила
+                    if (hov && friendOn(i)) maxW = Math.min(maxW, 2 * (friendBounds(i).x - 6 - (r.x + r.width / 2)));
                     g2.setFont(titleFont);
                     g2.setColor(p.text);
                     String t = fit(g2, it.title, maxW);
@@ -423,6 +489,8 @@ public final class DesktopPage extends JPanel {
                 }
                 if (hov || listMode) paintPlay(g2, p, playBounds(i), hov && hoverPlay, hov);
                 if (it.pinned || hov) paintStar(g2, p, starBounds(i), it.pinned, hov && hoverStar);
+                if (hov && settings != null) paintGear(g2, p, gearBounds(i), hoverGear);
+                if (hov && friendOn(i)) paintFriend(g2, p, friendBounds(i), hoverFriend);
             }
             g2.dispose();
         }
@@ -435,6 +503,46 @@ public final class DesktopPage extends JPanel {
             int cx = b.x + b.width / 2 + 1, cy = b.y + b.height / 2;
             Polygon tri = new Polygon(new int[]{cx - 5, cx - 5, cx + 6}, new int[]{cy - 7, cy + 7, cy}, 3);
             g2.fill(tri);
+        }
+
+        /** Шестерня (лише під мишею): контур кольору тексту, під самою мишею кольору акценту. */
+        private void paintGear(Graphics2D g2, LookTheme.Palette p, Rectangle b, boolean hot) {
+            double cx = b.getCenterX(), cy = b.getCenterY();
+            double ro = b.width / 2.0, rb = ro * 0.74, rh = ro * 0.32; // зуби, тіло, отвір
+            int teeth = 8;
+            java.awt.geom.Path2D.Double gear = new java.awt.geom.Path2D.Double();
+            for (int k = 0; k < teeth; k++) {
+                double a0 = k * 2 * Math.PI / teeth;
+                double step = 2 * Math.PI / teeth;
+                // зуб: два кути на зовнішньому колі, западина на колі тіла
+                double[] ang = {a0 - step * 0.30, a0 - step * 0.18, a0 + step * 0.18, a0 + step * 0.30};
+                double[] rad = {rb, ro, ro, rb};
+                for (int j = 0; j < 4; j++) {
+                    double x = cx + rad[j] * Math.cos(ang[j]), y = cy + rad[j] * Math.sin(ang[j]);
+                    if (k == 0 && j == 0) gear.moveTo(x, y);
+                    else gear.lineTo(x, y);
+                }
+            }
+            gear.closePath();
+            java.awt.geom.Area shape = new java.awt.geom.Area(gear);
+            shape.subtract(new java.awt.geom.Area(new Ellipse2D.Double(cx - rh, cy - rh, rh * 2, rh * 2)));
+            Color base = hot ? p.accent : new Color(p.text.getRed(), p.text.getGreen(), p.text.getBlue(), 215);
+            if (hot) {
+                g2.setColor(new Color(p.accent.getRed(), p.accent.getGreen(), p.accent.getBlue(), 45));
+                g2.fill(new Ellipse2D.Double(b.x - 4, b.y - 4, b.width + 8, b.height + 8));
+            }
+            g2.setColor(base);
+            g2.fill(shape);
+        }
+
+        /** Дві людини (лише під мишею): кольору тексту, під самою мишею кольору акценту з ореолом, як шестерня. */
+        private void paintFriend(Graphics2D g2, LookTheme.Palette p, Rectangle b, boolean hot) {
+            if (hot) {
+                g2.setColor(new Color(p.accent.getRed(), p.accent.getGreen(), p.accent.getBlue(), 45));
+                g2.fill(new Ellipse2D.Double(b.x - 4, b.y - 4, b.width + 8, b.height + 8));
+            }
+            Color c = hot ? p.accent : new Color(p.text.getRed(), p.text.getGreen(), p.text.getBlue(), 215);
+            FriendPromo.paintPeople(g2, b.x, b.y + 1, b.width, c);
         }
 
         /** Зірочка: із зірочкою жовта заповнена, без неї контур (видно під мишею). */

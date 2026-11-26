@@ -399,6 +399,13 @@ public class LauncherFrameFlat2 extends JFrame {
         JPanel north = new JPanel(new BorderLayout());
         north.setOpaque(false);
         north.add(topBar, BorderLayout.NORTH);
+        // 26.11.2026 (власник: наклейка «Грати з другом», як наклейка StalDayZ на сайті): праворуч під кнопками
+        friendSticker = new FriendPromo.Sticker(() -> openFriend(getSelectedInstance()));
+        friendSticker.setVisible(false);
+        JPanel stickerRow = new JPanel(new MigLayout("insets 6 0 0 28, gap 0", "push[]", "[]"));
+        stickerRow.setOpaque(false);
+        stickerRow.add(friendSticker, "w 112!, h 140!, hidemode 3");
+        north.add(stickerRow, BorderLayout.EAST);
         JPanel oldExeBanner = createOldExeBanner();
         if (oldExeBanner != null) {
             // під логотипом (він до 112 px заввишки від верху сцени)
@@ -813,6 +820,7 @@ public class LauncherFrameFlat2 extends JFrame {
                 refreshVersionBox();
                 refreshStatusRow();
                 refreshModrinthPage();
+                refreshFriendPromo();
             }
         });
     }
@@ -1207,6 +1215,9 @@ public class LauncherFrameFlat2 extends JFrame {
         row.title = instancesModel.titleOf(i);
         // 17.11.2026: оновлення це зелена стрілка на іконці (InstanceTableModel), текст у підказці
         row.tooltip = instancesModel.updatesShown(i);
+        if (instancesModel.isInstalledOnly() && com.gummer.launcher.manage.FriendReady.of(i)) { // 26.11.2026: синій значок
+            row.tooltip = (row.tooltip != null ? row.tooltip + " · " : "") + tr("friend.ready");
+        }
         boolean server = !i.isBuiltIn();
         boolean prevServer = r > 0 && !instancesModel.getInstanceAt(r - 1).isBuiltIn();
         if (r == 0 || server != prevServer) row.header = tr(server ? "ui2.section.servers" : "ui2.section.minecraft");
@@ -1563,6 +1574,9 @@ public class LauncherFrameFlat2 extends JFrame {
         com.gummer.launcher.ui.UiHooks.instanceSettings = (owner, instance) -> InstanceSettingsDialogFlat.open(LauncherFrameFlat2.this, instance);
         com.gummer.launcher.ui.UiHooks.reinstall = (owner, instance) -> confirmHardUpdate(instance);
         com.gummer.launcher.ui.UiHooks.openMods = (owner, instance) -> openManage(instance, InstanceManageDialog.MODS);
+        // 26.11.2026: галочка «Гра з другом» у вікні вибору акаунта перед запуском (без переходу на іншу збірку)
+        com.gummer.launcher.ui.UiHooks.friendPlay = (owner, instance) -> FriendPlayDialog.open(owner, launcher, instance,
+                () -> openManage(instance, InstanceManageDialog.IMPEX), null);
         com.gummer.launcher.ui.UiHooks.openWorlds = (owner, instance) -> openManage(instance, InstanceManageDialog.WORLDS);
         com.gummer.launcher.ui.UiHooks.rollback = (owner, instance) -> MrpackUpdateFlow.rollback(LauncherFrameFlat2.this, launcher, instance, null);
         com.gummer.launcher.crash.CrashDialog.driversHelpUrl = launcher.getProperties().getProperty("driversHelpUrl");
@@ -1644,6 +1658,29 @@ public class LauncherFrameFlat2 extends JFrame {
      * @param y mouse Y
      * @param selected the selected instance, possibly null
      */
+    /** 26.11.2026: «Гра з другом» зробила копію ванільної збірки на Fabric: вибрати її. */
+    // ------------------------------------------------------------------ 26.11.2026: реклама «Гри з другом»
+
+    /** Наклейка «Грати з другом!» (FriendPromo), видно лише на збірках, де помічник працює. */
+    private FriendPromo.Sticker friendSticker;
+
+    /** Помічник «Гра з другом» для збірки (наклейка, іконка на плитці «Робочого столу»). */
+    private void openFriend(Instance i) {
+        if (i == null) return;
+        FriendPlayDialog.open(this, launcher, i, () -> openManage(i, InstanceManageDialog.IMPEX), this::friendSwitch);
+    }
+
+    private void refreshFriendPromo() {
+        Instance sel = getSelectedInstance();
+        if (friendSticker != null) friendSticker.setVisible(FriendPromo.worth(sel));
+    }
+
+    private void friendSwitch(String name) {
+        launcher.getConfig().setLastInstance(name);
+        com.skcraft.launcher.persistence.Persistence.commitAndForget(launcher.getConfig());
+        loadInstances();
+    }
+
     /** 17.11.2026: вікно «Керування збіркою» для збірки (кнопка «Збірка» біля «Грати» і меню збірки). */
     private void openManage(Instance instance, int page) {
         if (InstanceTableModel.isBrowser(instance)) return;
@@ -1733,6 +1770,14 @@ public class LauncherFrameFlat2 extends JFrame {
             if (!selected.isVanilla() && !com.gummer.launcher.manage.InstanceMods.packModsLocked(selected)) {
                 menuItem = new JMenuItem(tr("manage.menuMods"), widgetIcon);
                 menuItem.addActionListener(e -> openManage(selected, InstanceManageDialog.MODS));
+                popup.add(menuItem);
+            }
+            // 26.11.2026 (власник: «автоматизована гра з другом»): помічник ставить і сам налаштовує мод для гри
+            // поруч (LAN) чи через інтернет; у збірках GummerCraft і StalDayZ його немає
+            if (com.gummer.launcher.manage.FriendPlay.availability(selected) != com.gummer.launcher.manage.FriendPlay.Availability.LOCKED) {
+                menuItem = new JMenuItem(tr("friend.menu"), widgetIcon);
+                menuItem.addActionListener(e -> FriendPlayDialog.open(this, launcher, selected,
+                        () -> openManage(selected, InstanceManageDialog.IMPEX), this::friendSwitch));
                 popup.add(menuItem);
             }
 
@@ -1867,11 +1912,9 @@ public class LauncherFrameFlat2 extends JFrame {
     }
 
     private void importMrpack() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle(tr("mrpack.chooseTitle"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modrinth, CurseForge (.mrpack, .zip)", "mrpack", "zip"));
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
-        final File file = chooser.getSelectedFile();
+        final File file = new com.gummer.launcher.swing.NativeFileDialog(this).title(tr("mrpack.chooseTitle"))
+                .filter("Modrinth, CurseForge (.mrpack, .zip)", "mrpack", "zip").openFile();
+        if (file == null) return;
         final com.gummer.launcher.modrinth.MrpackPacks importer = new com.gummer.launcher.modrinth.MrpackPacks();
         com.google.common.util.concurrent.ListenableFuture<String> task = launcher.getExecutor().submit(
                 () -> importer.importFile(launcher, file));
@@ -1955,6 +1998,11 @@ public class LauncherFrameFlat2 extends JFrame {
         startOnlinePolling();
         loadNews();
         com.gummer.launcher.manage.UpdateBadges.refresh(launcher, this::badgesChanged);
+        // 26.11.2026: значок «готово до гри з другом» (FriendReady рахує у фоні)
+        com.gummer.launcher.manage.FriendReady.setChanged(() -> {
+            badgesChanged();
+            if (desktopPage != null) desktopPage.repaint();
+        });
     }
 
     /** Швидкий перший показ: список збірок лише з кешів на диску (мілісекунди, без мережі). false - кешу немає. */
@@ -2022,7 +2070,9 @@ public class LauncherFrameFlat2 extends JFrame {
         mainHolder.add(modrinthPage, "modrinth");
         // 25.11.2026: сторінка «Робочий стіл» (рядок угорі «Встановлених»): усі збірки сіткою чи списком
         desktopPage = new DesktopPage(instancesModel, this::openFromDesktop, this::playFromDesktop,
+                i -> openManage(i, InstanceManageDialog.GENERAL), // 26.11.2026: шестерня на плитці
                 (i, c, x, y) -> popupInstanceMenu(c, x, y, i)); // 25.11.2026: правий клік як у списку зліва
+        desktopPage.setFriend(this::openFriend); // 26.11.2026: іконка «дві людини» на плитці, як шестерня
         mainHolder.add(desktopPage, "desktop");
         curseforgePage = new ModrinthPage(launcher, true, name -> {
             // 17.11.2026 (власник: «чому після скачки я його маю окремо знайти в списку і встановити?»): модпак скачано,

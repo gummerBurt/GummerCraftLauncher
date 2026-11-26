@@ -571,7 +571,7 @@ public final class ModUpdates {
     }
 
     /** Скачати файл версії поруч з модами як {@code .назва.part} і звірити sha512 (лише cdn.modrinth.com). */
-    private static File fetch(JsonNode primary, File dir) throws IOException, InterruptedException {
+    static File fetch(JsonNode primary, File dir) throws IOException, InterruptedException {
         String fileName = primary.path("filename").asText("");
         String sha512 = primary.path("hashes").path("sha512").asText(null);
         URL url = new URL(primary.path("url").asText(""));
@@ -634,7 +634,7 @@ public final class ModUpdates {
         out.append('\n').append(text.isEmpty() ? com.skcraft.launcher.util.SharedLocale.tr("mrpack.update.noChangelog") : text);
     }
 
-    private static JsonNode primaryFile(JsonNode version) {
+    static JsonNode primaryFile(JsonNode version) {
         JsonNode first = null;
         for (JsonNode f : version.path("files")) {
             if (f.path("primary").asBoolean(false)) return f;

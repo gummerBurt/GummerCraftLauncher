@@ -44,6 +44,8 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 - CurseForge modpacks: browse and install them on the CurseForge page, like Modrinth, or open a CurseForge `.zip`. Modrinth `.mrpack` works too. Mods whose authors allow downloads only from the CurseForge website are listed with a "Download" button, and the launcher picks the downloaded files up from your Downloads folder by itself.
 - "Share build": a `.mrpack` file of a few kilobytes with mods from Modrinth and CurseForge saved as links, or a `.zip` with all the mods. Our launcher opens both, Prism too (it skips CurseForge mods from a `.mrpack`).
 - Import builds from Prism Launcher, PolyMC, ATLauncher, CurseForge, the old Modrinth App, TLauncher, SKlauncher and the official Minecraft launcher (MultiMC and any other launcher: pick the folder by hand). Mods, settings, resource packs and shaders are moved over, worlds if you want.
+- Mod sets in one click (comfort, map, shaders, ambience) picked for the build's loader and game version.
+- Play with a friend: the launcher installs and sets up a mod for playing nearby or over the internet without port forwarding, even with a friend without a license.
 
 **Helper: when something goes wrong**
 - **Before launch** it checks the mods: a mod for the wrong loader or game version, the same mod twice, incompatible pairs, missing dependencies. It offers to find the right version on Modrinth, download the dependency or disable what is extra. Damaged or missing game files are downloaded again on their own.
@@ -79,23 +81,19 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.41.1
+## What's new in 1.41.2
 
-- **Mods that fit the loader.** Mod updates, installs from search and the pre-launch auto-fix no longer install a mod version that needs a newer Fabric Loader, Quilt, Forge or NeoForge than the build has. If the game still does not start because of this, the crash window updates the loader in one click.
-- **The auto-fix no longer loops.** Before launch the launcher installs the lowest mod version that is enough, and if the game then crashes, it offers "Undo the auto-fix".
-- **"Has an update" in "My mods":** only the mods with a newer version, no need to scroll the whole list.
-- **Better crash help:** a crash on the early Forge loading screen (a "Turn off the early screen" button), a crash when Windows does not let the game write files, fewer false suggestions to update the graphics driver.
-- **Also:** the ▶ on the "Desktop" starts the game right there, modpacks that name a Forge build for another game version install again, the Java crash report in support requests, buttons start with a capital letter.
+- **Play with a friend in one click.** Right-click your build, "Play with a friend...", or the "Play with a friend!" sticker on the main page. Say whether your friend is nearby, and the launcher installs and sets up the right mod: on the same network or over the internet without port forwarding, even for a friend without a license, with voice chat as an option. Then short in-game steps, a "Send the build to a friend" button and, for LAN, a Windows Firewall check. Builds that already have such a mod are marked with a blue two-people badge.
+- **Mod sets.** "Manage build", "Mods", "Mod sets": "Comfort", "Map", "Shaders" and "Ambience and sound". The launcher picks the mods for the build's loader and game version and installs everything in one click; "Remove set" removes only what the set added. A "Remove multiplayer mods" button is there too.
+- **"Install a shader mod":** one button installs Iris and Sodium or Oculus and Embeddium when a build has no shader mod.
+- **Mod version choice:** a "Version..." button next to "Install", and before launch the launcher can find versions of two incompatible mods that work together.
+- **CurseForge as a backup source** for FPS mods, mod sets, "Play with a friend" and compatible versions, when Modrinth has nothing for the build.
+- **Also:** the standard Windows file picker with thumbnails, a gear and a "Play with a friend" button on "Desktop" tiles, a "Play with a friend" checkbox in the account window before launch.
 
-**Also in 1.41.0:**
+**Also in 1.41.1:**
 
-- **A "Desktop" with all your builds.** The first row in "Installed" opens a page with all your builds together, as a grid or a list, by name, mod loader or date. The ▶ button starts the game right away, and a star pins a build to the top.
-- **Scrolling like on the CurseForge page.** One wheel notch scrolls by a little over one build instead of two or three.
-- **Modrinth and CurseForge back each other up.** Mod updates and downloads of required mods now use both sources: what one of them lacks, the launcher takes from the other, but only the same mod.
-- **Smarter crash help.** When mods do not fit each other, the launcher updates or downloads the needed mod by itself and checks that it helped. After a crash with no visible reason it lists the mods added since the last good run and can turn them off.
-- **"My mods":** "Newest first", the date each mod was added, and your own mods can be deleted (the file goes to the Recycle Bin).
-- **Share a build in a few kilobytes:** mods from Modrinth and CurseForge are saved as links, your friend's launcher downloads them itself.
-- **Also:** fewer micro-stutters in Java 8 builds, the game output in support requests, modpacks on old Forge (Minecraft 1.7.10 - 1.10.2) install again, the maximized launcher no longer flashes after the game.
+- **Mods that fit the loader.** Mod updates, installs and the pre-launch auto-fix no longer install a mod version that needs a newer loader than the build has; the crash window updates the loader in one click.
+- **The auto-fix no longer loops** and can be undone; "Has an update" in "My mods"; better crash help for the early Forge screen and blocked file writes.
 
 The full list of changes is in the [CHANGELOG](CHANGELOG.md#english-changelog).
 

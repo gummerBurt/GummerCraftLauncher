@@ -34,6 +34,11 @@ public final class PreLaunchCheck {
         /** Ще одна деталь для тексту: версія гри збірки (WRONG_GAME). */
         public String extra = "";
         public final List<InstanceMods.Mod> disable = new ArrayList<InstanceMods.Mod>();
+        /**
+         * 26.11.2026: INCOMPATIBLE: мод, який оголосив несумісність саме з версіями (не «з усіма»), або null. Тоді
+         * {@link CompatFix} може поставити іншу версію одного з двох замість вимкнення.
+         */
+        public InstanceMods.Mod by;
 
         Issue(Kind kind, String mod, String detail) {
             this.kind = kind;
@@ -209,14 +214,14 @@ public final class PreLaunchCheck {
                 InstanceMods.Mod target = byId.get(b.getKey());
                 if (target == null || target == e.getKey() || off.contains(target)) continue;
                 Boolean hit = b.getValue().contains("*") ? Boolean.TRUE : McRange.fabric(b.getValue(), versionFor(info.get(target), b.getKey()));
-                if (Boolean.TRUE.equals(hit)) conflict(info, target, a.name, off, out);
+                if (Boolean.TRUE.equals(hit)) conflict(info, target, a.name, off, out).by = b.getValue().contains("*") ? null : e.getKey();
             }
             for (Map.Entry<String, String> b : a.breaksMaven.entrySet()) {
                 InstanceMods.Mod target = byId.get(b.getKey());
                 if (target == null || target == e.getKey() || off.contains(target)) continue;
                 String r = b.getValue().trim();
                 Boolean hit = r.isEmpty() || r.equals("*") ? Boolean.TRUE : McRange.maven(r, versionFor(info.get(target), b.getKey()));
-                if (Boolean.TRUE.equals(hit)) conflict(info, target, a.name, off, out);
+                if (Boolean.TRUE.equals(hit)) conflict(info, target, a.name, off, out).by = r.isEmpty() || r.equals("*") ? null : e.getKey();
             }
         }
         InstanceMods.Mod optifine = byId.get("optifine");
@@ -236,12 +241,33 @@ public final class PreLaunchCheck {
         return McRange.plainModVersion(mi.version);
     }
 
-    private static void conflict(Map<InstanceMods.Mod, ModInfo> info, InstanceMods.Mod disable, String with,
-                                 Set<InstanceMods.Mod> off, List<Issue> out) {
+    private static Issue conflict(Map<InstanceMods.Mod, ModInfo> info, InstanceMods.Mod disable, String with,
+                                  Set<InstanceMods.Mod> off, List<Issue> out) {
         Issue is = new Issue(Kind.INCOMPATIBLE, info.get(disable).name, with);
         is.disable.add(disable);
         out.add(is);
         off.add(disable);
+        return is;
+    }
+
+    /**
+     * 26.11.2026: чи оголосив мод {@code a} несумісність з модом {@code b} саме такої версії (Fabric breaks, NeoForge
+     * incompatible), за тими самими правилами, що і перевірка. Для {@link CompatFix}: чи підходить інша версія.
+     */
+    static boolean breaks(ModInfo a, ModInfo b) {
+        if (a == null || b == null) return false;
+        for (Map.Entry<String, List<String>> e : a.breaksFabric.entrySet()) {
+            if (!b.provides.contains(e.getKey())) continue;
+            Boolean hit = e.getValue().contains("*") ? Boolean.TRUE : McRange.fabric(e.getValue(), versionFor(b, e.getKey()));
+            if (Boolean.TRUE.equals(hit)) return true;
+        }
+        for (Map.Entry<String, String> e : a.breaksMaven.entrySet()) {
+            if (!b.provides.contains(e.getKey())) continue;
+            String r = e.getValue().trim();
+            Boolean hit = r.isEmpty() || r.equals("*") ? Boolean.TRUE : McRange.maven(r, versionFor(b, e.getKey()));
+            if (Boolean.TRUE.equals(hit)) return true;
+        }
+        return false;
     }
 
     /** Вимкнути файли, які пропонують проблеми (лишаються в теці як вимкнені, вмикаються у вікні «Збірка»). */

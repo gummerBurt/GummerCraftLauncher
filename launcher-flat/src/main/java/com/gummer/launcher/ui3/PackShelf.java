@@ -33,6 +33,8 @@ public final class PackShelf extends JComponent implements Scrollable {
         public boolean notInstalled;
         /** 17.11.2026: є оновлення модпака Modrinth чи своїх модів (UpdateBadges): зелена стрілка. */
         public boolean updates;
+        /** 26.11.2026: мод для гри з другом стоїть (FriendReady): синій кружечок з двома людьми. */
+        public boolean friend;
         /** Підпис групи, якщо з цієї плитки починається нова група. */
         public String group;
         public String tooltip;
@@ -330,6 +332,12 @@ public final class PackShelf extends JComponent implements Scrollable {
             g.fillOval(bx - w + 7, by + 6, 6, 6);
             g.drawString(t.online, bx - w + 16, by + 13);
             bx -= w + 4;
+        }
+        if (t.friend) {
+            g.setColor(new Color(0, 0, 0, 175));
+            g.fillOval(bx - 20, by - 1, 20, 20);
+            com.gummer.launcher.manage.FriendReady.paintDot(g, bx - 18, by + 1, 16);
+            bx -= 22;
         }
         if (t.updates && !t.update && !t.notInstalled) {
             g.setColor(new Color(0, 0, 0, 175));

@@ -39,7 +39,8 @@ public final class PreLaunchDialog {
         log.info("Pre-launch check: " + issues.size() + " issue(s)");
         final int[] answer = {-1};
         // 1.36.1: і мод не під завантажувач збірки (той самий мод під потрібний завантажувач з Modrinth, див. LoaderSwap)
-        final boolean canFetch = hasMissing(issues) || hasWrongLoader(issues);
+        // 26.11.2026: і несумісність, задана версіями (CompatFix ставить сумісну версію одного з двох модів)
+        final boolean canFetch = hasMissing(issues) || hasWrongLoader(issues) || CompatFix.canTry(issues);
         try {
             SwingUtilities.invokeAndWait(() -> answer[0] = show(instance, issues, canFetch));
         } catch (Exception e) {
@@ -61,6 +62,15 @@ public final class PreLaunchDialog {
                     Thread.currentThread().interrupt();
                     throw new LauncherException("Cancelled", SharedLocale.tr("prelaunch.cancelled"));
                 }
+            }
+            // 26.11.2026 (гравець вимкнув Sodium, і «Iris: бракує sodium» не прибиралось ніяк): вимкнений мод, якого
+            // бракує, вмикається, а несумісні версії замінюються сумісними
+            try {
+                List<String> changed = CompatFix.fix(instance, issues);
+                if (!changed.isEmpty()) log.info("Pre-launch check: compatible versions " + changed);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new LauncherException("Cancelled", SharedLocale.tr("prelaunch.cancelled"));
             }
             for (PreLaunchCheck.Issue is : issues) {
                 if (is.kind != PreLaunchCheck.Kind.MISSING || is.disable.isEmpty()) continue;
@@ -134,10 +144,13 @@ public final class PreLaunchDialog {
             html.append("&#8226; ").append(esc(SharedLocale.tr(key, is.mod, is.detail, is.extra))).append("<br>");
         }
         boolean swap = canFetch && hasWrongLoader(issues);
+        // 26.11.2026: лише несумісність версіями (без нестачі і заміни): своя кнопка і пояснення
+        boolean compat = canFetch && !swap && !hasMissing(issues) && CompatFix.canTry(issues);
         if (swap) html.append("<br>").append(esc(SharedLocale.tr("prelaunch.swapHint")));
+        else if (canFetch && CompatFix.canTry(issues)) html.append("<br>").append(esc(SharedLocale.tr("prelaunch.compatHint", SharedLocale.tr(compat ? "prelaunch.compat" : "prelaunch.fetch"))));
         html.append("<br>").append(esc(SharedLocale.tr("prelaunch.hint"))).append("</body></html>");
         Object[] options = canFetch
-                ? new Object[]{SharedLocale.tr(swap ? "prelaunch.swap" : "prelaunch.fetch"), SharedLocale.tr("prelaunch.fix"), SharedLocale.tr("prelaunch.anyway"), SharedLocale.tr("prelaunch.cancel")}
+                ? new Object[]{SharedLocale.tr(swap ? "prelaunch.swap" : compat ? "prelaunch.compat" : "prelaunch.fetch"), SharedLocale.tr("prelaunch.fix"), SharedLocale.tr("prelaunch.anyway"), SharedLocale.tr("prelaunch.cancel")}
                 : new Object[]{SharedLocale.tr("prelaunch.fix"), SharedLocale.tr("prelaunch.anyway"), SharedLocale.tr("prelaunch.cancel")};
         Window owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
         if (owner == null) {

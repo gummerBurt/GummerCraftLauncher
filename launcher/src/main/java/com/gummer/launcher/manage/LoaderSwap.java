@@ -54,7 +54,7 @@ final class LoaderSwap {
         }
         if (project == null) {
             log.info("Loader swap: " + jar.getName() + " is not on Modrinth");
-            return null;
+            return fromCurse(jar, mi, game, loaders, missing);
         }
         try {
             StringBuilder l = new StringBuilder("[");
@@ -71,7 +71,7 @@ final class LoaderSwap {
             }
             if (chosen == null) {
                 log.info("Loader swap: no " + Arrays.toString(loaders) + " " + game + " version of " + project + " (" + jar.getName() + ")");
-                return null;
+                return fromCurse(jar, mi, game, loaders, missing);
             }
             JsonNode primary = null;
             for (JsonNode f : chosen.path("files")) {
@@ -91,5 +91,51 @@ final class LoaderSwap {
             log.info("Loader swap failed for " + jar.getName() + ": " + e);
             return null;
         }
+    }
+
+    /**
+     * 26.11.2026 (власник: «шукати і на Modrinth, і на CurseForge»): на Modrinth заміни немає, тож той самий мод з
+     * CurseForge: за fingerprint файлу (той самий проєкт), інакше за назвою мода ({@link ModSources}). Старий файл на час
+     * встановлення відкладається (інакше «мод з таким id уже є» лишив би його), потім іде у сховище відкату.
+     */
+    private static File fromCurse(File jar, ModInfo mi, String game, String[] loaders, List<String> missing) throws InterruptedException {
+        com.skcraft.launcher.Launcher l = com.gummer.launcher.curseforge.CurseBrowse.shared();
+        if (l == null) return null;
+        ModrinthBrowse.Hit hit = null;
+        try {
+            long fp = com.gummer.launcher.curseforge.CurseForge.fingerprint(jar);
+            int[] m = com.gummer.launcher.curseforge.CurseForge.matchFingerprints(l, java.util.Collections.singletonList(fp)).get(fp);
+            if (m != null && m[1] > 0) {
+                hit = new ModrinthBrowse.Hit();
+                hit.id = com.gummer.launcher.curseforge.CurseBrowse.ID_PREFIX + m[1];
+                hit.title = mi != null && mi.name != null ? mi.name : jar.getName();
+                if (com.gummer.launcher.curseforge.CurseBrowse.fileChoices(l, ModrinthBrowse.Kind.MOD, hit, game, loaders).isEmpty()) hit = null;
+            }
+        } catch (IOException e) {
+            log.info("Loader swap: CurseForge fingerprint lookup failed for " + jar.getName() + ": " + e.getMessage());
+        }
+        if (hit == null && mi != null && mi.name != null && !mi.name.trim().isEmpty()) {
+            ModSources.Found f = ModSources.find("cf:" + mi.name, ModrinthBrowse.Kind.MOD, game, loaders);
+            if (f != null) hit = f.hit;
+        }
+        if (hit == null) {
+            log.info("Loader swap: " + jar.getName() + " is not on CurseForge for " + game + " " + Arrays.toString(loaders) + " either");
+            return null;
+        }
+        File dir = jar.getParentFile();
+        File aside = new File(dir, "." + jar.getName() + ".swapping");
+        if (!jar.renameTo(aside)) return null;
+        String name = null;
+        try {
+            name = com.gummer.launcher.curseforge.CurseBrowse.installFile(l, ModrinthBrowse.Kind.MOD, hit, game, loaders, dir, null, missing, null);
+        } catch (IOException e) {
+            log.info("Loader swap from CurseForge failed for " + jar.getName() + ": " + e.getMessage());
+        } finally {
+            if (!aside.renameTo(jar)) log.warning("Loader swap: could not put back " + jar.getName());
+        }
+        if (name == null || name.equals(jar.getName())) return null;
+        if (!ModRollback.keep(jar, name, mi != null && mi.version != null ? mi.version : "?", hit.id)) jar.delete();
+        log.info("Loader swap: " + jar.getName() + " -> " + name + " (CurseForge)");
+        return new File(dir, name);
     }
 }

@@ -959,6 +959,10 @@ public class InstanceTableModel extends AbstractTableModel {
             fitOff = false;
         }
         String updates = updatesText(getInstanceAt(row)); // 17.11.2026: що означає зелена стрілка на іконці
+        // 26.11.2026: що означає синій значок з двома людьми
+        if (installedOnly && com.gummer.launcher.manage.FriendReady.of(getInstanceAt(row))) {
+            updates = (updates != null ? updates + " · " : "") + SharedLocale.tr("friend.ready");
+        }
         if (full == null || full.equals(shown)) return updates;
         return (updates != null ? full + " · " + updates : full.toString()).replaceAll("<br\\s*/?>", " · ").replaceAll("<[^>]+>", "").replace("&nbsp;", " ")
                 .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
@@ -1149,6 +1153,16 @@ public class InstanceTableModel extends AbstractTableModel {
             if (z == null) zoomIcons.put(icon, z = new ZoomIcon(icon, zoom));
             v = z;
         }
+        // 26.11.2026 (власник: «познач якось ті збірки, котрі готові до гри з другом»): синій значок з двома людьми
+        // в лівому нижньому куті іконки, лише у «Встановлених»; стрілка оновлень лишається в правому
+        if (columnIndex == 0 && installedOnly && friendBadges && v instanceof Icon && com.gummer.launcher.manage.FriendReady.of(getInstanceAt(rowIndex))) {
+            Icon icon = (Icon) v;
+            synchronized (friendIcons) {
+                Icon b = friendIcons.get(icon);
+                if (b == null) friendIcons.put(icon, b = new FriendBadgeIcon(icon));
+                v = b;
+            }
+        }
         // 17.11.2026 (власник: «а бейдж не влазить»): оновлення збірки це зелена стрілка на куті іконки, а не текст у
         // підписі (там він скорочувався до «є оновленн...»); повний текст у підказці (tooltipAt) і біля «Запуску»
         // 21.11.2026 (власник: «в "додати" не має бути стрілочок оновлення, лише у "встановлені"»)
@@ -1164,6 +1178,38 @@ public class InstanceTableModel extends AbstractTableModel {
     }
 
     private final java.util.Map<Icon, Icon> badgeIcons = new java.util.WeakHashMap<Icon, Icon>();
+    private final java.util.Map<Icon, Icon> friendIcons = new java.util.WeakHashMap<Icon, Icon>();
+    private volatile boolean friendBadges = true;
+
+    /** 26.11.2026: значок «готово до гри з другом» на іконці; Бібліотека малює свій кружечок на плитці і вимикає цей. */
+    public void setFriendBadges(boolean on) {
+        friendBadges = on;
+    }
+
+    /** Іконка збірки зі значком «готово до гри з другом» у лівому нижньому куті. */
+    public static final class FriendBadgeIcon implements Icon {
+        private final Icon base;
+
+        public FriendBadgeIcon(Icon base) {
+            this.base = base;
+        }
+
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+            base.paintIcon(c, g, x, y);
+            com.gummer.launcher.manage.FriendReady.paintBadge(g, x, y, getIconWidth(), getIconHeight());
+        }
+
+        @Override
+        public int getIconWidth() {
+            return base.getIconWidth();
+        }
+
+        @Override
+        public int getIconHeight() {
+            return base.getIconHeight();
+        }
+    }
 
     /** Іконка збірки з зеленим кружечком і стрілкою вгору в правому нижньому куті (є оновлення). */
     public static final class UpdateBadgeIcon implements Icon {
