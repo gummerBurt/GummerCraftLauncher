@@ -46,3 +46,6 @@ gradlew         text eol=lf
 # Linux: скрипт установки та ярлик мусять мати LF навіть на Windows (core.autocrlf=true), інакше bash падає на символі CR
 *.sh            text eol=lf
 *.desktop       text eol=lf
+
+# json у ресурсах jar (mod-sets.json, maven_repos.json): завжди LF, інакше jar з Windows-чекауту (core.autocrlf=true) не збігається з публічною збіркою і verify-cdn.py падає
+*.json          text eol=lf
