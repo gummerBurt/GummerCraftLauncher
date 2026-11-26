@@ -81,9 +81,13 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.41.3
+## What's new in 1.41.4
 
-- **Java installs even when an antivirus blocks Windows system files.** On Windows 10 and 11 the launcher skips a blocked copy of `ucrtbase.dll` or `api-ms-win-*.dll` in the Java folder (only Windows 7 and 8.1 need them) instead of stopping the install.
+- **A mod installs even when its newest versions do not fit the build's loader.** If no release version fits (JEI for Fabric 1.20.1 has only 2 releases, both needing Fabric Loader 0.19.4), the launcher picks the newest fitting beta.
+- **Clear errors on the Modrinth mods page.** A too old loader is named as such; an unknown failure opens the error window with "Write to support".
+- **Shaders tab:** says the build already has a shader mod when Iris, Oculus or OptiFine is there.
+
+**Also in 1.41.3:** Java installs even when an antivirus blocks Windows system files (`ucrtbase.dll`, `api-ms-win-*.dll` copies are skipped on Windows 10 and 11).
 
 **Also in 1.41.2:**
 

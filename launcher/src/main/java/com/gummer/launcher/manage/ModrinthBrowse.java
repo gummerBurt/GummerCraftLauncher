@@ -580,6 +580,7 @@ public final class ModrinthBrowse {
             log.info("Modrinth " + hit.slug + ": the pinned version " + versionId + " is not for " + gameVersion + ", taking the newest");
         }
         List<JsonNode[]> list = strict ? java.util.Collections.singletonList(pinned) : releases.isEmpty() ? others : releases;
+        final boolean betaFallback = !strict && !releases.isEmpty() && !others.isEmpty();
         if (list.isEmpty()) throw new IOException(NO_VERSION);
         if (pinned != null && !strict) {
             // вказана автором версія першою, далі як раніше (якщо вона не йде під завантажувач)
@@ -597,26 +598,22 @@ public final class ModrinthBrowse {
         int best = -1;
         File bestPart = null;
         try {
-            Object first = fetchFitting(kind, hit, list.get(0), dir, have, need);
-            if (first instanceof String) return (String) first;
-            if (first != null) {
-                best = 0;
-                bestPart = (File) first;
-            } else {
-                int lo = 1, hi = list.size() - 1, tries = 1;
-                while (lo <= hi && tries < MAX_LOADER_TRIES) {
-                    int mid = (lo + hi) >>> 1;
-                    tries++;
-                    Object got = fetchFitting(kind, hit, list.get(mid), dir, have, need);
-                    if (got instanceof String) return (String) got;
-                    if (got != null) {
-                        if (bestPart != null) bestPart.delete();
-                        best = mid;
-                        bestPart = (File) got;
-                        hi = mid - 1;
-                    } else {
-                        lo = mid + 1;
-                    }
+            Object[] found = searchFitting(kind, hit, list, dir, have, need);
+            if (found[0] instanceof String) return (String) found[0];
+            if (found[0] != null) {
+                best = (Integer) found[1];
+                bestPart = (File) found[0];
+            }
+            // 26.11.2026 (тікети 133, 135): у JEI для Fabric 1.20.1 лише 2 версії release (обидві хочуть Fabric Loader
+            // 0.19.4), решта 217 beta; якщо жоден release не йде під завантажувач збірки, той самий пошук серед beta
+            if (bestPart == null && !strict && kind == Kind.MOD && have != null && betaFallback) {
+                log.info("Modrinth " + hit.slug + ": no release fits " + have + ", trying " + others.size() + " beta/alpha versions");
+                found = searchFitting(kind, hit, others, dir, have, need);
+                if (found[0] instanceof String) return (String) found[0];
+                if (found[0] != null) {
+                    list = others;
+                    best = (Integer) found[1];
+                    bestPart = (File) found[0];
                 }
             }
             if (bestPart == null) {
@@ -649,6 +646,37 @@ public final class ModrinthBrowse {
         } finally {
             if (bestPart != null) bestPart.delete();
         }
+    }
+
+    /**
+     * Найновіша версія зі списку (від найновішої), що йде під завантажувач: перша, далі двійковий пошук (до
+     * {@link #MAX_LOADER_TRIES} завантажень). Повертає {результат fetchFitting або null, індекс}; зайві .part видаляє.
+     */
+    private static Object[] searchFitting(Kind kind, Hit hit, List<JsonNode[]> list, File dir, LoaderVersion have, String[] need)
+            throws IOException, InterruptedException {
+        Object first = fetchFitting(kind, hit, list.get(0), dir, have, need);
+        if (first != null) return new Object[]{first, 0};
+        int best = -1;
+        File bestPart = null;
+        int lo = 1, hi = list.size() - 1, tries = 1;
+        while (lo <= hi && tries < MAX_LOADER_TRIES) {
+            int mid = (lo + hi) >>> 1;
+            tries++;
+            Object got = fetchFitting(kind, hit, list.get(mid), dir, have, need);
+            if (got instanceof String) {
+                if (bestPart != null) bestPart.delete();
+                return new Object[]{got, mid};
+            }
+            if (got != null) {
+                if (bestPart != null) bestPart.delete();
+                best = mid;
+                bestPart = (File) got;
+                hi = mid - 1;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return new Object[]{bestPart, best};
     }
 
     /** Скільки найбільше версій качаємо, шукаючи ту, що йде під завантажувач збірки (двійковий пошук). */

@@ -4,6 +4,12 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.41.4
+
+- **Мод ставиться, навіть якщо найновіші версії не йдуть під завантажувач збірки.** Деякі автори позначають на Modrinth стабільними лише кілька найновіших версій, а решту бетою: у JEI для Fabric 1.20.1 стабільних 2, і обидві хочуть Fabric Loader 0.19.4. Раніше в збірку зі старшим завантажувачем такий мод не ставився. Тепер, якщо жодна стабільна версія не підходить, лаунчер шукає серед бета-версій найновішу, що підходить, і ставить її.
+- **Зрозумілі помилки на сторінці «Моди Modrinth».** Якщо мод вимагає новіший завантажувач, лаунчер так і пише (як у вікні збірки), а не «Не вдалося встановити». Якщо причина невідома, відкривається вікно помилки з кнопкою «Написати в підтримку»: лог піде разом зі зверненням.
+- **«Шейдери»: мод уже є.** Якщо в збірці вже стоїть Iris, Oculus чи OptiFine, на вкладці «Шейдери» написано «В цій збірці вже є мод для шейдерів» замість «Шейдерам потрібен мод».
+
 ## 1.41.3
 
 - **Java ставиться, навіть коли антивірус чіпає системні файли Windows.** У збірках Java лежать копії системних бібліотек Windows (`ucrtbase.dll`, `api-ms-win-*.dll`), потрібні лише для Windows 7 і 8.1. Деякі антивіруси не дають їх прочитати або забирають у карантин, і встановлення збірки зупинялось з помилкою на кшталт «api-ms-win-core-util-l1-1-0.dll (Отказано в доступе)». Тепер на Windows 10 і 11 лаунчер такий файл пропускає і ставить Java далі: ці системи мають свою бібліотеку, і Java бере саме її. Поки все працює, нічого не змінилось.
@@ -347,6 +353,8 @@
 ---
 
 ## English changelog
+
+**1.41.4:** A mod installs even when its newest versions do not fit the build's loader: some authors mark only a few newest versions as release on Modrinth and the rest as beta (JEI for Fabric 1.20.1 has 2 releases, both needing Fabric Loader 0.19.4), so if no release fits, the launcher now picks the newest fitting beta. Clear errors on the Modrinth mods page: a too old loader is named as such, and an unknown failure opens the error window with "Write to support" (the log goes with the request). The Shaders tab says the build already has a shader mod when Iris, Oculus or OptiFine is there.
 
 **1.41.3:** Java installs even when an antivirus touches Windows system files. Java builds carry copies of Windows system libraries (`ucrtbase.dll`, `api-ms-win-*.dll`) that only Windows 7 and 8.1 need. Some antiviruses block reading them or quarantine them, and installing a build stopped with an error like "api-ms-win-core-util-l1-1-0.dll (Access is denied)". On Windows 10 and 11 the launcher now skips such a file and goes on with Java: these systems have their own library and Java uses it. Nothing changes while everything works.
 

@@ -2148,7 +2148,26 @@ public class InstanceManageDialog extends JDialog {
         if (!locked) head.add(addButton(page, dir, ext));
         head.add(folderButton(tr("manage.openFolder"), dir));
         c.add(head, "wmin 0");
-        c.add(LookUi.body(locked ? tr("manage.packs.hintLocked") : hint, true), "wmin 0");
+        final JTextArea hintText = LookUi.body(locked ? tr("manage.packs.hintLocked") : hint, true);
+        c.add(hintText, "wmin 0");
+        if (page == SHADERS && !instance.isVanilla()) {
+            // 26.11.2026 (власник): мод для шейдерів уже стоїть - так і пишемо, а не «Шейдерам потрібен мод»
+            new SwingWorker<Boolean, Void>() {
+                @Override
+                protected Boolean doInBackground() {
+                    return com.gummer.launcher.manage.ModSets.shaderModIn(instance) != null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        if (Boolean.TRUE.equals(get())) hintText.setText(tr("manage.shaders.hintHave"));
+                    } catch (Exception ignored) {
+                        // лишається звичайна підказка
+                    }
+                }
+            }.execute();
+        }
         c.add(list, "wmin 0, gaptop 6");
         // 17.11.2026: текст порожнього списку з переносом: створений разом зі сторінкою (доданий пізніше JTextArea
         // брав висоту за нульовою шириною і лишав у картці порожнє місце), fillFiles лише показує і ховає

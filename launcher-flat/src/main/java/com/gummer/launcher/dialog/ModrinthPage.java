@@ -956,10 +956,22 @@ public final class ModrinthPage extends JPanel {
                     });
                 } catch (Exception e) {
                     log.log(Level.WARNING, "Mod install failed: " + hit.slug + " -> " + target.getName(), e);
-                    SwingUtilities.invokeLater(() -> toast(Notification.Type.WARNING,
-                            ModrinthBrowse.NO_VERSION.equals(e.getMessage()) ? tr("mpage.mod.noVersion", modTitle, game)
-                                    : com.gummer.launcher.curseforge.CurseBrowse.NOT_DOWNLOADED.equals(e.getMessage())
-                                    ? tr("cpage.notDownloaded", modTitle) : tr("manage.browse.installFailed", modTitle)));
+                    SwingUtilities.invokeLater(() -> {
+                        if (ModrinthBrowse.NO_VERSION.equals(e.getMessage())) {
+                            toast(Notification.Type.WARNING, tr("mpage.mod.noVersion", modTitle, game));
+                        } else if (e instanceof com.gummer.launcher.manage.ModUpdates.LoaderTooOld) {
+                            // 26.11.2026 (тікети 133, 135): «потрібен новіший завантажувач», як у вікні збірки, а не
+                            // загальне «Не вдалося встановити»
+                            toast(Notification.Type.WARNING, e.getLocalizedMessage());
+                        } else if (com.gummer.launcher.curseforge.CurseBrowse.NOT_DOWNLOADED.equals(e.getMessage())) {
+                            toast(Notification.Type.WARNING, tr("cpage.notDownloaded", modTitle));
+                        } else {
+                            // 26.11.2026 (тікет 133): невідома причина - вікно помилки з кнопкою «Написати в підтримку»
+                            // (лог іде разом зі зверненням), а не лише тост без кнопки
+                            com.skcraft.launcher.swing.SwingHelper.showErrorDialog(SwingUtilities.getWindowAncestor(ModrinthPage.this),
+                                    tr("manage.browse.installFailed", modTitle), tr("errorTitle"), e);
+                        }
+                    });
                 }
             });
         }
