@@ -219,16 +219,27 @@ public abstract class BaseUpdater {
 
                     if (output.exists()) {
                         // Check SHA1
-                        if (FileUtils.getShaHash(output).equals(raw.getHash())) {
+                        String existingHash;
+                        try {
+                            existingHash = FileUtils.getShaHash(output);
+                        } catch (IOException e) {
+                            // 1.41.3: копію системної DLL Windows не дає прочитати антивірус; на Windows 10+ вона не потрібна
+                            if (!com.gummer.launcher.install.SystemDlls.optional(output)) throw e;
+                            com.gummer.launcher.install.SystemDlls.skipped(output, e);
+                            break;
+                        }
+                        if (existingHash.equals(raw.getHash())) {
                             System.out.println("File " + output.getAbsolutePath() + " OK");
                             break;
                         }
                     }
 
                     File tempFile = installer.getDownloader().download(url(raw.getUrl()), "", raw.getSize(), output.getName());
-                    installer.queue(new FileMover(tempFile, output));
+                    // 1.41.3: tolerant() повертає ту саму задачу для всіх файлів, крім копій системних DLL на Windows 10+
+                    installer.queue(com.gummer.launcher.install.SystemDlls.tolerant(output, new FileMover(tempFile, output)));
                     if (raw.getHash() != null) {
-                        installer.queue(new FileVerify(output, output.getName(), raw.getHash()));
+                        installer.queue(com.gummer.launcher.install.SystemDlls.tolerant(output,
+                                new FileVerify(output, output.getName(), raw.getHash())));
                     }
 
                     if (jf.isExecutable()) {

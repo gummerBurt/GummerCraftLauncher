@@ -81,7 +81,11 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.41.2
+## What's new in 1.41.3
+
+- **Java installs even when an antivirus blocks Windows system files.** On Windows 10 and 11 the launcher skips a blocked copy of `ucrtbase.dll` or `api-ms-win-*.dll` in the Java folder (only Windows 7 and 8.1 need them) instead of stopping the install.
+
+**Also in 1.41.2:**
 
 - **Play with a friend in one click.** Right-click your build, "Play with a friend...", or the "Play with a friend!" sticker on the main page. Say whether your friend is nearby, and the launcher installs and sets up the right mod: on the same network or over the internet without port forwarding, even for a friend without a license, with voice chat as an option. Then short in-game steps, a "Send the build to a friend" button and, for LAN, a Windows Firewall check. Builds that already have such a mod are marked with a blue two-people badge.
 - **Mod sets.** "Manage build", "Mods", "Mod sets": "Comfort", "Map", "Shaders" and "Ambience and sound". The launcher picks the mods for the build's loader and game version and installs everything in one click; "Remove set" removes only what the set added. A "Remove multiplayer mods" button is there too.

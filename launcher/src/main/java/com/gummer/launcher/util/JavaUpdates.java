@@ -225,7 +225,15 @@ public final class JavaUpdates {
                 JavaFileDownload raw = jf.getDownloads() != null ? jf.getDownloads().getRaw() : null;
                 if (raw == null || raw.getHash() == null) return false;
                 File f = base.resolve(en.getKey()).normalize().toFile();
-                if (!f.isFile() || !raw.getHash().equalsIgnoreCase(FileUtils.getShaHash(f))) return false;
+                String have;
+                try {
+                    have = f.isFile() ? FileUtils.getShaHash(f) : null;
+                } catch (IOException e) {
+                    // 1.41.3: копія системної DLL, яку не дає прочитати антивірус, на Windows 10+ не заважає Java
+                    if (com.gummer.launcher.install.SystemDlls.optional(f)) continue;
+                    throw e;
+                }
+                if (have == null || !raw.getHash().equalsIgnoreCase(have)) return false;
             }
             log.info("Java in " + dir + " matches the CDN manifest file by file, marker written");
             return true;
@@ -408,15 +416,22 @@ public final class JavaUpdates {
             if (!"file".equals(jf.getType())) continue;
             JavaFileDownload raw = jf.getDownloads() != null ? jf.getDownloads().getRaw() : null;
             if (raw == null) throw new IOException("No raw download for " + jf.getPath());
-            if (!out.isFile() || raw.getHash() != null && !raw.getHash().equalsIgnoreCase(FileUtils.getShaHash(out))) {
-                out.getParentFile().mkdirs();
-                File part = new File(out.getParentFile(), out.getName() + ".gc-part");
-                HttpRequest.get(new URL(raw.getUrl())).execute().expectResponseCode(200).saveContent(part);
-                if (raw.getHash() != null && !raw.getHash().equalsIgnoreCase(FileUtils.getShaHash(part))) {
-                    part.delete();
-                    throw new IOException("sha1 mismatch for " + jf.getPath());
+            try {
+                if (!out.isFile() || raw.getHash() != null && !raw.getHash().equalsIgnoreCase(FileUtils.getShaHash(out))) {
+                    out.getParentFile().mkdirs();
+                    File part = new File(out.getParentFile(), out.getName() + ".gc-part");
+                    HttpRequest.get(new URL(raw.getUrl())).execute().expectResponseCode(200).saveContent(part);
+                    if (raw.getHash() != null && !raw.getHash().equalsIgnoreCase(FileUtils.getShaHash(part))) {
+                        part.delete();
+                        throw new IOException("sha1 mismatch for " + jf.getPath());
+                    }
+                    Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 }
-                Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                // 1.41.3: копію системної DLL Windows чіпає антивірус; на Windows 10+ Java бере свою з System32
+                if (!com.gummer.launcher.install.SystemDlls.optional(out)) throw e;
+                com.gummer.launcher.install.SystemDlls.skipped(out, e);
+                new File(out.getParentFile(), out.getName() + ".gc-part").delete();
             }
             if (jf.isExecutable()) out.setExecutable(true, false);
             done += Math.max(1, raw.getSize());
