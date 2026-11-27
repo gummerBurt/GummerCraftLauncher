@@ -81,11 +81,15 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.41.4
+## What's new in 1.41.5
 
-- **A mod installs even when its newest versions do not fit the build's loader.** If no release version fits (JEI for Fabric 1.20.1 has only 2 releases, both needing Fabric Loader 0.19.4), the launcher picks the newest fitting beta.
-- **Clear errors on the Modrinth mods page.** A too old loader is named as such; an unknown failure opens the error window with "Write to support".
-- **Shaders tab:** says the build already has a shader mod when Iris, Oculus or OptiFine is there.
+- **The crash helper names a mod even when the crash report does not.** It looks at whose code is where the game crashed and whether the mod is made for this game version (FastQuit for 26.2 in a 26.3 build comes first), with "Turn off" and "Update" buttons.
+- **"Mod A does not work with the mod B version".** For example Veil and Sodium 0.8.14-beta.2: an "Install stable Sodium" button (or "Install the previous version" when a stable one is installed); the current version is kept for "Restore".
+- **"Turn off" together with the mods that need it:** "Turn off Veil and Sable", so the game does not crash on a missing dependency.
+- **Java installs even when Windows guards Documents.** If Ransomware protection or an antivirus blocks it, Java goes to `%LOCALAPPDATA%\GummerCraft\runtime`; files move with retries, and the error window has "Open Windows protection" and "Reinstall to a new folder" buttons.
+- **"Play with a friend" for vanilla builds too:** the launcher makes a build of the same version with Fabric (or NeoForge, Forge), moves worlds, settings and resource packs there and sets everything up. The vanilla build stays as it is.
+
+**Also in 1.41.4:** a mod installs from a beta when no release fits the build's loader (JEI for Fabric 1.20.1); clear errors on the Modrinth mods page; the Shaders tab says the build already has a shader mod.
 
 **Also in 1.41.3:** Java installs even when an antivirus blocks Windows system files (`ucrtbase.dll`, `api-ms-win-*.dll` copies are skipped on Windows 10 and 11).
 

@@ -19,7 +19,8 @@ public class BundledJava {
 
     /** 1.32.2: тека Java для заданої ОС (на Apple Silicon старі версії гри беруть Java для Intel, див. MacRosetta). */
     public static File getJavaDir(Launcher l, String component, String os) {
-        return new File(l.getBaseDir(), "runtime/" + component + "/" + os);
+        // 27.11.2026: корінь може бути поза текою даних (JavaPlace, тікети #134, #138)
+        return new File(JavaPlace.root(l), component + "/" + os);
     }
 
     /** Чи є в теці runtime виконуваний файл Java (Windows: bin/javaw.exe або bin/java.exe, інакше bin/java). */

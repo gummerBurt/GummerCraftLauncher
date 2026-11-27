@@ -39,7 +39,9 @@ public final class FriendPromo {
             return false;
         }
         if (!i.isLocal() || !i.isInstalled()) return false;
-        return FriendPlay.availability(i) == FriendPlay.Availability.OK;
+        // 27.11.2026: і ваніль: помічник зробить копію з завантажувачем (FriendPlayDialog.vanillaPage)
+        FriendPlay.Availability a = FriendPlay.availability(i);
+        return a == FriendPlay.Availability.OK || a == FriendPlay.Availability.VANILLA;
     }
 
     // ------------------------------------------------------------------ іконка «дві людини»

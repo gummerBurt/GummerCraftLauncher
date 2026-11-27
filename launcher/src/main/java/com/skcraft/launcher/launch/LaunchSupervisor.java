@@ -80,7 +80,12 @@ public class LaunchSupervisor {
                 }
                 // 26.11.2026: галочка «Грати з другом»: помічник ставить і налаштовує мод, далі звичайний запуск
                 com.gummer.launcher.ui.UiHooks.InstanceAction fp = com.gummer.launcher.ui.UiHooks.friendPlay;
-                if (friend[0] && fp != null) fp.run(window, instance);
+                if (friend[0] && fp != null) {
+                    fp.run(window, instance);
+                    // 27.11.2026: ваніль з галочкою: помічник робить копію з завантажувачем і продовжує вже в ній, а сама
+                    // ваніль не запускається (у ній гра з другом не працює)
+                    if (instance.isVanilla()) return;
+                }
             }
 
             // If we have to update, we have to update

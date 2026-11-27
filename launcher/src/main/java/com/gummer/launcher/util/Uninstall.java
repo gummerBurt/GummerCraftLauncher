@@ -83,10 +83,19 @@ public final class Uninstall {
                 || new File(base, "instances").isDirectory());
     }
 
+    /** 27.11.2026: запасна тека Java ({@code %LOCALAPPDATA%\GummerCraft\runtime}, JavaPlace) і її порожня тека GummerCraft. */
+    private static void addJavaFallback(Plan p) {
+        File fb = JavaPlace.fallbackRoot();
+        if (fb == null || !fb.isDirectory()) return;
+        p.add(fb);
+        p.removeIfEmpty.add(fb.getParentFile());
+    }
+
     public static Plan builds(File base, boolean withWorldBackups) {
         Plan p = new Plan();
         if (!looksLikeOurs(base)) return p;
         for (String n : BUILD_ENTRIES) p.add(new File(base, n));
+        addJavaFallback(p);
         if (withWorldBackups) p.add(new File(base, "world-backups"));
         return p;
     }
@@ -100,6 +109,7 @@ public final class Uninstall {
         Plan p = new Plan();
         if (looksLikeOurs(base)) {
             for (String n : BUILD_ENTRIES) p.add(new File(base, n));
+            addJavaFallback(p);
             for (String n : OTHER_ENTRIES) p.add(new File(base, n));
             File[] top = base.listFiles();
             if (top != null) {

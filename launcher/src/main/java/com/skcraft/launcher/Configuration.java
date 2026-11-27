@@ -71,6 +71,8 @@ public class Configuration {
      * наявну Java лаунчер не чіпає, оновлення лише кнопкою в налаштуваннях («Оновлення Java»).
      */
     private boolean javaAutoUpdate = true;
+    /** 27.11.2026 (тікети #134, #138): корінь тек Java поза текою даних (JavaPlace), або null: <тека даних>/runtime. */
+    private String javaRuntimeDir = null;
     /** 21.11.2026: статус у Discord (com.gummer.launcher.discord.DiscordPresence), гравець може вимкнути в налаштуваннях. */
     private boolean discordPresence = true;
     /** 1.36.3: Java гри, відкочені гравцем («17/windows-x64»): не оновлюються самі, доки гравець не натисне «Оновити». */

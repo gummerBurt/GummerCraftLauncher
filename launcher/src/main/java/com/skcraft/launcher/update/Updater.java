@@ -322,6 +322,9 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         } else {
             JavaFile[] files = readJavaManifest(javaManifest);
 
+            // 27.11.2026 (тікети #134, #138): тека Java в «Документах», а Windows не дає її читати: ставимо в запасну
+            jvmDir = com.gummer.launcher.util.JavaPlace.ensureUsable(launcher, instance.getJavaRuntime(), runtimeOs, jvmDir);
+
             if (!jvmDir.exists()) {
                 jvmDir.mkdirs();
             }
@@ -370,7 +373,19 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
 
         log.info("Executing install phase...");
         progress = ProgressFilter.between(installer, 0.98, 1);
-        installer.execute(launcher);
+        try {
+            installer.execute(launcher);
+        } catch (IOException e) {
+            // 27.11.2026 (тікети #134, #138): Windows не дав записати чи прочитати файл Java. Наступна спроба в запасній
+            // теці, а гравцю вікно з поясненням і кнопками (ErrorExplainer, «javaMoved» / «javaBlocked»)
+            if (runtimeMarkerDir != null && com.gummer.launcher.util.JavaPlace.deniedUnderRoot(launcher, e)) {
+                File was = com.gummer.launcher.util.JavaPlace.root(launcher);
+                log.warning("Java install blocked in " + was + ": " + e + "\n" + com.gummer.launcher.util.WindowsSecurityInfo.lines());
+                File to = com.gummer.launcher.util.JavaPlace.switchToFallback(launcher);
+                throw new com.gummer.launcher.install.JavaBlockedException(was, to != null, to, e);
+            }
+            throw e;
+        }
 
         installer.executeLate(launcher);
         if (runtimeMarkerDir != null) {

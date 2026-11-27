@@ -288,7 +288,8 @@ public final class FriendPlay {
     /** Усі javaw.exe, якими лаунчер запускає гру: рантайми лаунчера і Java самого лаунчера. */
     public static List<File> javaws(File launcherBaseDir) {
         List<File> out = new ArrayList<File>();
-        collect(new File(launcherBaseDir, "runtime"), out, 0);
+        // 27.11.2026: і запасна тека Java поза текою даних (JavaPlace)
+        for (File root : com.gummer.launcher.util.JavaPlace.allRoots(launcherBaseDir)) collect(root, out, 0);
         File own = new File(System.getProperty("java.home", ""), "bin" + File.separator + "javaw.exe");
         if (own.isFile() && !out.contains(own)) out.add(own);
         return out;

@@ -434,10 +434,9 @@ public class Runner implements Callable<Process>, ProgressObservable {
                 SwingExtras.logDebugMessage(launcher, "builder.setRuntime", "using legacy ZIP runtime\n" + String.valueOf(runtime));
             } else {
                 // by default use shared distributed runtime
-                JavaRuntime runtime = JavaRuntime.fromDir(
-                    (new File(launcher.getBaseDir(), "runtime/" + instance.getJavaRuntime() + "/"
-                            + com.gummer.launcher.util.MacRosetta.runtimeOs(versionManifest))).toString()
-                );
+                // 27.11.2026: та сама тека, куди Java поставив Updater (корінь може бути поза текою даних, JavaPlace)
+                JavaRuntime runtime = JavaRuntime.fromDir(com.gummer.launcher.util.BundledJava.getJavaDir(launcher,
+                        instance.getJavaRuntime(), com.gummer.launcher.util.MacRosetta.runtimeOs(versionManifest)).toString());
                 builder.setRuntime(runtime);
                 SwingExtras.logDebugMessage(launcher, "builder.setRuntime", "using default shared runtime\n" + String.valueOf(runtime));
             }

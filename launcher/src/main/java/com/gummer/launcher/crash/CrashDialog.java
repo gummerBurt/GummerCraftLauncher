@@ -117,6 +117,92 @@ public final class CrashDialog {
     }
 
     /** Оновити мод (чи застарілу залежність) до новішої версії з Modrinth під цю гру; старий файл замінюється. */
+    /** Заголовок причини: деталь у дужках і, для нових причин, назви модів і версії ({@link #args}). */
+    private static String title(CrashAnalyzer.Diagnosis d, String detail) {
+        return tr("crash." + d.key + ".title", args(d, detail));
+    }
+
+    /**
+     * 27.11.2026: аргументи текстів причини: {0} деталь у дужках (як раніше), {1} мод (A), {2} мод B, {3} версія B,
+     * {4} версія гри, для якої зроблено мод, {5} версія гри збірки. Старим текстам зайві аргументи не заважають.
+     */
+    private static Object[] args(CrashAnalyzer.Diagnosis d, String detail) {
+        return new Object[]{detail, d.modName != null ? d.modName : "?", d.depName != null ? d.depName : "?",
+                d.depVersion != null ? d.depVersion : "?", d.modFor != null ? d.modFor : "?", d.gameVersion != null ? d.gameVersion : "?"};
+    }
+
+    /**
+     * 27.11.2026 (тікет #139, власник: «Вимикати мод разом з тими, кому він потрібен»): кнопка «Вимкнути «Veil» і
+     * «Sable»». Список рахується одразу ({@link com.gummer.launcher.manage.ModDependents}), щоб назва кнопки казала
+     * правду про те, що буде вимкнено.
+     */
+    private static JButton disableButton(final JDialog dialog, final Window owner, final Instance instance,
+                                         java.util.List<java.io.File> roots, String firstName) {
+        final java.util.List<com.gummer.launcher.manage.InstanceMods.Mod> chain = com.gummer.launcher.manage.ModDependents.withDependents(instance, roots);
+        final java.util.List<String> names = new java.util.ArrayList<String>();
+        for (com.gummer.launcher.manage.InstanceMods.Mod m : chain) names.add(roots.contains(m.file) && firstName != null ? firstName : modTitle(m));
+        if (names.isEmpty() && firstName != null) names.add(firstName);
+        final String list = com.gummer.launcher.manage.ModDependents.names(names, tr("crash.and"));
+        final String first = names.isEmpty() ? "?" : names.get(0);
+        JButton b = new JButton(names.size() > 1 ? tr("crash.action.disableModWith", list) : tr("crash.action.disableMod", first));
+        if (names.size() > 1) b.setToolTipText(tr("crash.action.disableModWithTip", first));
+        b.addActionListener(e -> {
+            java.util.List<com.gummer.launcher.manage.InstanceMods.Mod> todo = chain;
+            if (todo.isEmpty()) {
+                todo = new java.util.ArrayList<com.gummer.launcher.manage.InstanceMods.Mod>();
+                for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+                    if (roots.contains(m.file) && m.enabled) todo.add(m);
+                }
+            }
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : todo) {
+                try {
+                    com.gummer.launcher.manage.InstanceMods.setEnabled(instance, m, false);
+                } catch (java.io.IOException ex) {
+                    SwingHelper.showErrorDialog(dialog, tr("crash.modDisableFailed", modTitle(m)), tr("errorTitle"), ex);
+                    return;
+                }
+            }
+            dialog.dispose();
+            JOptionPane.showMessageDialog(owner, names.size() > 1 ? tr("crash.modsDisabled", list) : tr("crash.modDisabled", first),
+                    tr("crash.windowTitle"), JOptionPane.INFORMATION_MESSAGE);
+        });
+        return b;
+    }
+
+    /** 27.11.2026 (тікет #139): поставити стабільну чи попередню версію мода B у фоні ({@link com.gummer.launcher.manage.ModSwap}). */
+    private static void swapMod(final JDialog dialog, final Instance instance, final CrashAnalyzer.Diagnosis d, final JButton b) {
+        final String label = b.getText();
+        b.setEnabled(false);
+        b.setText(tr("crash.action.working"));
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                String game = com.gummer.launcher.manage.ModrinthBrowse.gameVersionOf(instance);
+                String[] loaders = com.gummer.launcher.manage.ModrinthBrowse.loadersOf(com.gummer.launcher.manage.ModrinthBrowse.Kind.MOD, instance);
+                return com.gummer.launcher.manage.ModSwap.swap(d.depFile, d.depPrerelease, game, loaders);
+            }
+
+            @Override
+            protected void done() {
+                String v;
+                try {
+                    v = get();
+                } catch (Exception ex) {
+                    b.setText(label);
+                    b.setEnabled(true);
+                    Throwable t = ex.getCause() != null ? ex.getCause() : ex;
+                    String msg = t instanceof com.gummer.launcher.manage.ModUpdates.LoaderTooOld ? t.getLocalizedMessage()
+                            : tr("crash.swapMod.failed", d.depName, String.valueOf(t.getLocalizedMessage()));
+                    JOptionPane.showMessageDialog(dialog, msg, tr("crash.windowTitle"), JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                dialog.dispose();
+                JOptionPane.showMessageDialog(dialog.getOwner(), tr("crash.swapMod.done", d.depName, v), tr("crash.windowTitle"),
+                        JOptionPane.INFORMATION_MESSAGE);
+            }
+        }.execute();
+    }
+
     private static void updateMod(final JDialog dialog, final Instance instance, final java.io.File file, final JButton b) {
         final String label = b.getText();
         b.setEnabled(false);
@@ -216,7 +302,8 @@ public final class CrashDialog {
 
     /** Причини в модах: для них кнопка «Моди збірки». */
     private static final java.util.Set<String> MOD_KEYS = new java.util.HashSet<String>(java.util.Arrays.asList(
-            "duplicateMod", "modConflict", "mixin", "missingDep", "depTooOld", "modCrash", "modClassMissing"));
+            "duplicateMod", "modConflict", "mixin", "missingDep", "depTooOld", "modCrash", "modClassMissing",
+            "modBreaksMod", "modSuspect", "modStack"));
     /** Причини, де стара порада радить перевстановити пак: для збірок зі своїми модами є інша (adviceOwn). */
     private static final java.util.Set<String> OWN_ADVICE = new java.util.HashSet<String>(java.util.Arrays.asList(
             "duplicateMod", "modConflict", "mixin"));
@@ -272,8 +359,8 @@ public final class CrashDialog {
                 : ownMods && OWN_ADVICE.contains(d.key) ? "crash." + d.key + ".adviceOwn" : "crash." + d.key + ".advice";
         String html = "<html><div style=\"width: 440px\">"
                 + "<span style=\"font-size: 15px\"><b>" + SwingHelper.htmlEscape(tr("crash.headline", instance.getTitle())) + "</b></span><br><br>"
-                + "<b>" + SwingHelper.htmlEscape(tr("crash." + d.key + ".title", detail)) + "</b><br>"
-                + SwingHelper.htmlEscape(tr(adviceKey, detail)).replace("\n", "<br>")
+                + "<b>" + SwingHelper.htmlEscape(title(d, detail)) + "</b><br>"
+                + SwingHelper.htmlEscape(tr(adviceKey, args(d, detail))).replace("\n", "<br>")
                 + autoFixHtml(autoFixes)
                 + recentHtml(d)
                 + ("modClassMissing".equals(d.key) && d.depLocked
@@ -305,20 +392,23 @@ public final class CrashDialog {
                 break;
             case DISABLE_MOD:
                 if (d.modFile != null) {
-                    final String modName = d.modName != null ? d.modName : d.modFile.getName();
-                    primary = new JButton(tr("crash.action.disableMod", modName));
-                    primary.addActionListener(e -> {
-                        try {
-                            for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
-                                if (m.file.equals(d.modFile)) com.gummer.launcher.manage.InstanceMods.setEnabled(instance, m, false);
-                            }
-                            dialog.dispose();
-                            JOptionPane.showMessageDialog(owner, tr("crash.modDisabled", modName), tr("crash.windowTitle"),
-                                    JOptionPane.INFORMATION_MESSAGE);
-                        } catch (java.io.IOException ex) {
-                            SwingHelper.showErrorDialog(dialog, tr("crash.modDisableFailed", modName), tr("errorTitle"), ex);
-                        }
-                    });
+                    primary = disableButton(dialog, owner, instance, java.util.Collections.singletonList(d.modFile), d.modName);
+                }
+                break;
+            case FIX_OTHER_MOD:
+                // 27.11.2026 (тікет #139): мод A не вставився в мод B. Головна дія: інша версія B (стабільна замість бети,
+                // інакше попередня); поруч «Вимкнути A» разом з тими, кому A потрібен
+                if (ownMods && d.depFile != null) {
+                    final JButton swap = new JButton(tr(d.depPrerelease ? "crash.action.stableMod" : "crash.action.prevMod", d.depName));
+                    swap.setToolTipText(tr(d.depPrerelease ? "crash.action.stableModTip" : "crash.action.prevModTip", d.depName,
+                            d.depVersion != null ? d.depVersion : "?"));
+                    swap.addActionListener(e -> swapMod(dialog, instance, d, swap));
+                    primary = swap;
+                }
+                if (d.modFile != null) {
+                    JButton off = disableButton(dialog, owner, instance, java.util.Collections.singletonList(d.modFile), d.modName);
+                    if (primary == null) primary = off;
+                    else buttons.add(off);
                 }
                 break;
             case RESET_CONFIG:
@@ -454,7 +544,8 @@ public final class CrashDialog {
             primary = fetch;
         }
         final java.io.File updatable = "depTooOld".equals(d.key) ? d.depFile
-                : "modCrash".equals(d.key) || "mixin".equals(d.key) || "modClassMissing".equals(d.key) ? d.modFile : null;
+                : "modCrash".equals(d.key) || "mixin".equals(d.key) || "modClassMissing".equals(d.key)
+                        || "modSuspect".equals(d.key) || "modStack".equals(d.key) ? d.modFile : null;
         if (ownMods && updatable != null) {
             String name = "depTooOld".equals(d.key) ? d.depId : d.modName;
             final JButton upd = new JButton(tr("crash.action.updateMod", name != null ? name : updatable.getName()));
@@ -480,10 +571,15 @@ public final class CrashDialog {
         }
         // 19.11.2026 (власник: «Відкат моду після оновлення ... давай»): винний мод оновлено нещодавно, а стара версія
         // збережена (ModRollback): повернути її головною дією, бо до оновлення гра працювала
-        final com.gummer.launcher.manage.ModRollback.Entry prev = ownMods && ("modCrash".equals(d.key) || "mixin".equals(d.key) || "modClassMissing".equals(d.key))
+        // 27.11.2026 (тікет #139): після «Поставити стабільну Sodium» гра знову впала на тій самій парі: «Повернути Sodium»
+        final boolean breaks = "modBreaksMod".equals(d.key);
+        final com.gummer.launcher.manage.ModRollback.Entry prev = !ownMods ? null
+                : breaks ? com.gummer.launcher.manage.ModRollback.recentFor(d.depFile)
+                : "modCrash".equals(d.key) || "mixin".equals(d.key) || "modClassMissing".equals(d.key)
+                        || "modSuspect".equals(d.key) || "modStack".equals(d.key)
                 ? com.gummer.launcher.manage.ModRollback.recentFor(d.modFile) : null;
         if (prev != null) {
-            final String name = d.modName != null ? d.modName : d.modFile.getName();
+            final String name = breaks ? d.depName : d.modName != null ? d.modName : d.modFile.getName();
             final String ver = prev.prevVersion == null || prev.prevVersion.isEmpty() || "?".equals(prev.prevVersion) ? "" : " " + prev.prevVersion;
             JButton back = new JButton(tr("crash.action.modBack", name, ver));
             back.setToolTipText(tr("crash.action.modBackTip"));
@@ -496,15 +592,25 @@ public final class CrashDialog {
                     SwingHelper.showErrorDialog(dialog, tr("crash.modBackFailed", name), tr("errorTitle"), ex);
                 }
             });
-            if (primary != null) buttons.add(primary);
-            primary = back;
+            if (breaks) {
+                buttons.add(back);
+            } else {
+                if (primary != null) buttons.add(primary);
+                primary = back;
+            }
         }
         // 25.11.2026 (власник: «виною були три нові моди, жоден з них наш лаунчер не задетектив»): винного мода не названо,
         // але після останньої вдалої гри з'явились нові моди: вимкнути їх одним кліком. Головна дія, якщо іншої немає або
         // це «невідомо» чи «пошкоджені файли» (перевстановлення нових модів гравця не прибирає)
         if (!d.recentMods.isEmpty()) {
-            final java.util.List<com.gummer.launcher.manage.InstanceMods.Mod> recent = d.recentMods;
-            JButton off = new JButton(tr("crash.action.disableRecent", recent.size()));
+            // 27.11.2026: разом з модами, які без нових не запустяться (ModDependents)
+            java.util.List<java.io.File> roots = new java.util.ArrayList<java.io.File>();
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : d.recentMods) roots.add(m.file);
+            java.util.List<com.gummer.launcher.manage.InstanceMods.Mod> chain = com.gummer.launcher.manage.ModDependents.withDependents(instance, roots);
+            final java.util.List<com.gummer.launcher.manage.InstanceMods.Mod> recent = chain.size() >= d.recentMods.size() ? chain : d.recentMods;
+            JButton off = new JButton(recent.size() > d.recentMods.size()
+                    ? tr("crash.action.disableRecentWith", d.recentMods.size(), recent.size() - d.recentMods.size())
+                    : tr("crash.action.disableRecent", recent.size()));
             off.addActionListener(e -> {
                 java.util.List<String> done = new java.util.ArrayList<String>();
                 for (com.gummer.launcher.manage.InstanceMods.Mod m : recent) {
@@ -571,7 +677,7 @@ public final class CrashDialog {
             JButton write = new JButton(tr("crash.action.support"));
             write.addActionListener(e -> {
                 dialog.dispose();
-                String text = tr("crash.supportText", instance.getTitle(), tr("crash." + d.key + ".title", detail));
+                String text = tr("crash.supportText", instance.getTitle(), title(d, detail));
                 support.open(owner, com.gummer.launcher.support.SupportService.defaultTopic(instance), text);
             });
             buttons.add(write);

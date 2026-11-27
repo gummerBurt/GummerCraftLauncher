@@ -116,7 +116,7 @@ public final class JavaUpdates {
         out.add(launcherEntry());
 
         InstanceList il = launcher.getInstances();
-        File root = new File(launcher.getBaseDir(), "runtime");
+        File root = JavaPlace.root(launcher);
         File[] comps = root.listFiles(File::isDirectory);
         if (comps == null) comps = new File[0];
         java.util.Arrays.sort(comps, (a, b) -> Integer.compare(major(a.getName()), major(b.getName())));

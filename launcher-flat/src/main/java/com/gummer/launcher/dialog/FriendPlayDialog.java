@@ -323,44 +323,121 @@ public final class FriendPlayDialog {
 
     // ------------------------------------------------------------------ ванільна збірка
 
+    /**
+     * 27.11.2026 (власник: «додати наклейку "грати з другом" на ваніль, але нехай воно створить
+     * фордж-фабрік-неофордж тієї ж версії, фактично копію ванілі, але з лоадером для гри онлайн»). Кнопка робить
+     * нову збірку-копію з завантажувачем тієї ж версії гри ({@link #loaderFor}: Fabric, а де його немає, NeoForge чи
+     * Forge), переносить туди світи, налаштування і ресурспаки ({@link #copyFromVanilla}), ставить гру і відкриває
+     * помічника вже в новій збірці. Ванільна збірка не змінюється.
+     */
     private static JPanel vanillaPage(JDialog d, LookTheme.Palette pal, Launcher launcher, Instance instance,
                                       Runnable share, Consumer<String> switchTo) {
         final String mc = InstanceCopies.minecraftVersionOf(instance);
         JPanel row = new JPanel(new MigLayout("insets 0, gap 8", "[]push[]", ""));
         row.setOpaque(false);
-        final JButton copy = LookUi.primary(new JButton(SharedLocale.tr("friend.vanillaCopy")));
+        final Instance base = loaderFor(launcher, mc);
+        final String loaderTitle = base == null ? "" : InstanceCopies.kindTitleOf(base);
+        final JButton copy = LookUi.primary(new JButton(SharedLocale.tr("friend.vanillaMake", loaderTitle)));
         JButton close = LookUi.secondary(new JButton(SharedLocale.tr("friend.close")));
         close.addActionListener(e -> d.dispose());
         row.add(copy, "h 38!");
         row.add(close, "h 38!");
-        final Instance fabric = fabricFor(launcher, mc);
-        if (fabric == null) copy.setEnabled(false);
+        if (base == null) copy.setVisible(false);
         copy.addActionListener(e -> {
             copy.setEnabled(false);
-            new SwingWorker<Integer, Void>() {
+            copy.setText(SharedLocale.tr("friend.vanillaMaking"));
+            final String title = SharedLocale.tr("friend.vanillaCopyTitle", mc);
+            final InstanceCopies.Copier copier = new InstanceCopies.Copier(launcher, base, title,
+                    java.util.EnumSet.noneOf(InstanceCopies.Part.class));
+            new SwingWorker<Instance, Void>() {
                 @Override
-                protected Integer doInBackground() throws Exception {
-                    return copyWorlds(instance, fabric);
+                protected Instance doInBackground() throws Exception {
+                    String name = copier.call();
+                    File dir = new File(launcher.getInstancesDir(), name);
+                    Instance made = com.skcraft.launcher.persistence.Persistence.load(new File(dir, "instance.json"), Instance.class);
+                    made.setDir(dir);
+                    made.setName(name);
+                    int n = copyFromVanilla(instance, made.getContentDir());
+                    log.info("Friend play: vanilla " + instance.getName() + " -> copy " + name + " on " + base.getName() + ", worlds " + n);
+                    return made;
                 }
 
                 @Override
                 protected void done() {
-                    int n;
+                    final Instance made;
                     try {
-                        n = get();
+                        made = get();
                     } catch (Exception ex) {
-                        log.log(java.util.logging.Level.WARNING, "Friend play: copy to Fabric failed", ex);
-                        n = -1;
+                        log.log(java.util.logging.Level.WARNING, "Friend play: loader copy of vanilla failed", ex);
+                        copy.setText(SharedLocale.tr("friend.vanillaMake", loaderTitle));
+                        copy.setEnabled(true);
+                        com.skcraft.launcher.swing.SwingHelper.showErrorDialog(d, SharedLocale.tr("friend.vanillaFailed"),
+                                SharedLocale.tr("errorTitle"), ex.getCause() != null ? ex.getCause() : ex);
+                        return;
                     }
-                    log.info("Friend play: vanilla " + instance.getName() + " -> " + fabric.getName() + ", worlds " + n);
+                    final Window owner = d.getOwner();
                     d.dispose();
-                    if (switchTo != null) switchTo.accept(fabric.getName());
-                    open(d.getOwner(), launcher, fabric, null, switchTo);
+                    // гру ставимо одразу (бібліотеки та Java вже є від ванілі), далі помічник у новій збірці
+                    InstanceManageDialog.installOnly(owner, launcher, made, () -> {
+                        if (switchTo != null) switchTo.accept(made.getName());
+                        open(owner, launcher, made, null, switchTo);
+                    });
                 }
             }.execute();
         });
-        String text = SharedLocale.tr(fabric == null ? "friend.vanillaNoFabric" : "friend.vanilla", mc == null ? "" : mc);
+        String text = base == null ? SharedLocale.tr("friend.vanillaNoLoader", mc == null ? "" : mc)
+                : SharedLocale.tr("friend.vanillaLoader", mc == null ? "" : mc, loaderTitle);
         return page(pal, SharedLocale.tr("friend.title"), text, row);
+    }
+
+    /** Розділ лаунчера з завантажувачем для версії гри mc: Fabric, інакше NeoForge, інакше Forge, або null. */
+    static Instance loaderFor(Launcher launcher, String mc) {
+        if (mc == null) return null;
+        Instance f = fabricFor(launcher, mc);
+        if (f != null) return f;
+        for (com.gummer.launcher.forge.ForgeVersions.Kind k : new com.gummer.launcher.forge.ForgeVersions.Kind[]{
+                com.gummer.launcher.forge.ForgeVersions.Kind.NEOFORGE, com.gummer.launcher.forge.ForgeVersions.Kind.FORGE}) {
+            String name = com.gummer.launcher.forge.ForgeVersions.nameOf(k, mc);
+            for (Instance i : launcher.getInstances().getInstances()) {
+                if (name.equalsIgnoreCase(i.getName())) return i;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 27.11.2026: з ванільної збірки в теку гри нової: світи (крім тих, що там уже є), налаштування гри (options*.txt,
+     * servers.dat, hotbar.nbt) і ресурспаки. Моди не чіпаються, у ванілі їх немає. Повертає кількість світів.
+     */
+    static int copyFromVanilla(Instance from, File dst) throws IOException {
+        int n = copyWorlds(from, dst);
+        File src = from.getContentDir();
+        File[] top = src.listFiles(File::isFile);
+        if (top != null) {
+            for (File f : top) {
+                String low = f.getName().toLowerCase(java.util.Locale.ROOT);
+                boolean setting = low.startsWith("options") && low.endsWith(".txt") || low.equals("servers.dat") || low.equals("hotbar.nbt");
+                File t = new File(dst, f.getName());
+                if (setting && !t.exists()) {
+                    dst.mkdirs();
+                    Files.copy(f.toPath(), t.toPath());
+                }
+            }
+        }
+        File packs = new File(src, "resourcepacks");
+        File[] list = packs.listFiles();
+        if (list != null) {
+            for (File p : list) {
+                File t = new File(new File(dst, "resourcepacks"), p.getName());
+                if (t.exists()) continue;
+                if (p.isDirectory()) copyTree(p.toPath(), t.toPath());
+                else {
+                    t.getParentFile().mkdirs();
+                    Files.copy(p.toPath(), t.toPath());
+                }
+            }
+        }
+        return n;
     }
 
     static Instance fabricFor(Launcher launcher, String mc) {
@@ -374,7 +451,11 @@ public final class FriendPlayDialog {
 
     /** Світи і options.txt з ванільної збірки у Fabric тієї ж версії; наявне там не перезаписується. */
     static int copyWorlds(Instance from, Instance to) throws IOException {
-        File src = from.getContentDir(), dst = to.getContentDir();
+        return copyWorlds(from, to.getContentDir());
+    }
+
+    static int copyWorlds(Instance from, File dst) throws IOException {
+        File src = from.getContentDir();
         int n = 0;
         File[] worlds = new File(src, "saves").listFiles(File::isDirectory);
         if (worlds != null) {

@@ -278,6 +278,10 @@ public final class SwingHelper {
         html.append("</div></html>");
         panel.add(new JLabel(html.toString()), BorderLayout.NORTH);
 
+        // 27.11.2026 (тікети #134, #138, власник: «Зрозуміле вікно з кнопками»): Windows не дає доступу до файлів:
+        // кнопки, що відкривають потрібне самі, а не лише текст поради
+        final JPanel fixes = com.gummer.launcher.crash.ErrorExplainer.isAccess(why) ? accessButtons(parent) : null;
+
         final String fullDetails = details != null ? environmentInfo() + details : null;
         if (fullDetails != null) {
             final JTextArea textArea = new JTextArea(fullDetails);
@@ -319,7 +323,15 @@ public final class SwingHelper {
             }
             JPanel center = new JPanel(new BorderLayout(0, 8));
             center.setOpaque(false);
-            center.add(buttons, BorderLayout.NORTH);
+            if (fixes != null) {
+                JPanel top = new JPanel(new BorderLayout(0, 8));
+                top.setOpaque(false);
+                top.add(fixes, BorderLayout.NORTH);
+                top.add(buttons, BorderLayout.SOUTH);
+                center.add(top, BorderLayout.NORTH);
+            } else {
+                center.add(buttons, BorderLayout.NORTH);
+            }
             center.add(scroll, BorderLayout.CENTER);
             panel.add(center, BorderLayout.CENTER);
         }
@@ -333,6 +345,41 @@ public final class SwingHelper {
         }
 
         JOptionPane.showMessageDialog(parent, panel, title, JOptionPane.ERROR_MESSAGE);
+    }
+
+    /**
+     * 27.11.2026: «Відкрити захист Windows» (сторінка «Захист від програм-вимагачів», там «Дозволити програму через
+     * контрольований доступ до папок») і «Перевстановити до нової теки» (перенести дані лаунчера з «Документів»).
+     */
+    private static JPanel accessButtons(final Component parent) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        row.setOpaque(false);
+        if (com.skcraft.launcher.util.Environment.detectPlatform() == com.skcraft.launcher.util.Platform.WINDOWS) {
+            JButton protect = new JButton(tr("crash.action.windowsProtection"));
+            protect.setToolTipText(tr("errors.access.protectTip"));
+            protect.addActionListener(e -> {
+                try {
+                    java.awt.Desktop.getDesktop().browse(new java.net.URI("windowsdefender://ransomwareprotection"));
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(protect, tr("crash.windowsProtectionManual"), tr("errorTitle"), JOptionPane.INFORMATION_MESSAGE);
+                }
+            });
+            row.add(protect);
+        }
+        final com.skcraft.launcher.Launcher launcher = com.gummer.launcher.crash.CrashDialog.launcher;
+        if (launcher != null) {
+            JButton move = new JButton(tr("datadir.moveButton"));
+            move.setToolTipText(tr("errors.access.moveTip"));
+            move.addActionListener(e -> {
+                Window w = SwingUtilities.getWindowAncestor(move);
+                if (w != null) w.dispose();
+                com.gummer.launcher.util.DataDirCheck.offerMove(parent instanceof Window ? (Window) parent
+                        : parent != null ? SwingUtilities.getWindowAncestor(parent) : null, launcher);
+            });
+            if (row.getComponentCount() > 0) row.add(Box.createHorizontalStrut(8));
+            row.add(move);
+        }
+        return row.getComponentCount() > 0 ? row : null;
     }
 
     /**

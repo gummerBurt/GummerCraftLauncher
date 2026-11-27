@@ -33,6 +33,10 @@ public final class ErrorExplainer {
             if (c instanceof com.gummer.launcher.install.DiskSpaceException) {
                 return "diskNeed";
             }
+            // 27.11.2026 (тікети #134, #138): Windows не дав поставити Java; лаунчер уже перемкнув теку Java чи ні
+            if (c instanceof com.gummer.launcher.install.JavaBlockedException) {
+                return ((com.gummer.launcher.install.JavaBlockedException) c).moved ? "javaMoved" : "javaBlocked";
+            }
             // 19.11.2026 (власник: «Антивірус заблокував файл. -- го»): Windows прямо каже, що антивірус заблокував
             // файл (ERROR_VIRUS_INFECTED 225, ERROR_VIRUS_DELETED 226): при записі, відкритті чи запуску Java
             // («CreateProcess error=225»). Лише за цими текстами, без вгадування за зниклими файлами
@@ -85,7 +89,21 @@ public final class ErrorExplainer {
                 }
             }
         }
+        if ("javaMoved".equals(why) || "javaBlocked".equals(why)) {
+            for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
+                if (c instanceof com.gummer.launcher.install.JavaBlockedException) {
+                    com.gummer.launcher.install.JavaBlockedException j = (com.gummer.launcher.install.JavaBlockedException) c;
+                    return com.skcraft.launcher.util.SharedLocale.tr("errors.why." + why, String.valueOf(j.dir),
+                            j.to != null ? String.valueOf(j.to) : "");
+                }
+            }
+        }
         return com.skcraft.launcher.util.SharedLocale.tr("errors.why." + why);
+    }
+
+    /** 27.11.2026: причини, де Windows чи антивірус не дає доступу до файлів: у вікні кнопки захисту Windows і перенесення. */
+    public static boolean isAccess(String why) {
+        return "access".equals(why) || "javaMoved".equals(why) || "javaBlocked".equals(why);
     }
 
     /** Чи є в повідомленні вже людський текст від лаунчера (LauncherException), тоді пояснення не потрібне. */

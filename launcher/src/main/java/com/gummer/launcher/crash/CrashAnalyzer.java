@@ -45,6 +45,11 @@ public final class CrashAnalyzer {
          * {@link Diagnosis#loaderNeed} ({@link com.gummer.launcher.manage.LoaderVersion#raise}).
          */
         UPDATE_LOADER,
+        /**
+         * 27.11.2026 (тікет #139): мод A не вставився в інший мод B ({@code modBreaksMod}): поставити стабільну чи
+         * попередню версію B ({@link com.gummer.launcher.manage.ModSwap}), запасний варіант вимкнути A із залежними.
+         */
+        FIX_OTHER_MOD,
         /** Без особливої дії: лише підтримка. */
         NONE
     }
@@ -79,6 +84,14 @@ public final class CrashAnalyzer {
         /** 25.11.2026: loaderTooOld: завантажувач (fabric, quilt, forge, neoforge) і версія, якої досить усім модам. */
         public String loader;
         public String loaderNeed;
+        /** 27.11.2026: modBreaksMod: назва і версія мода B, в який не вставився мод A ({@link #depFile}). */
+        public String depName;
+        public String depVersion;
+        /** 27.11.2026: modBreaksMod: B стоїть бетою чи альфою, тож кнопка «Поставити стабільну», інакше «попередню». */
+        public boolean depPrerelease;
+        /** 27.11.2026: modSuspect: для якої версії гри зроблено мод (з його версії, «+mc26.2») і на якій збірка. */
+        public String modFor;
+        public String gameVersion;
 
         Diagnosis(String key, Action action, String detail, File source) {
             this(key, action, detail, source, null);
@@ -149,6 +162,7 @@ public final class CrashAnalyzer {
         }
         if (d != null && d.action == Action.RESET_CONFIG) return withConfig(instance, d);
         if (d != null && "modClassMissing".equals(d.key)) return withRecent(instance, withClassOwner(instance, d));
+        if (d != null && "modBreaksMod".equals(d.key)) return withRecent(instance, withBreaks(instance, d));
         if (d != null) return withRecent(instance, withMod(instance, d));
         // 20.11.2026 (тікет #88): шлях з літерами, яких немає в кодовій сторінці Windows для програм: Java бачить «?»
         // замість них і не знаходить файлів. Будь-яка версія гри; часто гра падає ще до логу, тож без умови на текст,
@@ -159,6 +173,9 @@ public final class CrashAnalyzer {
         if (accessViolation) {
             return new Diagnosis("driver", Action.DRIVERS, null, source);
         }
+        // 27.11.2026 (тікет #136): звіт не назвав винного, але в стеку видно мод, зроблений для іншої версії гри
+        Diagnosis suspect = suspect(instance, withoutQuietLines(t), source);
+        if (suspect != null) return withRecent(instance, suspect);
         return withRecent(instance, new Diagnosis("unknown", Action.NONE, null, source));
     }
 
@@ -453,6 +470,10 @@ public final class CrashAnalyzer {
             if (path.endsWith("'") || path.endsWith(",")) path = path.substring(0, path.length() - 1);
             return new Diagnosis("accessDenied", Action.WINDOWS_PROTECTION, path, source);
         }
+        // 27.11.2026 (тікет #139): міксин мода A не вставився в клас іншого мода B («... in veil.neoforge.mixins.json:
+        // compat.sodium.DefaultFluidRendererMixin from mod veil failed injection check»): винна пара, а не лише A
+        Diagnosis breaks = modBreaksMod(strict, source);
+        if (breaks != null) return breaks;
         Matcher mixin = Pattern.compile("Mixin apply(?: for mod ([A-Za-z0-9_\\-]+))? failed").matcher(strict);
         if (mixin.find()) {
             return new Diagnosis("mixin", Action.REINSTALL, mixin.group(1), source);
@@ -568,6 +589,154 @@ public final class CrashAnalyzer {
         }
     }
 
+    /**
+     * 27.11.2026 (тікет #139): «Critical injection failure: ... in veil.neoforge.mixins.json:compat.sodium.X from mod
+     * veil». Мод B: з назви міксина ({@code compat.<id>.}, так автори називають сумісність з іншим модом), інакше перший
+     * кадр {@code TRANSFORMER/<id>@} одразу після {@code loadClass} (клас, у який вставлявся міксин, завантажував
+     * цей мод; лише NeoForge і Forge пишуть id у кадрах). Немає B: null, далі звичайні правила (винним буде A).
+     */
+    static Diagnosis modBreaksMod(String t, File source) {
+        Matcher m = Pattern.compile("(?:Critical injection failure|InjectionError|InvalidInjectionException|InvalidMixinException)"
+                + "[^\\n]*? in ([A-Za-z0-9_.\\-]+\\.json):([A-Za-z0-9_.$]+) from mod ([a-z0-9_\\-]+)").matcher(t);
+        if (!m.find()) return null;
+        String a = m.group(3);
+        if (BUILTIN.contains(a)) return null;
+        String b = null;
+        Matcher compat = Pattern.compile("(?:^|\\.)compat\\.([a-z0-9_]+)\\.").matcher(m.group(2));
+        if (compat.find()) b = compat.group(1);
+        if (b == null) {
+            Matcher frame = Pattern.compile("\\.loadClass\\([^\\n]*\\n\\s*at TRANSFORMER/([a-z0-9_\\-]+)@").matcher(t);
+            if (frame.find()) b = frame.group(1);
+        }
+        if (b == null || b.equals(a) || BUILTIN.contains(b)) return null;
+        Diagnosis d = new Diagnosis("modBreaksMod", Action.NONE, a + " → " + b, source);
+        d.depId = b;
+        return d;
+    }
+
+    /**
+     * Знайти A і B у збірці. B на місці (увімкнений, не з модпака StalDayZ): кнопка поставити іншу версію B, другим
+     * варіантом вимкнути A. B немає: як раніше, «Гру, схоже, вбив мод A».
+     */
+    private static Diagnosis withBreaks(Instance instance, Diagnosis d) {
+        String a = d.detail.substring(0, d.detail.indexOf(" → "));
+        Diagnosis fallback = withMod(instance, new Diagnosis("modCrash", Action.NONE, a, d.source));
+        try {
+            com.gummer.launcher.manage.InstanceMods.Mod ma = null, mb = null;
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+                if (!m.enabled) continue;
+                com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.of(m.file);
+                if (ma == null && info.provides.contains(a)) ma = m;
+                else if (mb == null && info.provides.contains(d.depId)) mb = m;
+            }
+            if (ma == null || mb == null || ma.locked || mb.locked) return fallback;
+            com.gummer.launcher.manage.ModInfo ia = com.gummer.launcher.manage.ModInfo.of(ma.file);
+            com.gummer.launcher.manage.ModInfo ib = com.gummer.launcher.manage.ModInfo.of(mb.file);
+            String na = ia.name != null ? ia.name : a;
+            String nb = ib.name != null ? ib.name : d.depId;
+            Diagnosis out = new Diagnosis("modBreaksMod", Action.FIX_OTHER_MOD, na + " → " + nb, d.source, ma.file, na);
+            out.depId = d.depId;
+            out.depFile = mb.file;
+            out.depName = nb;
+            out.depVersion = ib.version;
+            out.depPrerelease = com.gummer.launcher.manage.ModSwap.isPrerelease(ib.version);
+            return out;
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
+
+    /** Версія гри, для якої зроблено мод, з його версії: «3.1.5+mc26.2», «1.4.0+26.2», «0.7.0+beta.3+26.3-fabric». */
+    private static final Pattern MC_TAG = Pattern.compile("\\+(?:mc)?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)(?![0-9.])");
+
+    static String mcTag(String version) {
+        if (version == null) return null;
+        Matcher m = MC_TAG.matcher(version);
+        String last = null;
+        while (m.find()) last = m.group(1);
+        return last;
+    }
+
+    /** Мод для версії tag іде на game: 1.21 і 1.21.1 так (автори часто так позначають), 26.2 і 26.3 ні. */
+    static boolean sameGame(String tag, String game, String version) {
+        if (tag == null || game == null) return true;
+        if (version != null && version.contains(game)) return true;
+        return tag.equals(game) || game.startsWith(tag + ".") || tag.startsWith(game + ".");
+    }
+
+    /** Ім'я мода з міксин-обгортки в стеку: «handler$zza000$rrls$onTick», «wrapOperation$bkj000$betterblockentities$x». */
+    private static final Pattern WRAPPER = Pattern.compile("\\$[a-z]{3}[0-9]{3}\\$([a-z0-9_]+)\\$");
+
+    /**
+     * 27.11.2026 (тікет #136, власник: «Помічник збиратиме ці імена і перевірятиме, чи мод зроблений для цієї версії гри.
+     * FastQuit для 26.2 у грі 26.3 він позначить першим»). Лише коли інших причин немає. Бали увімкненим модам збірки:
+     * мод з обгортки Mixin у першому стеку +2; мод зроблений для іншої версії гри (за «+mc26.2» у версії) +1, і ще +1,
+     * якщо його міксин є в розділі «Mixins in Stacktrace». Називаємо мод з балом від 2 (сама лише інша версія гри
+     * ще не вина: у збірці тікета 136 таких три). Мод з модпака StalDayZ не пропонуємо.
+     */
+    static Diagnosis suspect(Instance instance, String t, File source) {
+        try {
+            Matcher gv = Pattern.compile("Minecraft Version: ([0-9][^\\s]*)").matcher(t);
+            String game = gv.find() ? gv.group(1) : com.gummer.launcher.manage.ModrinthBrowse.gameVersionOf(instance);
+            java.util.Set<String> configs = new java.util.HashSet<String>();
+            Matcher cfg = Pattern.compile("(?m)^\\t\\t[A-Za-z0-9_.$]+ \\(([A-Za-z0-9_.\\-]+\\.json)\\)\\s*$").matcher(t);
+            while (cfg.find()) configs.add(cfg.group(1));
+            java.util.Set<String> wrapped = new java.util.LinkedHashSet<String>();
+            Matcher first = Pattern.compile("(?:\\n\\s*at [^\\n]+)+").matcher(t);
+            if (first.find()) {
+                Matcher w = WRAPPER.matcher(first.group());
+                while (w.find()) if (!BUILTIN.contains(w.group(1)) && !w.group(1).startsWith("fabric")) wrapped.add(w.group(1));
+            }
+            com.gummer.launcher.manage.InstanceMods.Mod best = null;
+            com.gummer.launcher.manage.ModInfo bestInfo = null;
+            int bestScore = 1;
+            boolean bestOther = false;
+            for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {
+                if (!m.enabled || m.locked) continue;
+                com.gummer.launcher.manage.ModInfo info = com.gummer.launcher.manage.ModInfo.of(m.file);
+                int score = 0;
+                for (String id : wrapped) {
+                    if (info.provides.contains(id)) {
+                        score += 2;
+                        break;
+                    }
+                }
+                String tag = mcTag(info.version);
+                boolean other = !sameGame(tag, game, info.version);
+                if (other) {
+                    score += 1;
+                    if (!configs.isEmpty() && hasAny(m.file, configs)) score += 1;
+                }
+                if (score > bestScore) {
+                    best = m;
+                    bestInfo = info;
+                    bestScore = score;
+                    bestOther = other;
+                }
+            }
+            if (best == null) return null;
+            String name = bestInfo.name != null ? bestInfo.name : best.name;
+            Diagnosis d = new Diagnosis(bestOther ? "modSuspect" : "modStack", Action.DISABLE_MOD, name, source, best.file);
+            if (bestOther) {
+                d.modFor = mcTag(bestInfo.version);
+                d.gameVersion = game;
+            }
+            return d;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** У jar є хоч один з цих файлів міксинів (у корені, як їх пише Mixin). */
+    private static boolean hasAny(File jar, java.util.Set<String> names) {
+        try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(jar)) {
+            for (String n : names) if (z.getEntry(n) != null) return true;
+        } catch (java.io.IOException e) {
+            // не читається
+        }
+        return false;
+    }
+
     /** id, які не є «винним модом»: сама гра і завантажувачі. */
     private static final java.util.Set<String> BUILTIN = new java.util.HashSet<String>(java.util.Arrays.asList(
             "minecraft", "java", "forge", "neoforge", "fml", "fabricloader", "fabric", "quilt_loader", "mixinextras", "unknown"));
@@ -578,7 +747,7 @@ public final class CrashAnalyzer {
      */
     private static Diagnosis withMod(Instance instance, Diagnosis d) {
         if (d.detail != null && ("missingDep".equals(d.key) || "depTooOld".equals(d.key))) return withDependent(instance, d);
-        if (d.detail == null || !("mixin".equals(d.key) || "modCrash".equals(d.key))) return d;
+        if (d.detail == null || !("mixin".equals(d.key) || "modCrash".equals(d.key) || "modSuspect".equals(d.key))) return d;
         try {
             String id = d.detail.toLowerCase(java.util.Locale.ROOT);
             for (com.gummer.launcher.manage.InstanceMods.Mod m : com.gummer.launcher.manage.InstanceMods.list(instance)) {

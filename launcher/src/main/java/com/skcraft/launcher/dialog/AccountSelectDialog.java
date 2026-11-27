@@ -298,7 +298,10 @@ public class AccountSelectDialog extends JDialog {
 	 */
 	private boolean friendOffered() {
 		if (instance == null || com.gummer.launcher.ui.UiHooks.friendPlay == null) return false;
-		if (com.gummer.launcher.manage.FriendPlay.availability(instance) != com.gummer.launcher.manage.FriendPlay.Availability.OK) return false;
+		com.gummer.launcher.manage.FriendPlay.Availability av = com.gummer.launcher.manage.FriendPlay.availability(instance);
+		// 27.11.2026: ваніль теж: помічник зробить копію з завантажувачем, а ваніль не запускається
+		if (av == com.gummer.launcher.manage.FriendPlay.Availability.VANILLA) return true;
+		if (av != com.gummer.launcher.manage.FriendPlay.Availability.OK) return false;
 		java.util.concurrent.FutureTask<Boolean> has = new java.util.concurrent.FutureTask<Boolean>(
 				() -> com.gummer.launcher.manage.FriendPlay.hasFriendMod(instance));
 		Thread t = new Thread(has, "friend-mod-check");

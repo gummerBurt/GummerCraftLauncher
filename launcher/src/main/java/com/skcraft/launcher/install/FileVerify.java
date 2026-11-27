@@ -19,7 +19,19 @@ public class FileVerify implements InstallTask {
 	public void execute(Launcher launcher) throws Exception {
 		log.info("Verifying file " + name);
 
-		String actualHash = FileUtils.getShaHash(target);
+		// 27.11.2026 (тікети #134, #138): щойно перенесений файл ненадовго тримає антивірус: читання ще двічі з паузами,
+		// далі справжня помилка (AccessDeniedException з шляхом), а не «не той sha1»
+		String actualHash = null;
+		for (int attempt = 0; ; attempt++) {
+			try {
+				actualHash = FileUtils.getShaHash(target);
+				break;
+			} catch (java.io.IOException e) {
+				if (attempt >= 2) throw e;
+				log.info("Cannot read " + target.getAbsolutePath() + " yet (" + e + "), retrying");
+				FileMover.pause(attempt == 0 ? 300 : 800);
+			}
+		}
 		if (!actualHash.equals(hash)) {
 			String message = String.format(
 					"File %s (%s) is corrupt (invalid hash)\n" +

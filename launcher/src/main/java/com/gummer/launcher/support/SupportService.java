@@ -316,6 +316,12 @@ public class SupportService {
         long total = com.skcraft.launcher.util.Environment.getTotalSystemMemory();
         if (total > 0) sb.append("RAM системи: ").append(total / (1024 * 1024)).append(" МБ\n");
         sb.append("Тека даних: ").append(launcher.getBaseDir()).append('\n');
+        // 27.11.2026 (тікети #134, #138): де Java гри (запасна тека поза «Документами», якщо Windows не дав доступу),
+        // антивіруси і захист від програм-вимагачів
+        String javaAlt = launcher.getConfig().getJavaRuntimeDir();
+        sb.append("Тека Java: ").append(com.gummer.launcher.util.JavaPlace.root(launcher))
+                .append(javaAlt != null && !javaAlt.trim().isEmpty() ? " (запасна, Windows не дав доступу до теки даних)" : "").append('\n');
+        sb.append(com.gummer.launcher.util.WindowsSecurityInfo.lines());
         sb.append("Пам'ять для гри (налаштування): ").append(launcher.getConfig().getMaxMemory()).append(" МБ\n");
         if (selected != null) {
             sb.append("Модпак: ").append(selected.getTitle()).append(" (").append(selected.getName()).append(")")
