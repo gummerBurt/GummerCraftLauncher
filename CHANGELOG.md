@@ -4,6 +4,15 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.41.6
+
+- **Java ставиться, навіть коли антивірус блокує теку з ліцензіями.** У теці Java є тексти ліцензій (`legal/...`, `DISCLAIMER`, `Welcome.html`), сама Java їх ніколи не читає. Деякі антивіруси не давали створити саме таку теку (`legal/java.rmi`) і в «Документах», і в `%LOCALAPPDATA%`, тож Java не ставилась ніде. Тепер лаунчер такі файли пропускає і ставить Java далі, без зайвого очікування.
+- **Java сама переходить у запасну теку і ставиться з першого разу.** Якщо Windows чи антивірус не дає прибрати чи прочитати стару Java (а не лише записати нову), лаунчер сам переносить Java в `%LOCALAPPDATA%\GummerCraft\runtime` і одразу повторює встановлення. Раніше гравець бачив вікно «Java перенесено» і мав натиснути «Запуск» ще раз.
+- **Сервер просить пароль: пояснення замість порожнього звернення.** Якщо сервер відключив через «Час очікування авторизації» чи неправильний пароль, лаунчер пояснює, що нік уже зареєстровано і в грі треба написати `/login пароль`, з кнопками «Я забув пароль», «Інша проблема» і «Зрозуміло».
+- **Нік без випадкового пробілу.** Пробіл на початку чи в кінці ніка в офлайн-вході тепер прибирається, і сервер бачить той самий нік, що і при реєстрації.
+- **Нік зі змішаних літер не реєструється.** Реєстрація ніка, де разом латиниця і кирилиця (латинська «a» і кирилична «а» виглядають однаково), зупиняється з поясненням: такий нік потім неможливо набрати правильно.
+- **Більше даних про невдалі встановлення.** Анонімна подія завантаження збірки тепер іде і тоді, коли встановлення впало ще до завантаження файлів, з етапом і видом помилки (без шляхів і ніка).
+
 ## 1.41.5
 
 - **Помічник вильотів називає мод, навіть коли звіт про збій мовчить.** Якщо причину не знайдено, лаунчер дивиться, чий код є там, де гра впала, і чи зроблений мод для цієї версії гри. Наприклад, FastQuit для Minecraft 26.2 у збірці на 26.3 він назве першим: «Схоже, винен мод FastQuit», з кнопками «Вимкнути» і «Оновити».
@@ -363,6 +372,8 @@
 ---
 
 ## English changelog
+
+**1.41.6:** Java installs even when an antivirus blocks the licence folder: licence and readme texts in the Java folder (`legal/...`, `DISCLAIMER`, `Welcome.html`), which Java never reads, are skipped on an error instead of stopping the install (ticket #150: `legal/java.rmi` was blocked both in Documents and in `%LOCALAPPDATA%`). When Windows or an antivirus blocks removing or reading the old Java, the launcher moves Java to `%LOCALAPPDATA%\GummerCraft\runtime` and retries the install by itself, without the "Java moved" window. When the server disconnects with a login timeout or a wrong password, the launcher explains `/login` with "I forgot my password", "Another problem" and "OK" buttons. Spaces around the offline nick are trimmed; registering a nick that mixes Latin and Cyrillic letters is refused. The anonymous download event is now sent for installs that fail before any download, with the stage and the kind of error.
 
 **1.41.5:** the crash helper names a mod even when the crash report does not: it looks at whose code is where the game crashed and whether the mod is made for this game version (FastQuit for 26.2 in a 26.3 build comes first). "Mod A does not work with the mod B version" (Veil and Sodium 0.8.14-beta.2): a button installs stable B instead of a beta, or the previous B version, keeping the current one for "Restore". "Turn off" buttons also turn off mods that need the mod ("Turn off Veil and Sable"). Java installs even when Windows guards Documents: the launcher checks the Java folder first and, if Windows protection or an antivirus blocks it, installs Java to `%LOCALAPPDATA%\GummerCraft\runtime`; files move with retries and a copy fallback, and errors show the real cause. A clear error window with "Open Windows protection" and "Reinstall to a new folder" buttons. Support requests include the Java folder, installed antiviruses and the Controlled folder access state. "Play with a friend" for vanilla builds: the sticker and the launch checkbox make a new build of the same version with Fabric (or NeoForge, Forge), move worlds, settings and resource packs there and open the helper in it; the vanilla build stays as it is.
 

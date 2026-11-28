@@ -48,7 +48,7 @@ import static com.skcraft.launcher.util.HttpRequest.url;
 public class Updater extends BaseUpdater implements Callable<Instance>, ProgressObservable {
 
     private final ObjectMapper mapper = com.gummer.launcher.util.Json.newMapper();
-    private final Installer installer;
+    private Installer installer; // 1.41.6: новий для повтору після перемикання теки Java (черга виконується один раз)
     private final Launcher launcher;
     private final Instance instance;
 
@@ -135,8 +135,22 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
             com.gummer.launcher.stats.DownloadStats.begin();
             boolean ok = false;
             try {
-                update(instance);
+                try {
+                    update(instance);
+                } catch (com.gummer.launcher.install.JavaBlockedException e) {
+                    // 1.41.6 (28.11.2026): корінь Java щойно перемкнуто на запасний: одна спроба одразу, без нового «Грати»
+                    // (у 1.41.5 гравець бачив вікно «Java перенесено» і мав натиснути ще раз). Не вийшло і там: вікно як раніше.
+                    if (!e.moved) throw e;
+                    log.warning("Java folder moved to " + e.to + ", installing " + instance.getTitle() + " again right away");
+                    com.gummer.launcher.stats.DownloadStats.retried();
+                    installer = new Installer(launcher.getInstallerDir());
+                    forgetCompletion();
+                    update(instance);
+                }
                 ok = true;
+            } catch (Exception e) {
+                com.gummer.launcher.stats.DownloadStats.failed(e);
+                throw e;
             } finally {
                 com.gummer.launcher.stats.DownloadStats.finish(launcher, instance, ok);
             }
@@ -213,6 +227,20 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
             .asJson(VersionManifest.class);
     }
 
+    /**
+     * Помилка з файлом Java: якщо Windows не дав доступу під коренем Java, перемкнути корінь на запасний і повернути
+     * {@link com.gummer.launcher.install.JavaBlockedException} (вікно з поясненням; {@link #call} з перемкнутим коренем
+     * сам пробує ще раз), інакше саму помилку.
+     */
+    private IOException javaBlocked(IOException e) {
+        if (e instanceof com.gummer.launcher.install.JavaBlockedException) return e;
+        if (!com.gummer.launcher.util.JavaPlace.deniedUnderRoot(launcher, e)) return e;
+        File was = com.gummer.launcher.util.JavaPlace.root(launcher);
+        log.warning("Java install blocked in " + was + ": " + e + "\n" + com.gummer.launcher.util.WindowsSecurityInfo.lines());
+        File to = com.gummer.launcher.util.JavaPlace.switchToFallback(launcher);
+        return new com.gummer.launcher.install.JavaBlockedException(was, to != null, to, e);
+    }
+
     private static void cleanJvmFiles(JavaFile[] files, File jvmPath) throws IOException {
         Path basePath = Paths.get(jvmPath.getAbsolutePath());
 
@@ -222,24 +250,55 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
             .collect(Collectors.toList())
         );
 
+        if (!Files.isDirectory(basePath)) return;
+        // 1.41.6 (28.11.2026): прибирання зайвого не зупиняє встановлення. Раніше файл чи тека, яку антивірус не дає
+        // прочитати чи видалити, кидали помилку ще до завантаження, повз запасну теку Java, і кожна наступна спроба
+        // падала так само. Зайвий файл, що лишився, Java не заважає; потрібні файли далі перевіряє installJvm.
         Files.walkFileTree(
             basePath,
             new SimpleFileVisitor<Path>() {
                 @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                     if (!shouldExist.contains(file)) {
                         System.out.println("Removing unwanted JVM file: " + file.toAbsolutePath().toString());
-                        Files.delete(file);
+                        try {
+                            Files.delete(file);
+                        } catch (IOException e) {
+                            log.warning("Cannot remove unwanted JVM file " + file + ": " + e);
+                        }
                     }
 
                     return FileVisitResult.CONTINUE;
                 }
 
                 @Override
-                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                    if (!shouldExist.contains(dir) && !Files.list(dir).findAny().isPresent()) {
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    log.warning("Cannot check JVM file " + file + ": " + exc);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                    if (exc != null) {
+                        log.warning("Cannot list JVM folder " + dir + ": " + exc);
+                        return FileVisitResult.CONTINUE;
+                    }
+                    if (shouldExist.contains(dir) || dir.equals(basePath)) return FileVisitResult.CONTINUE;
+                    // потік теки закривається: відкритий дескриптор на Windows не дає видалити теку
+                    boolean empty;
+                    try (java.util.stream.Stream<Path> s = Files.list(dir)) {
+                        empty = !s.findAny().isPresent();
+                    } catch (IOException e) {
+                        log.warning("Cannot list JVM folder " + dir + ": " + e);
+                        return FileVisitResult.CONTINUE;
+                    }
+                    if (empty) {
                         System.out.println("Removing unwanted JVM folder: " + dir.toAbsolutePath().toString());
-                        Files.delete(dir);
+                        try {
+                            Files.delete(dir);
+                        } catch (IOException e) {
+                            log.warning("Cannot remove unwanted JVM folder " + dir + ": " + e);
+                        }
                     }
 
                     return FileVisitResult.CONTINUE;
@@ -262,6 +321,7 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         Persistence.commitAndForget(instance);
 
         // Read manifest
+        com.gummer.launcher.stats.DownloadStats.stage("manifest");
         log.info("Reading package manifest...");
         progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.readingManifest"));
         Manifest manifest = installPackage(installer, instance);
@@ -320,6 +380,7 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
             // 1.36.3: автооновлення Java вимкнено або гравець відкотив цю Java: наявну не чіпаємо
             log.info("Java auto-update off or runtime pinned, keeping " + jvmDir.getAbsolutePath());
         } else {
+            com.gummer.launcher.stats.DownloadStats.stage("java");
             JavaFile[] files = readJavaManifest(javaManifest);
 
             // 27.11.2026 (тікети #134, #138): тека Java в «Документах», а Windows не дає її читати: ставимо в запасну
@@ -329,13 +390,20 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
                 jvmDir.mkdirs();
             }
 
-            log.info("Cleanup unwanted runtime files...");
-            progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.cleaningJavaFiles"));
-            cleanJvmFiles(files, jvmDir);
+            try {
+                log.info("Cleanup unwanted runtime files...");
+                progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.cleaningJavaFiles"));
+                cleanJvmFiles(files, jvmDir);
 
-            // Validating / downloading the JVM
-            log.info("Installing correct runtime");
-            installJvm(installer, jvmDir, files);
+                // Validating / downloading the JVM
+                log.info("Installing correct runtime");
+                installJvm(installer, jvmDir, files);
+            } catch (IOException e) {
+                // 1.41.6 (28.11.2026): файл Java, що лишився від невдалої спроби і не читається, раніше зупиняв
+                // встановлення тут, ще до завантаження і повз запасну теку, тож кожна наступна спроба падала так само
+                // (гравець з #132, #134, #150 два дні не міг поставити Main 1.21). Тепер так само, як під час встановлення.
+                throw javaBlocked(e);
+            }
             runtimeMarkerDir = jvmDir;
         }
 
@@ -357,7 +425,9 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
 
         // 16.11.2026: перша установка цієї версії гри: ассети і бібліотеки Minecraft одним архівом з нашого CDN
         // (докачка після обриву, звірка кожного файлу); не вдалось: далі звичайне пофайлове завантаження
+        com.gummer.launcher.stats.DownloadStats.stage("base");
         com.gummer.launcher.install.BaseArchive.prefetch(launcher, version, p -> progress = p);
+        com.gummer.launcher.stats.DownloadStats.stage("libs");
 
         progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.collectingLibraries"));
         installLibraries(installer, manifest, launcher.getLibrariesDir(), librarySources);
@@ -368,25 +438,23 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         installAssets(installer, version, url(version.getAssetIndex().getUrl()), assetsSources);
 
         log.info("Executing download phase...");
+        com.gummer.launcher.stats.DownloadStats.stage("download");
         progress = ProgressFilter.between(installer.getDownloader(), 0, 0.98);
         installer.download();
 
         log.info("Executing install phase...");
         progress = ProgressFilter.between(installer, 0.98, 1);
+        com.gummer.launcher.stats.DownloadStats.stage("install");
         try {
             installer.execute(launcher);
         } catch (IOException e) {
             // 27.11.2026 (тікети #134, #138): Windows не дав записати чи прочитати файл Java. Наступна спроба в запасній
             // теці, а гравцю вікно з поясненням і кнопками (ErrorExplainer, «javaMoved» / «javaBlocked»)
-            if (runtimeMarkerDir != null && com.gummer.launcher.util.JavaPlace.deniedUnderRoot(launcher, e)) {
-                File was = com.gummer.launcher.util.JavaPlace.root(launcher);
-                log.warning("Java install blocked in " + was + ": " + e + "\n" + com.gummer.launcher.util.WindowsSecurityInfo.lines());
-                File to = com.gummer.launcher.util.JavaPlace.switchToFallback(launcher);
-                throw new com.gummer.launcher.install.JavaBlockedException(was, to != null, to, e);
-            }
+            if (runtimeMarkerDir != null) throw javaBlocked(e);
             throw e;
         }
 
+        com.gummer.launcher.stats.DownloadStats.stage("late");
         installer.executeLate(launcher);
         if (runtimeMarkerDir != null) {
             com.gummer.launcher.util.JavaSecurity.writeMarker(runtimeMarkerDir, javaManifest);

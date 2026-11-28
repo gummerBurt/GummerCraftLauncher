@@ -40,7 +40,10 @@ public class OfflineSession implements Session {
      * світах одиночної гри), але без токена.
      */
     public OfflineSession(@NonNull String name, String uuid) {
-        this.name = name;
+        // 1.41.6 (28.11.2026, тікет #145): вікно офлайн-входу перевіряло нік без пробілів по краях, а зберігало як ввели,
+        // тож у грі був « Mirakl» і StalDayZ не пускав («недопустимі символи»). Обрізаємо тут, тож лікуються і вже
+        // збережені акаунти.
+        this.name = name.trim();
         this.uuid = uuid;
     }
 

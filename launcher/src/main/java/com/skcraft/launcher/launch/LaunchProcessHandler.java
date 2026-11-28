@@ -234,7 +234,16 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
             @Override
             public void run() {
                 com.gummer.launcher.ui.UiHooks.Support support = com.gummer.launcher.ui.UiHooks.support;
-                if (support != null) {
+                if (support != null && report.isAuthTimeout()) {
+                    // 1.41.6 (тікети #146, #148, #149): спершу пояснення про /login, звернення лише якщо гравець хоче
+                    Object[] options = {tr("disconnect.authTimeout.forgot"), tr("disconnect.authTimeout.support"),
+                            tr("disconnect.authTimeout.ok")};
+                    int choice = JOptionPane.showOptionDialog(owner, tr("disconnect.authTimeout.text"),
+                            tr("disconnect.authTimeout.title"), JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE,
+                            null, options, options[2]);
+                    if (choice == 0) support.open(null, report.topic(), report.passwordText(null));
+                    else if (choice == 1) support.open(null, report.topic(), report.text());
+                } else if (support != null) {
                     support.open(null, report.topic(), report.text());
                 } else {
                     log.warning("Support is not available, disconnect report dropped");

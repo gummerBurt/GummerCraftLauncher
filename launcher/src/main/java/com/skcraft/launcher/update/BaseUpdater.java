@@ -83,6 +83,11 @@ public abstract class BaseUpdater {
         }
     }
 
+    /** 1.41.6: перед повтором встановлення в тому самому оновлювачі прибрати завершальні дії невдалої спроби. */
+    protected void forgetCompletion() {
+        executeOnCompletion.clear();
+    }
+
     protected Manifest installPackage(@NonNull Installer installer, @NonNull Instance instance) throws Exception {
         final File contentDir = instance.getContentDir();
         final File logPath = new File(instance.getDir(), "install_log.json");

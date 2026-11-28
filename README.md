@@ -81,13 +81,14 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.41.5
+## What's new in 1.41.6
 
-- **The crash helper names a mod even when the crash report does not.** It looks at whose code is where the game crashed and whether the mod is made for this game version (FastQuit for 26.2 in a 26.3 build comes first), with "Turn off" and "Update" buttons.
-- **"Mod A does not work with the mod B version".** For example Veil and Sodium 0.8.14-beta.2: an "Install stable Sodium" button (or "Install the previous version" when a stable one is installed); the current version is kept for "Restore".
-- **"Turn off" together with the mods that need it:** "Turn off Veil and Sable", so the game does not crash on a missing dependency.
-- **Java installs even when Windows guards Documents.** If Ransomware protection or an antivirus blocks it, Java goes to `%LOCALAPPDATA%\GummerCraft\runtime`; files move with retries, and the error window has "Open Windows protection" and "Reinstall to a new folder" buttons.
-- **"Play with a friend" for vanilla builds too:** the launcher makes a build of the same version with Fabric (or NeoForge, Forge), moves worlds, settings and resource packs there and sets everything up. The vanilla build stays as it is.
+- **Java installs even when an antivirus blocks the licence folder.** Licence texts in the Java folder (Java never reads them) are skipped on an error, so Java installs instead of failing in both Documents and `%LOCALAPPDATA%`.
+- **Java moves to the backup folder and installs on the first try.** If Windows or an antivirus blocks the old Java, the launcher moves it to `%LOCALAPPDATA%\GummerCraft\runtime` and retries by itself, no second "Launch" click.
+- **The server asks for a password:** after a login timeout or a wrong password the launcher explains `/login`, with "I forgot my password" and "Another problem" buttons.
+- **Nicks:** spaces around the offline nick are trimmed, and a nick mixing Latin and Cyrillic letters cannot be registered.
+
+**Also in 1.41.5:** the crash helper names a mod even when the crash report does not, "Mod A does not work with the mod B version" with a button for a stable or previous B, "Turn off" together with the mods that need it, Java goes to `%LOCALAPPDATA%\GummerCraft\runtime` when Windows guards Documents, "Play with a friend" for vanilla builds.
 
 **Also in 1.41.4:** a mod installs from a beta when no release fits the build's loader (JEI for Fabric 1.20.1); clear errors on the Modrinth mods page; the Shaders tab says the build already has a shader mod.
 

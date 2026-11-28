@@ -43,16 +43,64 @@ public final class SystemDlls {
         }
     }
 
-    /** Файл є копією системної бібліотеки Windows, без якої Java на цій системі обійдеться. */
+    /**
+     * Файл Java, без якого Java на цій системі обійдеться: копія системної бібліотеки Windows (лише Windows 10+) або
+     * текст ліцензії чи довідки ({@link #notice}).
+     */
     public static boolean optional(File f) {
+        return systemDll(f) || notice(f);
+    }
+
+    /** Копія системної бібліотеки Windows на Windows 10+. */
+    static boolean systemDll(File f) {
         if (f == null || !windows10Plus()) return false;
         String n = f.getName().toLowerCase(java.util.Locale.ROOT);
         return n.endsWith(".dll") && (n.equals("ucrtbase.dll") || n.startsWith("api-ms-win-"));
     }
 
+    /**
+     * 1.41.6 (28.11.2026, тікет #150 і 44 невдачі встановлення за 21-28.11): тексти ліцензій і довідки в теці Java
+     * ({@code legal/<модуль>/ASSEMBLY_EXCEPTION}, {@code LICENSE}, {@code ADDITIONAL_LICENSE_INFO}, {@code DISCLAIMER},
+     * {@code Welcome.html}). Java їх ніколи не читає. У #150 антивірус не давав створити саме {@code legal/java.rmi},
+     * і в «Документах», і в запасній теці {@code %LOCALAPPDATA%}, тож Java не ставилась ніде. На будь-якій ОС: файли так
+     * само качаються і кладуться, лише помилка з ними не зупиняє встановлення.
+     */
+    static boolean notice(File f) {
+        if (f == null) return false;
+        String n = f.getName().toLowerCase(java.util.Locale.ROOT);
+        if (n.endsWith(".dll") || n.endsWith(".exe") || n.endsWith(".jar") || n.endsWith(".so") || n.endsWith(".dylib")) return false;
+        File p = f.getParentFile();
+        for (int i = 0; i < 3 && p != null; i++, p = p.getParentFile()) {
+            if ("legal".equalsIgnoreCase(p.getName())) return true;
+        }
+        return n.equals("disclaimer") || n.equals("welcome.html") || n.equals("readme") || n.equals("readme.txt")
+                || n.equals("readme.html");
+    }
+
+    /**
+     * Необов'язкові файли, з якими вже сталась помилка, і теки, куди не дали писати (за час роботи лаунчера). Лише для
+     * {@link #optional} файлів: решта встановлюється і падає як раніше.
+     */
+    private static final java.util.Set<File> SKIPPED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final java.util.Set<File> DENIED_DIRS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** У ланцюжку причин відмова в доступі (Windows: «Отказано в доступе», «Access is denied»). */
+    static boolean denied(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof java.nio.file.AccessDeniedException) return true;
+            String m = String.valueOf(t.getMessage()).toLowerCase(java.util.Locale.ROOT);
+            if (m.contains("access is denied") || m.contains("отказано в доступе") || m.contains("відмовлено в доступі")) return true;
+        }
+        return false;
+    }
+
     /** Рядок у лог про пропущений файл. */
     public static void skipped(File f, Throwable cause) {
-        log.warning("Skipping Windows system DLL copy " + f.getAbsolutePath() + " (Windows 10+ loads its own from System32): " + cause);
+        if (systemDll(f)) {
+            log.warning("Skipping Windows system DLL copy " + f.getAbsolutePath() + " (Windows 10+ loads its own from System32): " + cause);
+        } else {
+            log.warning("Skipping Java notice file " + f.getAbsolutePath() + " (licence or readme text, Java does not read it): " + cause);
+        }
     }
 
     /**
@@ -64,11 +112,21 @@ public final class SystemDlls {
         return new InstallTask() {
             @Override
             public void execute(Launcher launcher) throws Exception {
+                File file = target.getAbsoluteFile();
+                File dir = file.getParentFile();
+                // 1.41.6: перенесення робить до 5 спроб з паузами, перевірка ще 3; на 182 файлах ліцензій у заблокованій теці
+                // це 3+ хвилини зайвого «зависання» (наскрізна проба 28.11: 220 с проти 17). Файл чи тека вже відмовили: одразу далі
+                if (SKIPPED.contains(file) || (dir != null && DENIED_DIRS.contains(dir))) {
+                    log.info("Skipping " + file + " right away (this file or its folder already failed)");
+                    return;
+                }
                 try {
                     task.execute(launcher);
                 } catch (InterruptedException e) {
                     throw e;
                 } catch (Exception e) {
+                    SKIPPED.add(file);
+                    if (dir != null && (!dir.isDirectory() || denied(e))) DENIED_DIRS.add(dir);
                     skipped(target, e);
                 }
             }

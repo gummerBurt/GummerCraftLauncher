@@ -100,6 +100,23 @@ public final class DisconnectReport {
         return "password".equalsIgnoreCase(kind);
     }
 
+    /**
+     * 1.41.6 (28.11.2026, тікети #146, #148, #149): сервер (AuthMe) викинув, бо не дочекався {@code /login} чи пароль не
+     * той. Нові гравці реєструють нік у лаунчері, а на сервері чекають {@code /register} чи не пам'ятають пароль.
+     */
+    public boolean isAuthTimeout() {
+        if (isPassword()) return false;
+        String r = reason.toLowerCase(java.util.Locale.ROOT);
+        return r.contains("час очікування авторизації") || r.contains("время авторизации") || r.contains("login timeout")
+                || r.contains("неправильний пароль") || r.contains("неверный пароль") || r.contains("wrong password");
+    }
+
+    /** Текст звернення «забув пароль» для цього відключення. */
+    public String passwordText(String fallbackNick) {
+        String n = !nick.isEmpty() ? nick : (fallbackNick != null && !fallbackNick.trim().isEmpty() ? fallbackNick.trim() : "?");
+        return tr("support.passwordText", n, server.isEmpty() ? tr("support.disconnectUnknownServer") : server);
+    }
+
     @Override
     public String toString() {
         return "DisconnectReport{kind=" + kind + ", nick=" + nick + ", game=" + game + ", server=" + server + ", source=" + source + ", reason=" + reason + "}";

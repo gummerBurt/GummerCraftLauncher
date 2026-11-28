@@ -106,7 +106,7 @@ public class OfflineLoginDialog extends JDialog {
                     );
                     return;
                 }
-                session = new OfflineSession(usernameText.getText());
+                session = new OfflineSession(username); // 1.41.6 (тікет #145): обрізаний нік, той самий, що перевірено
                 dispose();
             } else {
                 SwingHelper.showErrorDialog(this, SharedLocale.tr("login.OfflineNoLoginError"), SharedLocale.tr("login.OfflineNoLoginTitle"));

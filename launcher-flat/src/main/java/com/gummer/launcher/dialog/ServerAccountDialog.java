@@ -217,12 +217,29 @@ public class ServerAccountDialog extends JDialog {
         });
     }
 
+    /** У ніку є і латинські, і кириличні літери (схожі на вигляд «С» і «C» дають два різні акаунти). */
+    static boolean mixedScripts(String nick) {
+        boolean latin = false, cyr = false;
+        for (int i = 0; i < nick.length(); i++) {
+            char c = nick.charAt(i);
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin = true;
+            else if (Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CYRILLIC) cyr = true;
+        }
+        return latin && cyr;
+    }
+
     private void doRegister() {
         String nick = regNick.getText().trim();
         String pass = new String(regPass.getPassword());
         String pass2 = new String(regPass2.getPassword());
         if (!NICK.matcher(nick).matches()) {
             fail(regStatus, tr("serverAccount.error.nick_invalid"));
+            return;
+        }
+        if (mixedScripts(nick)) {
+            // 1.41.6 (28.11.2026): «СaliSoron» з кириличною «С» зареєструвався, гравець потім заходив латиницею
+            // «CaliSoron», це вже інший акаунт, і він «забув пароль» (тікет #147)
+            fail(regStatus, tr("serverAccount.error.nick_mixed"));
             return;
         }
         if (!PASSWORD.matcher(pass).matches()) {
