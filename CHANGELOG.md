@@ -4,6 +4,14 @@
 
 *English history is at the bottom: [English changelog](#english-changelog).*
 
+## 1.41.7
+
+- **«Гра з другом» зрозуміла дітям.** Помічник переписано: кольорові іконки, смужка з чотирьох кроків, великі картки «Поруч зі мною» і «Далеко, у себе вдома», кроки в грі з номерами, сторінки «Друг не бачить гру?» (перевірка по черзі) і «Мене кличе друг. Що робити?». Логіка встановлення та сама.
+- **Звіт про відключення називає справжній сервер.** Якщо гравець з нашого сервера переходив на інший через список серверів, а той його відключав, звіт і звернення писали адресу нашого сервера. Тепер лаунчер бере адресу з останнього рядка `Connecting to` у лозі гри (і міні-мод `gcreport` 1.0.1 у збірках GummerCraft робить так само).
+- **«Недійсна сесія» на чужому сервері: пояснення замість звернення.** Якщо гравця не пустив сервер, який не належить GummerCraft, з причиною «Недійсна сесія», лаунчер пояснює, що вхід туди можливий лише з ліцензією Minecraft, а наші сервери працюють. Звернення в підтримку при цьому не відкривається (тікети #148, #151).
+- **Повні тексти у вікнах «Сервер надто довго чекав на твій пароль» і «Тека з грою знаходиться в невірному місці».** Через зламаний перенос рядка в мовному файлі ці вікна показували лише перше речення, без підказки про `/login` чи шляху до теки.
+- **Відкрито, що робить лаунчер.** `SECURITY.md`: чого лаунчер не робить, як перевірити це самому, звідки Java і навіщо копії системних DLL, і повний список програм, які він запускає.
+
 ## 1.41.6
 
 - **Java ставиться, навіть коли антивірус блокує теку з ліцензіями.** У теці Java є тексти ліцензій (`legal/...`, `DISCLAIMER`, `Welcome.html`), сама Java їх ніколи не читає. Деякі антивіруси не давали створити саме таку теку (`legal/java.rmi`) і в «Документах», і в `%LOCALAPPDATA%`, тож Java не ставилась ніде. Тепер лаунчер такі файли пропускає і ставить Java далі, без зайвого очікування.
@@ -372,6 +380,8 @@
 ---
 
 ## English changelog
+
+**1.41.7:** "Play with a friend" is clear for kids: colour icons, a four-step bar, big "Right next to me" and "Far away" cards, numbered in-game steps, "Friend can't see the game?" and "A friend is calling me" pages, same install logic. The disconnect report names the real server: the launcher takes the address from the last `Connecting to` line of the game log (the `gcreport` mini mod 1.0.1 does the same). "Invalid session" on a server that is not ours shows an explanation (that server only lets in players with a Minecraft license, our servers are working) instead of opening a support request. The "server waited too long for your password" and "game folder is in a wrong place" windows show their full text again (a broken line break in the language file cut them after the first sentence). `SECURITY.md` explains openly what the launcher does and does not do.
 
 **1.41.6:** Java installs even when an antivirus blocks the licence folder: licence and readme texts in the Java folder (`legal/...`, `DISCLAIMER`, `Welcome.html`), which Java never reads, are skipped on an error instead of stopping the install (ticket #150: `legal/java.rmi` was blocked both in Documents and in `%LOCALAPPDATA%`). When Windows or an antivirus blocks removing or reading the old Java, the launcher moves Java to `%LOCALAPPDATA%\GummerCraft\runtime` and retries the install by itself, without the "Java moved" window. When the server disconnects with a login timeout or a wrong password, the launcher explains `/login` with "I forgot my password", "Another problem" and "OK" buttons. Spaces around the offline nick are trimmed; registering a nick that mixes Latin and Cyrillic letters is refused. The anonymous download event is now sent for installs that fail before any download, with the stage and the kind of error.
 

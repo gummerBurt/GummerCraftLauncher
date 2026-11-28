@@ -234,7 +234,11 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
             @Override
             public void run() {
                 com.gummer.launcher.ui.UiHooks.Support support = com.gummer.launcher.ui.UiHooks.support;
-                if (support != null && report.isAuthTimeout()) {
+                if (report.isInvalidSession() && !report.isOurServer()) {
+                    // 28.11.2026 (тікети #148, #151): відмова чужого ліцензійного сервера, підтримка GummerCraft тут не допоможе
+                    JOptionPane.showMessageDialog(owner, tr("disconnect.foreignSession.text", report.server),
+                            tr("disconnect.foreignSession.title"), JOptionPane.INFORMATION_MESSAGE);
+                } else if (support != null && report.isAuthTimeout()) {
                     // 1.41.6 (тікети #146, #148, #149): спершу пояснення про /login, звернення лише якщо гравець хоче
                     Object[] options = {tr("disconnect.authTimeout.forgot"), tr("disconnect.authTimeout.support"),
                             tr("disconnect.authTimeout.ok")};

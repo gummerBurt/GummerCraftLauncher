@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "gcreport",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "GummerCraft Report",
   "description": "Кнопка «Надіслати звіт у техпідтримку» на екрані відключення від сервера. Звіт відкривається у формі підтримки лаунчера GummerCraft.",
   "authors": ["GummerCraft"],

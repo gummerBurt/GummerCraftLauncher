@@ -40,7 +40,7 @@ import java.util.List;
 public final class GcReport implements ClientModInitializer {
 
     static final String FILE_NAME = "gummercraft-report.json";
-    static final String VERSION = "1.0.0";
+    static final String VERSION = "1.0.1";
     private static final long WAIT_MS = 8000L;
     private static final int BTN_W = 200, BTN_H = 20, GAP = 24;
 
@@ -179,7 +179,10 @@ public final class GcReport implements ClientModInitializer {
             return;
         }
         try {
-            String server = currentServer(null);
+            // 1.0.1 (28.11.2026, тікети #148, #151): спершу лог гри. lastServer лишався від попереднього сервера: гравець ішов з
+            // play.gummercraft.fun на чужий ліцензійний сервер, той відкидав його з «Недійсна сесія», а звіт писав наш сервер.
+            String server = lastConnected();
+            if (server.isEmpty()) server = currentServer(null);
             if (server.isEmpty()) server = lastServer;
             String title = firstText(screen, screenCls, false);
             String reason = firstText(screen, disconnectedCls, true);
@@ -377,6 +380,28 @@ public final class GcReport implements ClientModInitializer {
             log("не вдалося прочитати текст екрана: " + t);
         }
         return "";
+    }
+
+    private static final java.util.regex.Pattern CONNECTING = java.util.regex.Pattern.compile("Connecting to ([^,\\s]+), (\\d+)");
+
+    /** Адреса з останнього рядка {@code Connecting to <host>, <port>} у {@code logs/latest.log} (порт 25565 не пишемо), або "". */
+    private static String lastConnected() {
+        try {
+            File f = new File(new File(reportFile().getParentFile(), "logs"), "latest.log");
+            if (!f.isFile()) return "";
+            try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
+                long len = raf.length(), from = Math.max(0, len - 2L * 1024 * 1024);
+                byte[] buf = new byte[(int) (len - from)];
+                raf.seek(from);
+                raf.readFully(buf);
+                java.util.regex.Matcher m = CONNECTING.matcher(new String(buf, StandardCharsets.ISO_8859_1));
+                String last = "";
+                while (m.find()) last = "25565".equals(m.group(2)) ? m.group(1) : m.group(1) + ":" + m.group(2);
+                return last;
+            }
+        } catch (Throwable t) {
+            return "";
+        }
     }
 
     private static File reportFile() throws Exception {

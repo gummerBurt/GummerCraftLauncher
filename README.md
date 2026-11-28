@@ -81,12 +81,14 @@ A free, open-source (LGPL-3.0) Minecraft launcher from Ukraine, made by the [Gum
 
 You can join right from the launcher: pick the pack, press "Launch", and the launcher downloads all the mods it needs and keeps them updated. The server's online count is shown next to the pack, and the "Straight to server" box starts the game and joins the server at once.
 
-## What's new in 1.41.6
+## What's new in 1.41.7
 
-- **Java installs even when an antivirus blocks the licence folder.** Licence texts in the Java folder (Java never reads them) are skipped on an error, so Java installs instead of failing in both Documents and `%LOCALAPPDATA%`.
-- **Java moves to the backup folder and installs on the first try.** If Windows or an antivirus blocks the old Java, the launcher moves it to `%LOCALAPPDATA%\GummerCraft\runtime` and retries by itself, no second "Launch" click.
-- **The server asks for a password:** after a login timeout or a wrong password the launcher explains `/login`, with "I forgot my password" and "Another problem" buttons.
-- **Nicks:** spaces around the offline nick are trimmed, and a nick mixing Latin and Cyrillic letters cannot be registered.
+- **"Play with a friend" is clear for kids:** colour icons, steps, big "Right next to me" and "Far away" cards, "Friend can't see the game?" and "A friend is calling me" pages.
+- **The disconnect report names the real server,** and "Invalid session" on a server that is not ours is explained in a window, without a support request.
+- **Full texts** in the server password and game folder windows.
+- **What the launcher does, openly:** [SECURITY.md](SECURITY.md) (Ukrainian).
+
+**Also in 1.41.6:** Java installs even when an antivirus blocks the licence folder and moves to the backup folder by itself; a `/login` explanation when the server waited for a password; nicks without stray spaces or mixed alphabets.
 
 **Also in 1.41.5:** the crash helper names a mod even when the crash report does not, "Mod A does not work with the mod B version" with a button for a stable or previous B, "Turn off" together with the mods that need it, Java goes to `%LOCALAPPDATA%\GummerCraft\runtime` when Windows guards Documents, "Play with a friend" for vanilla builds.
 
@@ -113,6 +115,7 @@ The full list of changes is in the [CHANGELOG](CHANGELOG.md#english-changelog).
 ## Security and transparency
 
 - What the launcher does on the network (every address and what is sent there), what it stores on the computer, and known limitations: [SECURITY.md](SECURITY.md).
+- The launcher never turns off or bypasses your antivirus and never replaces Windows files. When an antivirus blocks part of Java, the launcher skips only Microsoft's copies of Windows libraries that Windows 10 and 11 never load from there, and licence texts, everything else stays required and hash-checked. The full explanation, and every program the launcher starts (including PowerShell, and why it uses `-EncodedCommand`), is in SECURITY.md: [Antivirus, Java and DLL](SECURITY.md#антивірус-java-і-dll) (Ukrainian).
 - No ads. There are anonymous statistics: a random install ID (not derived from anything, no nickname or account), "game started" events with the pack name, "pack download" and a few others, each described in SECURITY.md. The word `off` in the `stats-id.txt` file in the launcher folder turns all of it off.
 - Anyone can check the official build on our CDN: see [Verify the official build](#verify-the-official-build).
 - SHA-256 of every release file is published in [Releases](https://github.com/gummerBurt/GummerCraftLauncher/releases). To check a downloaded file: `Get-FileHash GummerCraft.exe` in PowerShell or `sha256sum GummerCraft.exe` on Linux and macOS.

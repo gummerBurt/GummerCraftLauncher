@@ -86,3 +86,29 @@ shadowJar {
 build {
     dependsOn(shadowJar)
 }
+
+// 28.11.2026 (1.41.7): мовний файл з переносом рядка всередині значення без "\" Java тихо обрізає до першого рядка, а решту
+// читає як сміттєві ключі (так у 1.36.4-1.41.6 вікна про теку з грою і про /login показували лише перше речення). Тепер збірка падає.
+task checkLangFiles {
+    def dirs = ['src/main/resources/com/gummer/launcher/lang', 'src/main/resources/com/skcraft/launcher/lang']
+    inputs.files(dirs.collect { fileTree(it) { include '*.properties' } })
+    doLast {
+        def bad = []
+        dirs.each { d ->
+            fileTree(d) { include '*.properties' }.each { f ->
+                boolean cont = false
+                f.readLines('UTF-8').eachWithIndex { line, i ->
+                    def l = line.replaceAll(/\r$/, '')
+                    int bs = 0; while (bs < l.length() && l.charAt(l.length() - 1 - bs) == (char) 92) bs++; boolean ends = bs % 2 == 1
+                    if (cont) { cont = ends; return }
+                    def t = l.trim()
+                    if (t.isEmpty() || t.startsWith('#') || t.startsWith('!')) return
+                    if (!(l ==~ /^\s*[A-Za-z0-9_.\-]+\s*[=:].*/)) bad << "${f.name}:${i + 1}: ${t.take(60)}"
+                    cont = ends
+                }
+            }
+        }
+        if (bad) throw new GradleException("Рядки мовних файлів без ключа (перенос усередині значення? пиши \n):\n" + bad.join('\n'))
+    }
+}
+processResources.dependsOn checkLangFiles
